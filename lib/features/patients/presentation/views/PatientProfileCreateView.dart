@@ -69,6 +69,25 @@ class _PatientProfileCreateViewState extends State<PatientProfileCreateView> {
     result.when(
       ok: (MedicalTicketEntity ticket) {
         _viewModel.continueCommand.clearResult();
+        ScaffoldMessenger.of(context).clearSnackBars();
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Row(
+              children: [
+                const Icon(Icons.check_circle_rounded, color: Colors.white, size: 22),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    'Đăng ký khám thành công! STT của bạn: ${ticket.queueNumber}',
+                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                  ),
+                ),
+              ],
+            ),
+            backgroundColor: const Color(0xFF16A34A),
+            duration: const Duration(seconds: 4),
+          ),
+        );
         AppNavigator.replaceNamed(
           context,
           RouteNames.medicalTicket,
@@ -82,6 +101,35 @@ class _PatientProfileCreateViewState extends State<PatientProfileCreateView> {
           SnackBar(
             content: Text(message),
             backgroundColor: Colors.red[800],
+            duration: const Duration(seconds: 4),
+          ),
+        );
+        showDialog(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            title: Row(
+              children: const [
+                Icon(Icons.error_outline_rounded, color: Colors.red, size: 28),
+                SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    'Đăng ký không thành công',
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Color(0xFF991B1B)),
+                  ),
+                ),
+              ],
+            ),
+            content: Text(
+              message,
+              style: const TextStyle(fontSize: 14, height: 1.4, color: Color(0xFF334155)),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(ctx).pop(),
+                child: const Text('Đã hiểu', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+              ),
+            ],
           ),
         );
       },
@@ -192,7 +240,9 @@ class _PatientProfileCreateViewState extends State<PatientProfileCreateView> {
                                         ? 'Thứ 5'
                                         : date.weekday == DateTime.friday
                                             ? 'Thứ 6'
-                                            : 'Thứ 7';
+                                            : date.weekday == DateTime.saturday
+                                                ? 'Thứ 7'
+                                                : 'Chủ nhật';
                         
                         final dateLabel = DateFormat('dd/MM').format(date);
                         

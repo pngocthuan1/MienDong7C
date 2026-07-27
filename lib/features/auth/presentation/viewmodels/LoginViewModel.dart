@@ -10,6 +10,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:benhvien7c/core/session/AppSessionStore.dart';
 import 'package:benhvien7c/features/auth/domain/entities/UserRole.dart';
 import 'package:benhvien7c/core/constants/AppStrings.dart';
+import 'package:benhvien7c/features/auth/domain/entities/UserProfileEntity.dart';
 
 /// Lớp phụ trợ Command hỗ trợ quản lý trạng thái tải (loading) và kết quả thực thi
 class Command<T> extends ChangeNotifier {
@@ -91,7 +92,7 @@ class LoginViewModel extends ChangeNotifier {
     }
   }
 
-  bool _isOfflineDemo = true;
+  bool _isOfflineDemo = false;
   bool get isOfflineDemo => _isOfflineDemo;
 
   void setOfflineDemo(bool val) {
@@ -154,31 +155,52 @@ class LoginViewModel extends ChangeNotifier {
       version: Environment.appVersion,
     );
 
-    final result = await _authRepository.login(params);
+    // Bước 1: Lấy Token xác thực thiết bị & ứng dụng từ /api/Token/Login
+    final tokenResult = await _authRepository.login(params);
 
-    result.when(
-      success: (session) {
-        _message = null;
-        SharedPreferences.getInstance().then((prefs) {
-          prefs.setString('saved_phone', phoneVal);
-        });
-        AppSessionStore.instance.setSession(
-          session,
-          UserProfileSession(
-            fullName: phoneVal == AppStrings.demoEmployeePhone ? 'BS. Nguyễn Văn Nam (HIS)' : 'Khách Hàng',
-            phoneNumber: phoneVal,
-            role: phoneVal == AppStrings.demoEmployeePhone ? UserRole.employee : UserRole.customer,
-          ),
-        );
-        notifyListeners();
-      },
-      failure: (exception) {
-        _message = exception.message;
-        notifyListeners();
-      },
+    if (tokenResult is ApiFailure<AuthSessionEntity>) {
+      final exc = tokenResult.exception;
+      _message = exc.message;
+      notifyListeners();
+      return tokenResult;
+    }
+
+    final session = (tokenResult as ApiSuccess<AuthSessionEntity>).data;
+
+    // Bước 2: Thử lấy thông tin hồ sơ HIS (nếu là tài khoản Bác sĩ / Nhân viên như 'hunglng')
+    final hisResult = await _authRepository.loginHis(phoneVal, passwordVal);
+
+    String userFullName = 'Khách Hàng';
+    UserRole userRole = UserRole.customer;
+
+    if (hisResult is ApiSuccess<UserProfileEntity>) {
+      final profile = hisResult.data;
+      userFullName = profile.hoTenHis.isNotEmpty
+          ? profile.hoTenHis
+          : (profile.tenDangNhapHis.isNotEmpty
+              ? profile.tenDangNhapHis
+              : 'Bác sĩ / Nhân viên');
+      userRole = UserRole.employee;
+    } else {
+      // Nếu đăng nhập bằng SĐT bệnh nhân (không phải tài khoản HIS nhân viên)
+      userFullName = phoneVal.isNotEmpty ? phoneVal : 'Khách Hàng';
+      userRole = UserRole.customer;
+    }
+
+    _message = null;
+    SharedPreferences.getInstance().then((prefs) {
+      prefs.setString('saved_phone', phoneVal);
+    });
+    AppSessionStore.instance.setSession(
+      session,
+      UserProfileSession(
+        fullName: userFullName,
+        phoneNumber: phoneVal,
+        role: userRole,
+      ),
     );
-
-    return result;
+    notifyListeners();
+    return tokenResult;
   });
 
   @override

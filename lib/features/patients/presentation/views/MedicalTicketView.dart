@@ -157,7 +157,7 @@ class _MedicalTicketViewState extends State<MedicalTicketView> {
                     _TicketRow(label: 'Giới tính', value: ticket.gender),
                     _TicketRow(label: 'Năm sinh', value: ticket.birthYear),
                     _TicketRow(label: 'SĐT', value: ticket.phoneNumber ?? ''),
-                    _TicketRow(label: 'Mã thẻ', value: ticket.patientCode),
+                    _TicketRow(label: 'Mã BN', value: ticket.patientCode),
                     
                     const SizedBox(height: 16),
                     CustomPaint(

@@ -483,7 +483,20 @@ class PatientProfileCreateViewModel extends BasePortalViewModel {
         phoneNumber: registerForSomeoneElse ? otherPhoneController.text.trim() : phoneController.text.trim(),
       );
 
-      final dateStr = DateFormat('dd/MM/yyyy').format(selectedDate!);
+      final weekdayStr = selectedDate!.weekday == DateTime.monday
+          ? 'Thứ 2'
+          : selectedDate!.weekday == DateTime.tuesday
+              ? 'Thứ 3'
+              : selectedDate!.weekday == DateTime.wednesday
+                  ? 'Thứ 4'
+                  : selectedDate!.weekday == DateTime.thursday
+                      ? 'Thứ 5'
+                      : selectedDate!.weekday == DateTime.friday
+                          ? 'Thứ 6'
+                          : selectedDate!.weekday == DateTime.saturday
+                              ? 'Thứ 7'
+                              : 'Chủ nhật';
+      final dateStr = '$weekdayStr, ${DateFormat('dd/MM/yyyy').format(selectedDate!)}';
       final result = await portalRepository.createMedicalTicket(
         role,
         draft,
