@@ -19,6 +19,7 @@ class AppointmentBookingView extends StatefulWidget {
 
 class _AppointmentBookingViewState extends State<AppointmentBookingView> {
   late final AppointmentBookingViewModel _viewModel;
+  final TextEditingController _searchController = TextEditingController();
 
   @override
   void initState() {
@@ -31,6 +32,7 @@ class _AppointmentBookingViewState extends State<AppointmentBookingView> {
 
   @override
   void dispose() {
+    _searchController.dispose();
     _viewModel.dispose();
     super.dispose();
   }
@@ -66,23 +68,71 @@ class _AppointmentBookingViewState extends State<AppointmentBookingView> {
     );
   }
 
-  Widget _buildTicketsList(List<MedicalTicketEntity> tickets, {required bool isDeletedTab}) {
+  Widget _buildFilterChip(String label, TicketDateFilterMode mode) {
+    final isSelected = _viewModel.dateFilterMode == mode;
+    return ChoiceChip(
+      label: Text(label),
+      labelStyle: TextStyle(
+        fontSize: 12,
+        fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+        color: isSelected ? Colors.white : const Color(0xFF475569),
+      ),
+      selected: isSelected,
+      selectedColor: const Color(0xFF0D6EFD),
+      backgroundColor: const Color(0xFFF1F5F9),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(20),
+        side: BorderSide(
+          color: isSelected ? const Color(0xFF0D6EFD) : const Color(0xFFE2E8F0),
+        ),
+      ),
+      showCheckmark: false,
+      onSelected: (_) => _viewModel.setDateFilterMode(mode),
+    );
+  }
+
+  Widget _buildTicketsList(
+    List<MedicalTicketEntity> tickets, {
+    required String emptyMessage,
+    bool isDeletedTab = false,
+  }) {
     if (tickets.isEmpty) {
+      final isFiltered = _viewModel.hasActiveFilter;
       return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(
-              Icons.receipt_long_rounded,
-              size: 64,
-              color: Colors.grey[300],
-            ),
-            const SizedBox(height: 12),
-            Text(
-              isDeletedTab ? 'Không có phiếu đã xóa' : 'Chưa có phiếu đăng ký nào',
-              style: const TextStyle(color: Colors.grey, fontSize: 14, fontWeight: FontWeight.w500),
-            ),
-          ],
+        child: Padding(
+          padding: const EdgeInsets.all(24.0),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(
+                isFiltered ? Icons.search_off_rounded : Icons.receipt_long_rounded,
+                size: 64,
+                color: Colors.grey[300],
+              ),
+              const SizedBox(height: 12),
+              Text(
+                isFiltered ? 'Không tìm thấy phiếu đăng ký nào phù hợp' : emptyMessage,
+                textAlign: TextAlign.center,
+                style: const TextStyle(color: Color(0xFF64748B), fontSize: 14, fontWeight: FontWeight.w600),
+              ),
+              if (isFiltered) ...[
+                const SizedBox(height: 16),
+                OutlinedButton.icon(
+                  onPressed: () {
+                    _searchController.clear();
+                    _viewModel.clearFilters();
+                  },
+                  icon: const Icon(Icons.refresh_rounded, size: 16),
+                  label: const Text('Xóa bộ lọc'),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: const Color(0xFF0D6EFD),
+                    side: const BorderSide(color: Color(0xFF0D6EFD)),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  ),
+                ),
+              ],
+            ],
+          ),
         ),
       );
     }
@@ -151,6 +201,7 @@ class _AppointmentBookingViewState extends State<AppointmentBookingView> {
                             RouteNames.medicalTicket,
                             arguments: MedicalTicketViewArgs(ticket: ticket),
                           );
+                          if (!mounted) return;
                           _viewModel.loadTicketsCommand.execute();
                         },
                         icon: const Icon(Icons.qr_code_rounded, size: 16),
@@ -168,6 +219,7 @@ class _AppointmentBookingViewState extends State<AppointmentBookingView> {
                             RouteNames.patientProfileCreate,
                             arguments: ticket,
                           );
+                          if (!mounted) return;
                           _viewModel.loadTicketsCommand.execute();
                         },
                         icon: const Icon(Icons.refresh_rounded, size: 16),
@@ -206,34 +258,36 @@ class _AppointmentBookingViewState extends State<AppointmentBookingView> {
     );
   }
 
-  Future<void> _scanTicketBarcode(BuildContext context) async {
+  Future<void> _scanTicketBarcode() async {
     final scannedCode = await Navigator.of(context).push<String>(
       MaterialPageRoute(
         builder: (context) => const TicketBarcodeScannerView(),
       ),
     );
 
-    if (scannedCode != null && mounted) {
-      final matchingTickets = _viewModel.allTickets.where(
-        (t) => t.patientCode.trim() == scannedCode.trim(),
-      ).toList();
+    if (scannedCode == null || !mounted) return;
 
-      if (matchingTickets.isNotEmpty) {
-        final ticket = matchingTickets.first;
-        await AppNavigator.pushNamed(
-          context,
-          RouteNames.medicalTicket,
-          arguments: MedicalTicketViewArgs(ticket: ticket),
-        );
-        _viewModel.loadTicketsCommand.execute();
-      } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Không tìm thấy phiếu khám nào khớp với Mã BN: $scannedCode'),
-            backgroundColor: Colors.redAccent,
-          ),
-        );
-      }
+    final matchingTickets = _viewModel.allTickets.where(
+      (t) => t.patientCode.trim() == scannedCode.trim(),
+    ).toList();
+
+    if (matchingTickets.isNotEmpty) {
+      final ticket = matchingTickets.first;
+      await AppNavigator.pushNamed(
+        context,
+        RouteNames.medicalTicket,
+        arguments: MedicalTicketViewArgs(ticket: ticket),
+      );
+      if (!mounted) return;
+      _viewModel.loadTicketsCommand.execute();
+    } else {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Không tìm thấy phiếu khám nào khớp với Mã BN: $scannedCode'),
+          backgroundColor: Colors.redAccent,
+        ),
+      );
     }
   }
 
@@ -252,7 +306,7 @@ class _AppointmentBookingViewState extends State<AppointmentBookingView> {
         return DefaultTabController(
           length: 4,
           child: AppResponsiveContainer(
-            maxWidth: 800.0, // Wider container for lists/tables
+            maxWidth: 800.0,
             drawer: PortalDrawer(
               session: session,
               summary: summary,
@@ -305,29 +359,21 @@ class _AppointmentBookingViewState extends State<AppointmentBookingView> {
                 IconButton(
                   icon: const Icon(Icons.qr_code_scanner_rounded),
                   tooltip: 'Quét mã vạch phiếu',
-                  onPressed: () => _scanTicketBarcode(context),
+                  onPressed: _scanTicketBarcode,
                 ),
               ],
-              bottom: const TabBar(
+              bottom: TabBar(
                 labelColor: Colors.white,
                 unselectedLabelColor: Colors.white60,
                 indicatorColor: Colors.white,
                 indicatorWeight: 3,
                 tabs: [
-                  Tab(text: 'Tất cả'),
-                  Tab(text: 'Sắp tới'),
-                  Tab(text: 'Đã qua'),
-                  Tab(text: 'Đã xóa'),
+                  Tab(text: 'Tất cả (${_viewModel.filteredActiveTickets.length})'),
+                  Tab(text: 'Sắp tới (${_viewModel.filteredUpcomingTickets.length})'),
+                  Tab(text: 'Đã qua (${_viewModel.filteredPassedTickets.length})'),
+                  Tab(text: 'Đã xóa (${_viewModel.filteredDeletedTickets.length})'),
                 ],
               ),
-            ),
-            child: TabBarView(
-              children: [
-                _buildTicketsList(_viewModel.activeTickets, isDeletedTab: false),
-                _buildTicketsList(_viewModel.upcomingTickets, isDeletedTab: false),
-                _buildTicketsList(_viewModel.passedTickets, isDeletedTab: false),
-                _buildTicketsList(_viewModel.deletedTickets, isDeletedTab: true),
-              ],
             ),
             floatingActionButton: FloatingActionButton.extended(
               onPressed: () async {
@@ -335,6 +381,7 @@ class _AppointmentBookingViewState extends State<AppointmentBookingView> {
                   context,
                   RouteNames.patientProfileCreate,
                 );
+                if (!mounted) return;
                 _viewModel.loadTicketsCommand.execute();
               },
               backgroundColor: const Color(0xFF0D6EFD),
@@ -343,6 +390,95 @@ class _AppointmentBookingViewState extends State<AppointmentBookingView> {
                 'Đăng ký mới',
                 style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
               ),
+            ),
+            child: Column(
+              children: [
+                // Search & Filter Bar
+                Container(
+                  color: Colors.white,
+                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 10),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      TextField(
+                        controller: _searchController,
+                        onChanged: (val) => _viewModel.setSearchQuery(val),
+                        decoration: InputDecoration(
+                          hintText: 'Tìm theo tên BN, mã BN, phòng khám, ngày...',
+                          hintStyle: const TextStyle(fontSize: 13, color: Color(0xFF94A3B8)),
+                          prefixIcon: const Icon(Icons.search_rounded, color: Color(0xFF0D6EFD)),
+                          suffixIcon: _searchController.text.isNotEmpty
+                              ? IconButton(
+                                  icon: const Icon(Icons.clear_rounded, size: 18, color: Colors.grey),
+                                  onPressed: () {
+                                    _searchController.clear();
+                                    _viewModel.setSearchQuery('');
+                                  },
+                                )
+                              : null,
+                          contentPadding: const EdgeInsets.symmetric(vertical: 10, horizontal: 12),
+                          filled: true,
+                          fillColor: const Color(0xFFF8FAFC),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
+                          ),
+                          enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
+                          ),
+                          focusedBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: const BorderSide(color: Color(0xFF0D6EFD), width: 1.5),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      SingleChildScrollView(
+                        scrollDirection: Axis.horizontal,
+                        child: Row(
+                          children: [
+                            _buildFilterChip('Tất cả thời gian', TicketDateFilterMode.all),
+                            const SizedBox(width: 8),
+                            _buildFilterChip('Hôm nay', TicketDateFilterMode.today),
+                            const SizedBox(width: 8),
+                            _buildFilterChip('Tuần này', TicketDateFilterMode.thisWeek),
+                            const SizedBox(width: 8),
+                            _buildFilterChip('Tháng này', TicketDateFilterMode.thisMonth),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const Divider(height: 1, color: Color(0xFFE2E8F0)),
+                Expanded(
+                  child: TabBarView(
+                    children: [
+                      _buildTicketsList(
+                        _viewModel.filteredActiveTickets,
+                        emptyMessage: 'Chưa có phiếu đăng ký nào',
+                        isDeletedTab: false,
+                      ),
+                      _buildTicketsList(
+                        _viewModel.filteredUpcomingTickets,
+                        emptyMessage: 'Chưa có phiếu khám nào sắp tới',
+                        isDeletedTab: false,
+                      ),
+                      _buildTicketsList(
+                        _viewModel.filteredPassedTickets,
+                        emptyMessage: 'Chưa có phiếu khám nào đã qua',
+                        isDeletedTab: false,
+                      ),
+                      _buildTicketsList(
+                        _viewModel.filteredDeletedTickets,
+                        emptyMessage: 'Không có phiếu đã xóa nào',
+                        isDeletedTab: true,
+                      ),
+                    ],
+                  ),
+                ),
+              ],
             ),
           ),
         );
