@@ -460,7 +460,8 @@ class PortalMockDatasource {
         final now = DateTime.now();
         bool dirty = false;
         final updatedList = list.map((ticket) {
-          if (!ticket.isPast && ticket.selectedDate != null && ticket.selectedTime != null) {
+          bool passed = ticket.isPast;
+          if (ticket.selectedDate != null && ticket.selectedTime != null) {
             try {
               final dateParts = ticket.selectedDate!.split('/');
               if (dateParts.length == 3) {
@@ -470,9 +471,10 @@ class PortalMockDatasource {
                   int.parse(dateParts[0]),
                 );
                 final today = DateTime(now.year, now.month, now.day);
-                bool passed = false;
                 if (ticketDay.isBefore(today)) {
                   passed = true;
+                } else if (ticketDay.isAfter(today)) {
+                  passed = false;
                 } else if (ticketDay.isAtSameMomentAs(today)) {
                   final startPart = ticket.selectedTime!.split('-')[0].trim().toLowerCase();
                   int hr = 0;
@@ -487,16 +489,14 @@ class PortalMockDatasource {
                     min = int.parse(parts[1]);
                   }
                   final ticketTime = DateTime(now.year, now.month, now.day, hr, min);
-                  if (ticketTime.isBefore(now)) {
-                    passed = true;
-                  }
-                }
-                if (passed) {
-                  dirty = true;
-                  return ticket.copyWith(isPast: true);
+                  passed = ticketTime.isBefore(now);
                 }
               }
             } catch (_) {}
+          }
+          if (ticket.isPast != passed) {
+            dirty = true;
+            return ticket.copyWith(isPast: passed);
           }
           return ticket;
         }).toList();
@@ -507,7 +507,16 @@ class PortalMockDatasource {
         }
         return updatedList;
       } else {
-        // Cache is empty: pre-populate with default mock tickets for easy barcode scan testing!
+        // Cache is empty: pre-populate with default mock tickets covering upcoming, past, and deleted status
+        final now = DateTime.now();
+        final tomorrow = now.add(const Duration(days: 1));
+        final nextWeek = now.add(const Duration(days: 5));
+        final past1 = now.subtract(const Duration(days: 3));
+        final past2 = now.subtract(const Duration(days: 7));
+        final deletedDay = now.subtract(const Duration(days: 2));
+
+        String fmt(DateTime dt) => '${dt.day.toString().padLeft(2, '0')}/${dt.month.toString().padLeft(2, '0')}/${dt.year}';
+
         final t1 = _buildTicket(
           role: role,
           patientName: 'PHẠM NGỌC THUẬN',
@@ -515,8 +524,8 @@ class PortalMockDatasource {
           gender: 'Nam',
           phoneNumber: '0902333444',
           identifier: '12345678',
-          selectedDate: '13/07/2026',
-          selectedTime: '7g30 - 8g00',
+          selectedDate: fmt(tomorrow),
+          selectedTime: '08g00 - 08g30',
         );
         final t2 = _buildTicket(
           role: role,
@@ -525,7 +534,7 @@ class PortalMockDatasource {
           gender: 'Nam',
           phoneNumber: '0902333444',
           identifier: '97192187',
-          selectedDate: '14/07/2026',
+          selectedDate: fmt(nextWeek),
           selectedTime: '10g30 - 11g00',
         );
         final t3 = _buildTicket(
@@ -535,10 +544,31 @@ class PortalMockDatasource {
           gender: 'Nam',
           phoneNumber: '0987654321',
           identifier: '07641190',
-          selectedDate: '15/07/2026',
-          selectedTime: '10g00 - 10g30',
+          selectedDate: fmt(past1),
+          selectedTime: '14g00 - 14g30',
         );
-        final defaultList = [t1, t2, t3];
+        final t4 = _buildTicket(
+          role: role,
+          patientName: 'TRẦN THỊ MAI',
+          birthYear: '1992',
+          gender: 'Nữ',
+          phoneNumber: '0912345678',
+          identifier: '88765432',
+          selectedDate: fmt(past2),
+          selectedTime: '09g00 - 09g30',
+        );
+        final t5 = _buildTicket(
+          role: role,
+          patientName: 'HOÀNG VĂN THÁI',
+          birthYear: '1985',
+          gender: 'Nam',
+          phoneNumber: '0933445566',
+          identifier: '55443322',
+          selectedDate: fmt(deletedDay),
+          selectedTime: '15g30 - 16g00',
+        ).copyWith(isDeleted: true);
+
+        final defaultList = [t1, t2, t3, t4, t5];
         final encoded = jsonEncode(defaultList.map((e) => e.toJson()).toList());
         await prefs.setString(key, encoded);
         return defaultList;
