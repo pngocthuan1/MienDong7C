@@ -23,6 +23,50 @@ class _DevTestingViewState extends State<DevTestingView> {
   String _captchaCode = '';
   String? _captchaResult;
 
+  bool _isSpamming = false;
+  int _spamTotal = 0;
+  int _spamSuccess = 0;
+  int _spamBlocked = 0;
+  String _spamLog = '';
+
+  Future<void> _runSpamTest(int count) async {
+    if (_isSpamming) return;
+    setState(() {
+      _isSpamming = true;
+      _spamTotal = 0;
+      _spamSuccess = 0;
+      _spamBlocked = 0;
+      _spamLog = '🚀 Đang khởi chạy $count requests spam liên tục sang Cloudflare Edge...\n';
+    });
+
+    const token = 'cf-token-bot-failed';
+
+    for (var i = 1; i <= count; i++) {
+      final res = await AppLocator.turnstileService.verifyToken(token);
+      res.when(
+        success: (_) {
+          _spamSuccess++;
+          _spamLog += '[$i/$count] ✅ PASSED\n';
+        },
+        failure: (exc) {
+          _spamBlocked++;
+          _spamLog += '[$i/$count] 🛑 BLOCKED: Cloudflare Edge chặn\n';
+        },
+      );
+      if (mounted) {
+        setState(() {
+          _spamTotal = i;
+        });
+      }
+    }
+
+    if (mounted) {
+      setState(() {
+        _isSpamming = false;
+      });
+    }
+  }
+
   @override
   void initState() {
     super.initState();
@@ -373,6 +417,99 @@ class _DevTestingViewState extends State<DevTestingView> {
                                     borderRadius: BorderRadius.circular(10),
                                   ),
                                   padding: const EdgeInsets.symmetric(vertical: 10),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 22),
+                    const Divider(color: Color(0xFFFFE6CC)),
+                    const SizedBox(height: 12),
+                    const Text(
+                      '5. Công cụ thử nghiệm Spam Bot (Turnstile Edge Test)',
+                      style: TextStyle(
+                        color: Color(0xFF4D3319),
+                        fontSize: 14,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(14),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: const Color(0xFFFFD1A9)),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Expanded(
+                                child: ElevatedButton.icon(
+                                  onPressed: _isSpamming ? null : () => _runSpamTest(10),
+                                  icon: const Icon(Icons.bolt_rounded, size: 16),
+                                  label: const Text('Spam 10 Request'),
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: const Color(0xFFE53935),
+                                    foregroundColor: Colors.white,
+                                    padding: const EdgeInsets.symmetric(vertical: 10),
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 10),
+                              Expanded(
+                                child: ElevatedButton.icon(
+                                  onPressed: _isSpamming ? null : () => _runSpamTest(30),
+                                  icon: const Icon(Icons.security_rounded, size: 16),
+                                  label: const Text('Spam 30 Request'),
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: const Color(0xFFC62828),
+                                    foregroundColor: Colors.white,
+                                    padding: const EdgeInsets.symmetric(vertical: 10),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                          if (_isSpamming) ...[
+                            const SizedBox(height: 12),
+                            const LinearProgressIndicator(
+                              color: Color(0xFFC62828),
+                              backgroundColor: Color(0xFFFFEBEE),
+                            ),
+                          ],
+                          if (_spamTotal > 0 || _isSpamming) ...[
+                            const SizedBox(height: 12),
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceAround,
+                              children: [
+                                Text('Đã gửi: $_spamTotal', style: const TextStyle(fontWeight: FontWeight.bold)),
+                                Text('Cho qua: $_spamSuccess', style: const TextStyle(color: Colors.green, fontWeight: FontWeight.bold)),
+                                Text('Chặn đứng: $_spamBlocked', style: const TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
+                              ],
+                            ),
+                            const SizedBox(height: 10),
+                            Container(
+                              height: 120,
+                              width: double.infinity,
+                              padding: const EdgeInsets.all(8),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFF1E1E1E),
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: SingleChildScrollView(
+                                child: SelectableText(
+                                  _spamLog,
+                                  style: const TextStyle(
+                                    color: Color(0xFF4CAF50),
+                                    fontFamily: 'Courier',
+                                    fontSize: 11,
+                                  ),
                                 ),
                               ),
                             ),

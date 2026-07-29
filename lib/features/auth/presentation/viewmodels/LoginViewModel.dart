@@ -10,6 +10,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:benhvien7c/core/session/AppSessionStore.dart';
 import 'package:benhvien7c/features/auth/domain/entities/UserRole.dart';
 import 'package:benhvien7c/core/constants/AppStrings.dart';
+import 'package:benhvien7c/core/dio/AppLocator.dart';
+import 'package:benhvien7c/core/services/TurnstileVerifyService.dart';
 import 'package:benhvien7c/features/auth/domain/entities/UserProfileEntity.dart';
 
 /// Lớp phụ trợ Command hỗ trợ quản lý trạng thái tải (loading) và kết quả thực thi
@@ -101,6 +103,8 @@ class LoginViewModel extends ChangeNotifier {
     notifyListeners();
   }
 
+  String? captchaToken;
+
   late final loginCommand = Command<AuthSessionEntity>(() async {
     _message = null;
     notifyListeners();
@@ -108,14 +112,14 @@ class LoginViewModel extends ChangeNotifier {
     final phoneVal = phoneController.text.trim();
     final passwordVal = passwordController.text;
 
+    // Nếu chuyển sang chế độ Demo Ngoại Tuyến (Offline Demo)
     if (_isOfflineDemo) {
-      // Chế độ Offline Demo -> Tạo session giả lập để test UI mượt mà không cần server
-      await Future<void>.delayed(const Duration(milliseconds: 400));
+      await Future.delayed(const Duration(milliseconds: 600));
 
       final mockSession = AuthSessionEntity(
         accessToken: 'mock_access_token_${DateTime.now().millisecondsSinceEpoch}',
         refreshToken: 'mock_refresh_token_${DateTime.now().millisecondsSinceEpoch}',
-        refreshTokenExpiry: DateTime.now().add(const Duration(days: 7)),
+        refreshTokenExpiry: DateTime.now().add(const Duration(days: 30)),
       );
 
       final role = phoneVal == AppStrings.demoEmployeePhone ? UserRole.employee : UserRole.customer;
@@ -142,7 +146,16 @@ class LoginViewModel extends ChangeNotifier {
       return ApiSuccess(mockSession);
     }
 
-    // Chế độ Server Thật -> Gọi API backend
+    // Chế độ Server Thật -> Kiểm tra CAPTCHA nếu có trước khi gọi Backend API
+    if (captchaToken != null && captchaToken!.isNotEmpty) {
+      final verifyRes = await AppLocator.turnstileService.verifyToken(captchaToken!);
+      if (verifyRes is ApiFailure<TurnstileVerifyResult>) {
+        _message = 'Xác thực CAPTCHA thất bại hoặc nghi ngờ Spam Bot.';
+        notifyListeners();
+        return ApiFailure(verifyRes.exception);
+      }
+    }
+
     final deviceId = await _secureStorage.getOrCreateDeviceId();
 
     final params = LoginParams(
@@ -153,6 +166,7 @@ class LoginViewModel extends ChangeNotifier {
       device: deviceId,
       platform: Environment.platform,
       version: Environment.appVersion,
+      captchaToken: captchaToken,
     );
 
     // Bước 1: Lấy Token xác thực thiết bị & ứng dụng từ /api/Token/Login

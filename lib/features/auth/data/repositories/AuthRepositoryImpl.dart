@@ -27,6 +27,7 @@ class AuthRepositoryImpl implements AuthRepository {
         version: params.version,
         username: params.username,
         password: params.password,
+        captchaToken: params.captchaToken,
       );
 
       // DataSource đã tự gọi ApiValidator và trả về Model sạch (đã validate).

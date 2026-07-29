@@ -29,11 +29,6 @@ class _MedicalTicketViewState extends State<MedicalTicketView> {
     super.dispose();
   }
 
-  bool _isOfficialCode(String code) {
-    final clean = code.trim();
-    return clean.length == 8 && RegExp(r'^\d+$').hasMatch(clean);
-  }
-
   void _confirmDelete() {
     showDialog(
       context: context,
@@ -58,6 +53,67 @@ class _MedicalTicketViewState extends State<MedicalTicketView> {
           ),
         ],
       ),
+    );
+  }
+
+  void _showExpandedBarcodeDialog(BuildContext context, String code) {
+    showDialog<void>(
+      context: context,
+      builder: (dialogCtx) {
+        return Dialog(
+          backgroundColor: Colors.white,
+          surfaceTintColor: Colors.white,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Text(
+                  'MÃ VẠCH BỆNH NHÂN',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                    color: Color(0xFF1E293B),
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  'Mã BN: $code',
+                  style: const TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: Color(0xFF0D6EFD),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Container(
+                  color: Colors.white,
+                  padding: const EdgeInsets.all(12),
+                  child: SizedBox(
+                    width: 280,
+                    height: 110,
+                    child: MedicalTicketBarcode(seed: code),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                const Text(
+                  'Đưa mã vạch này vuông góc với máy quét tại Quầy tiếp đón Bệnh viện',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(fontSize: 12, color: Colors.grey),
+                ),
+                const SizedBox(height: 12),
+                TextButton(
+                  onPressed: () => Navigator.of(dialogCtx).pop(),
+                  child: const Text('Đóng'),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
     );
   }
 
@@ -115,7 +171,7 @@ class _MedicalTicketViewState extends State<MedicalTicketView> {
               borderRadius: BorderRadius.circular(12),
               boxShadow: [
                 BoxShadow(
-                  color: Colors.black.withOpacity(0.06),
+                  color: Colors.black.withValues(alpha: 0.06),
                   blurRadius: 12,
                   offset: const Offset(0, 4),
                 ),
@@ -183,23 +239,55 @@ class _MedicalTicketViewState extends State<MedicalTicketView> {
 
                       // Patient Details List (: value format)
                       _DetailRow(label: 'Ngày khám', value: ticket.scheduleText),
-                      if (_isOfficialCode(ticket.patientCode))
-                        _DetailRow(label: 'Mã BN', value: ticket.patientCode),
                       _DetailRow(label: 'Họ tên', value: ticket.patientName),
                       _DetailRow(label: 'Năm sinh', value: ticket.birthYear),
                       _DetailRow(label: 'Giới tính', value: ticket.gender),
                       _DetailRow(label: 'Điện thoại', value: ticket.phoneNumber ?? ''),
-                      _DetailRow(label: 'Triệu chứng', value: (ticket.symptom != null && ticket.symptom!.isNotEmpty) ? ticket.symptom! : 'không có'),
+                      _DetailRow(label: 'Triệu chứng', value: ticket.symptom ?? ''),
 
                       const SizedBox(height: 14),
                       const Divider(color: Color(0xFFE2E8F0), thickness: 1),
                       const SizedBox(height: 14),
 
-                      _DetailRow(label: 'Đăng ký lúc', value: ticket.createdAtText),
-                      if (ticket.dangKyGiup != null && ticket.dangKyGiup!.trim().isNotEmpty)
-                        _DetailRow(label: 'Đăng ký giúp', value: ticket.dangKyGiup!.trim()),
+                      // Mã BN & Barcode (Chỉ hiển thị khi Server đã cấp mã BN)
+                      if (ticket.patientCode.trim().isNotEmpty) ...[
+                        _DetailRow(label: 'Mã BN', value: ticket.patientCode),
+                        const SizedBox(height: 8),
+                        InkWell(
+                          onTap: () => _showExpandedBarcodeDialog(context, ticket.patientCode),
+                          borderRadius: BorderRadius.circular(8),
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 4),
+                            child: Column(
+                              children: [
+                                Center(
+                                  child: SizedBox(
+                                    width: 260,
+                                    height: 80,
+                                    child: MedicalTicketBarcode(seed: ticket.patientCode),
+                                  ),
+                                ),
+                                const SizedBox(height: 4),
+                                const Text(
+                                  '(Chạm để phóng to mã vạch)',
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    color: Color(0xFF64748B),
+                                    fontStyle: FontStyle.italic,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 14),
+                      ],
 
-                      const SizedBox(height: 20),
+                      // Info rows below barcode
+                      _DetailRow(label: 'Đăng ký lúc', value: ticket.createdAtText),
+                      _DetailRow(label: 'Đăng ký giúp', value: ticket.dangKyGiup ?? ''),
+
+                      const SizedBox(height: 24),
 
                       // Center Red Delete Button
                       SizedBox(
@@ -221,22 +309,6 @@ class _MedicalTicketViewState extends State<MedicalTicketView> {
                           ),
                         ),
                       ),
-
-                      // Scannable barcode ONLY if official 8-digit patient code
-                      if (_isOfficialCode(ticket.patientCode)) ...[
-                        const SizedBox(height: 20),
-                        const Divider(color: Color(0xFFE2E8F0), thickness: 1),
-                        const SizedBox(height: 14),
-                        Text(
-                          'Mã BN: ${ticket.patientCode}',
-                          style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.grey),
-                        ),
-                        const SizedBox(height: 8),
-                        Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 20),
-                          child: MedicalTicketBarcode(seed: ticket.patientCode),
-                        ),
-                      ],
                     ],
                   ),
                 ),

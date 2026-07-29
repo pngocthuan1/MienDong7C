@@ -7,6 +7,7 @@ class LoginRequestModel {
   final String version;
   final String username;
   final String password;
+  final String? captchaToken;
 
   LoginRequestModel({
     required this.tenDangNhapHis,
@@ -17,10 +18,11 @@ class LoginRequestModel {
     required this.version,
     required this.username,
     required this.password,
+    this.captchaToken,
   });
 
   Map<String, dynamic> toJson() {
-    return {
+    final data = <String, dynamic>{
       'TenDangNhapHis': tenDangNhapHis,
       'MatKhauHis': matKhauHis,
       'Device': device,
@@ -30,14 +32,16 @@ class LoginRequestModel {
       'Username': username,
       'Password': password,
     };
+    if (captchaToken != null && captchaToken!.isNotEmpty) {
+      data['CaptchaToken'] = captchaToken;
+    }
+    return data;
   }
 
-  /// Che các trường mật khẩu khi in ra log/console, tránh lộ dữ liệu
-  /// nhạy cảm nếu lỡ debug print hoặc log interceptor bật nhầm ở production.
   @override
   String toString() {
     return 'LoginRequestModel(tenDangNhapHis: $tenDangNhapHis, matKhauHis: ***, '
         'device: $device, isMobile: $isMobile, platform: $platform, '
-        'version: $version, username: $username, password: ***)';
+        'version: $version, username: $username, password: ***, captchaToken: $captchaToken)';
   }
 }

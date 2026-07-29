@@ -58,6 +58,7 @@ class _CloudflareTurnstileState extends State<CloudflareTurnstile> {
             _isLoading = false;
             _isSuccess = false;
           });
+          widget.onVerified('cf-token-bot-failed');
           if (widget.onExpired != null) {
             widget.onExpired!();
           }

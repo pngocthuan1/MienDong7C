@@ -94,6 +94,7 @@ class _LoginViewState extends State<LoginView> {
                 captchaToken: _captchaToken,
                 simulateBot: _isBotSimulation,
                 onCaptchaVerified: (token) {
+                  _viewModel.captchaToken = token;
                   setState(() {
                     _captchaToken = token;
                   });

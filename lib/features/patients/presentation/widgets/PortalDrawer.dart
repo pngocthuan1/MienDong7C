@@ -14,7 +14,7 @@ class PortalDrawer extends StatelessWidget {
     required this.onNotificationTap,
     required this.onBookingTap,
     required this.onTypeFourDemoTap,
-    required this.onDevTestingTap,
+    this.onDevTestingTap,
     this.onChangePasswordTap,
     required this.onDeleteAccountTap,
     required this.onAboutTap,
@@ -30,7 +30,7 @@ class PortalDrawer extends StatelessWidget {
   final VoidCallback onNotificationTap;
   final VoidCallback onBookingTap;
   final VoidCallback onTypeFourDemoTap;
-  final VoidCallback onDevTestingTap;
+  final VoidCallback? onDevTestingTap;
   final VoidCallback? onUserManagementTap;
   final VoidCallback? onChangePasswordTap;
   final VoidCallback onDeleteAccountTap;
@@ -159,6 +159,16 @@ class PortalDrawer extends StatelessWidget {
                   icon: Icons.alt_route_rounded,
                   label: 'Demo điều hướng dạng 4',
                   onTap: onTypeFourDemoTap,
+                ),
+                const Divider(height: 1),
+                _DrawerTile(
+                  icon: Icons.developer_mode_rounded,
+                  label: 'Thử nghiệm Dev & CAPTCHA',
+                  iconColor: const Color(0xFFE67E22),
+                  onTap: onDevTestingTap ?? () {
+                    AppNavigator.safePop(context);
+                    AppNavigator.pushNamed(context, RouteNames.devTesting);
+                  },
                 ),
 
                 if (session.isEmployee && onUserManagementTap != null) ...[
