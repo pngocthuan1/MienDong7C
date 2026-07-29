@@ -1,0 +1,187 @@
+import 'package:flutter/material.dart';
+import 'package:benhvien7c/core/theme/AppSizes.dart';
+import 'package:benhvien7c/core/dio/AppLocator.dart';
+import 'package:benhvien7c/core/firebase/FirebaseBootstrap.dart';
+import 'package:benhvien7c/core/navigation/AppNavigator.dart';
+import 'package:benhvien7c/core/utils/AppInputFormatters.dart';
+import 'package:benhvien7c/core/widgets/AppButton.dart';
+import 'package:benhvien7c/core/widgets/AppTextField.dart';
+import 'package:benhvien7c/core/widgets/CloudflareTurnstile.dart';
+import 'package:benhvien7c/app/router/RouteNames.dart';
+import 'package:benhvien7c/features/auth/presentation/viewmodels/ForgotPasswordViewModel.dart';
+import 'package:benhvien7c/features/auth/presentation/views/AuthFlowArguments.dart';
+import 'package:benhvien7c/features/auth/presentation/widgets/AuthCardShell.dart';
+import 'package:benhvien7c/features/auth/presentation/widgets/AuthFeedbackBanner.dart';
+import 'package:benhvien7c/features/auth/presentation/widgets/AuthFooterLink.dart';
+import 'package:benhvien7c/features/auth/presentation/widgets/AuthGradientBackground.dart';
+import 'package:benhvien7c/features/auth/presentation/widgets/AuthHeader.dart';
+import 'package:benhvien7c/features/auth/presentation/widgets/FirebaseRecaptchaHost.dart';
+
+class ForgotPasswordView extends StatefulWidget {
+  const ForgotPasswordView({super.key});
+
+  @override
+  State<ForgotPasswordView> createState() => _ForgotPasswordViewState();
+}
+
+class _ForgotPasswordViewState extends State<ForgotPasswordView> {
+  final _formKey = GlobalKey<FormState>();
+  late final ForgotPasswordViewModel _viewModel;
+  String? _captchaToken;
+
+  @override
+  void initState() {
+    super.initState();
+    _viewModel = ForgotPasswordViewModel(AppLocator.authRepository);
+    _viewModel.requestOtpCommand.addListener(_onOtpRequested);
+  }
+
+  @override
+  void dispose() {
+    _viewModel.requestOtpCommand.removeListener(_onOtpRequested);
+    _viewModel.dispose();
+    super.dispose();
+  }
+
+  void _onOtpRequested() {
+    if (_viewModel.requestOtpCommand.running) {
+      return;
+    }
+
+    final result = _viewModel.requestOtpCommand.result;
+    if (result == null || !mounted) {
+      return;
+    }
+
+    result.when(
+      success: (message) {
+        _viewModel.requestOtpCommand.clearResult();
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(message)));
+        AppNavigator.pushNamed(
+          context,
+          RouteNames.verifyOtp,
+          arguments: OtpViewArgs(
+            phoneNumber: _viewModel.phoneController.text.trim(),
+            purpose: OtpPurpose.passwordReset,
+          ),
+        );
+      },
+      failure: (_) {
+        _viewModel.requestOtpCommand.clearResult();
+      },
+    );
+  }
+
+  Future<void> _submit() async {
+    try {
+      FocusScope.of(context).unfocus();
+      if (!_formKey.currentState!.validate()) {
+        return;
+      }
+      await _viewModel.requestOtpCommand.execute();
+    } catch (_) {}
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AuthGradientBackground(
+      child: AuthCardShell(
+        child: AnimatedBuilder(
+          animation: _viewModel,
+          builder: (context, _) {
+            return Form(
+              key: _formKey,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const AuthHeader(
+                    title: 'Quên mật khẩu',
+                    subtitle:
+                        'Nhập số điện thoại đã đăng ký. Hệ thống sẽ gửi OTP để bạn xác minh và tạo mật khẩu mới.',
+                    icon: Icons.lock_reset_rounded,
+                  ),
+                  const SizedBox(height: AppSizes.sectionSpacing),
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(14),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFF4FBFF),
+                      borderRadius: BorderRadius.circular(AppSizes.fieldRadius),
+                      border: Border.all(color: const Color(0xFFD7EDFF)),
+                    ),
+                    child: Text(
+                      FirebaseBootstrap.isInitialized
+                          ? 'Khi bạn bấm Gửi mã OTP, Firebase sẽ hiển thị Google reCAPTCHA để xác minh số điện thoại.'
+                          : 'Firebase chưa được cấu hình nên app đang chạy chế độ demo. OTP hiện tại vẫn dùng mã 123456.',
+                      style: const TextStyle(
+                        color: Color(0xFF0A4F95),
+                        fontWeight: FontWeight.w600,
+                        height: 1.4,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: AppSizes.compactSpacing),
+                  const FirebaseRecaptchaHost(),
+                  const SizedBox(height: AppSizes.itemSpacing),
+                  AppTextField(
+                    controller: _viewModel.phoneController,
+                    label: 'Số điện thoại',
+                    hintText: 'Nhập số điện thoại đã đăng ký',
+                    keyboardType: TextInputType.phone,
+                    prefixIcon: Icons.phone_android_rounded,
+                    inputFormatters: AppInputFormatters.phoneNumber,
+                    validator: _viewModel.checkPhone,
+                    textInputAction: TextInputAction.done,
+                    onChanged: _viewModel.updatePhoneError,
+                  ),
+                  if (_viewModel.message != null) ...[
+                    const SizedBox(height: AppSizes.itemSpacing),
+                    AuthFeedbackBanner(message: _viewModel.message!),
+                  ],
+                  const SizedBox(height: AppSizes.itemSpacing),
+                  Center(
+                    child: CloudflareTurnstile(
+                      onVerified: (token) {
+                        setState(() {
+                          _captchaToken = token;
+                        });
+                      },
+                    ),
+                  ),
+                  const SizedBox(height: AppSizes.sectionSpacing),
+                  Center(
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 280),
+                      child: ListenableBuilder(
+                        listenable: _viewModel.requestOtpCommand,
+                        builder: (context, _) {
+                          final isCaptchaVerified = _captchaToken != null;
+                          return AppButton(
+                            label: 'Gửi mã OTP',
+                            icon: Icons.sms_outlined,
+                            isLoading: _viewModel.requestOtpCommand.running,
+                            onPressed: isCaptchaVerified ? _submit : null,
+                          );
+                        },
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: AppSizes.sectionSpacing),
+                  AuthFooterLink(
+                    label: 'Nhớ lại mật khẩu?',
+                    actionLabel: 'Quay về đăng nhập',
+                    onTap: () {
+                      AppNavigator.resetToNamed(context, RouteNames.login);
+                    },
+                  ),
+                ],
+              ),
+            );
+          },
+        ),
+      ),
+    );
+  }
+}

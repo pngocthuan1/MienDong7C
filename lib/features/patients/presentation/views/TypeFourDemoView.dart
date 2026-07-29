@@ -90,6 +90,7 @@ class _TypeFourDemoViewState extends State<TypeFourDemoView> {
                 : null,
             onChangePasswordTap: () {
               AppNavigator.safePop(context);
+              AppNavigator.pushNamed(context, RouteNames.changePassword);
             },
             onDeleteAccountTap: () {
               AppNavigator.safePop(context);

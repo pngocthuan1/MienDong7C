@@ -99,6 +99,7 @@ class _UserManagementViewState extends State<UserManagementView> {
             onUserManagementTap: () => AppNavigator.safePop(context),
             onChangePasswordTap: () {
               AppNavigator.safePop(context);
+              AppNavigator.pushNamed(context, RouteNames.changePassword);
             },
             onDeleteAccountTap: () {
               AppNavigator.safePop(context);

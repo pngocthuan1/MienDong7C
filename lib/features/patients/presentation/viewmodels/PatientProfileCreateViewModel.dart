@@ -32,7 +32,8 @@ class PatientProfileCreateViewModel extends BasePortalViewModel {
   final phoneController = TextEditingController();
   final symptomController = TextEditingController();
 
-  // "Register for someone else" fields
+  // "Register for someone else" single text field
+  final dangKyGiupController = TextEditingController();
   final otherFullNameController = TextEditingController();
   final otherBirthYearController = TextEditingController();
   final otherPhoneController = TextEditingController();
@@ -90,17 +91,16 @@ class PatientProfileCreateViewModel extends BasePortalViewModel {
     final hasTime = selectedTime != null;
     if (!hasDate || !hasTime) return false;
 
+    final hasIdentifier = identifierController.text.trim().isNotEmpty;
+    final hasFullName = fullNameController.text.trim().isNotEmpty;
+    final hasPhone = phoneController.text.trim().isNotEmpty;
+    final hasBasicInfo = (hasIdentifier || hasFullName) && (hasPhone || hasIdentifier);
+    if (!hasBasicInfo) return false;
+
     if (registerForSomeoneElse) {
-      final hasOtherName = otherFullNameController.text.trim().isNotEmpty;
-      final hasOtherPhone = otherPhoneController.text.trim().isNotEmpty;
-      final hasOtherBirth = otherBirthYearController.text.trim().isNotEmpty;
-      return hasOtherName && hasOtherPhone && hasOtherBirth;
-    } else {
-      final hasIdentifier = identifierController.text.trim().isNotEmpty;
-      final hasFullName = fullNameController.text.trim().isNotEmpty;
-      final hasPhone = phoneController.text.trim().isNotEmpty;
-      return (hasIdentifier || hasFullName) && (hasPhone || hasIdentifier);
+      return dangKyGiupController.text.trim().isNotEmpty;
     }
+    return true;
   }
 
   // Field validation error states
@@ -216,6 +216,14 @@ class PatientProfileCreateViewModel extends BasePortalViewModel {
   }
 
   void refreshFormState() {
+    final text = identifierController.text.trim();
+    if (text.contains('|') || text.contains(r'$')) {
+      final parsed = CccdParserHelper.parse(text);
+      if (parsed != null) {
+        fillFromCccd(parsed);
+        return;
+      }
+    }
     notifyListeners();
   }
 
@@ -271,6 +279,21 @@ class PatientProfileCreateViewModel extends BasePortalViewModel {
       }
     }
     deleteConfirmIdentifier = null;
+    notifyListeners();
+  }
+
+  void clearProfileSelection() {
+    selectedProfileIdentifier = null;
+    isExistingProfile = false;
+    identifierController.clear();
+    fullNameController.text = session.user.fullName;
+    birthYearController.text = '1997';
+    _gender = 'Nam';
+    phoneController.clear();
+    dangKyGiupController.clear();
+    fullNameError = null;
+    birthYearError = null;
+    phoneError = null;
     notifyListeners();
   }
 
@@ -454,33 +477,18 @@ class PatientProfileCreateViewModel extends BasePortalViewModel {
       return Error(Exception('TimeExpired'), 'Khung giờ khám được chọn đã trôi qua. Vui lòng chọn khung giờ khác.');
     }
 
-    if (registerForSomeoneElse) {
-      updateOtherFullNameError(otherFullNameController.text);
-      updateOtherBirthYearError(otherBirthYearController.text);
-      updateOtherPhoneError(otherPhoneController.text);
-      if (otherFullNameError != null || otherBirthYearError != null || otherPhoneError != null) {
-        return Error(Exception('ValidationError'), 'Vui lòng điền đúng và đủ thông tin người được giúp.');
-      }
-    } else {
-      updateFullNameError(fullNameController.text);
-      updateBirthYearError(birthYearController.text);
-      updatePhoneError(phoneController.text);
-      if (fullNameError != null || birthYearError != null || phoneError != null) {
-        return Error(Exception('ValidationError'), 'Vui lòng kiểm tra lại thông tin định danh.');
-      }
+    if (registerForSomeoneElse && dangKyGiupController.text.trim().isEmpty) {
+      return Error(Exception('ValidationError'), 'Vui lòng điền thông tin đăng ký giúp.');
     }
 
     return runSafely(() async {
       final draft = PatientProfileDraftEntity(
         identifier: identifierController.text.trim(),
-        fullName: registerForSomeoneElse
-            ? otherFullNameController.text.trim()
-            : (fullNameController.text.trim().isEmpty ? session.user.fullName : fullNameController.text.trim()),
-        birthYear: registerForSomeoneElse
-            ? otherBirthYearController.text.trim()
-            : (birthYearController.text.trim().isEmpty ? '1997' : birthYearController.text.trim()),
-        gender: registerForSomeoneElse ? otherGender : _gender,
-        phoneNumber: registerForSomeoneElse ? otherPhoneController.text.trim() : phoneController.text.trim(),
+        fullName: fullNameController.text.trim().isEmpty ? session.user.fullName : fullNameController.text.trim(),
+        birthYear: birthYearController.text.trim().isEmpty ? '1997' : birthYearController.text.trim(),
+        gender: _gender,
+        phoneNumber: phoneController.text.trim(),
+        dangKyGiup: registerForSomeoneElse ? dangKyGiupController.text.trim() : null,
       );
 
       final weekdayStr = selectedDate!.weekday == DateTime.monday
@@ -534,6 +542,7 @@ class PatientProfileCreateViewModel extends BasePortalViewModel {
 
   @override
   void dispose() {
+    dangKyGiupController.dispose();
     identifierController.dispose();
     fullNameController.dispose();
     birthYearController.dispose();

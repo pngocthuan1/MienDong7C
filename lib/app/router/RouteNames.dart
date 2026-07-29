@@ -5,12 +5,16 @@ class RouteNames {
   static const String home = '/home';
   static const String forgotPassword = '/forgot-password';
   static const String register = '/register';
+  static const String verifyOtp = '/verify-otp';
+  static const String resetPassword = '/reset-password';
+  static const String changePassword = '/change-password';
 
   static const String notifications = '/notifications';
   static const String notificationDetail = '/notification-detail';
   static const String notificationPlayground = '/notification-playground';
   static const String appointmentBooking = '/appointment-booking';
   static const String patientProfileCreate = '/patient-profile-create';
+  static const String patientProfileSelect = '/patient-profile-select';
   static const String devTesting = '/dev-testing';
   static const String userManagement = '/user-management';
   static const String userManagementDetail = '/user-management-detail';
