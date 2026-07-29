@@ -142,116 +142,197 @@ class _AppointmentBookingViewState extends State<AppointmentBookingView> {
       itemCount: tickets.length,
       itemBuilder: (context, index) {
         final ticket = tickets[index];
-        return Card(
-          margin: const EdgeInsets.only(bottom: 12),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16),
-            side: const BorderSide(color: Color(0xFFE2E8F0)),
+        return Container(
+          margin: const EdgeInsets.only(bottom: 14),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: const Color(0xFFE2E8F0)),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.03),
+                blurRadius: 8,
+                offset: const Offset(0, 2),
+              ),
+            ],
           ),
-          elevation: 0,
-          color: Colors.white,
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          clipBehavior: Clip.antiAlias,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Top Header Bar: Pink banner if expired/past, or light blue if active/upcoming
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                color: ticket.isPast ? const Color(0xFFFFC0CB) : const Color(0xFFEBF3FF),
+                child: Row(
                   children: [
+                    const Icon(
+                      Icons.person_rounded,
+                      color: Color(0xFF4F46E5),
+                      size: 22,
+                    ),
+                    const SizedBox(width: 8),
                     Expanded(
                       child: Text(
-                        ticket.roomName,
-                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: Color(0xFF0F172A)),
+                        '${ticket.patientName.toUpperCase()} - ${ticket.birthYear}',
+                        style: const TextStyle(
+                          fontSize: 17,
+                          fontWeight: FontWeight.bold,
+                          color: Color(0xFF4F46E5),
+                        ),
                       ),
                     ),
                     _buildStatusBadge(ticket),
                   ],
                 ),
-                const SizedBox(height: 6),
-                Text(
-                  'Khung giờ: ${ticket.scheduleText}',
-                  style: const TextStyle(fontSize: 13, color: Color(0xFF475569), fontWeight: FontWeight.w600),
-                ),
-                const SizedBox(height: 8),
-                const Divider(height: 16, color: Color(0xFFF1F5F9)),
-                Row(
+              ),
+
+              const Divider(height: 1, color: Color(0xFFE2E8F0)),
+
+              Padding(
+                padding: const EdgeInsets.all(14),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Icon(Icons.person_outline_rounded, size: 16, color: Colors.grey),
-                    const SizedBox(width: 6),
-                    Text(
-                      ticket.patientName,
-                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Color(0xFF334155)),
-                    ),
-                    const SizedBox(width: 8),
-                    Text(
-                      '· Mã BN: ${ticket.patientCode}',
-                      style: const TextStyle(fontSize: 12, color: Colors.grey),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 12),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.end,
-                  children: [
-                    if (!ticket.isDeleted) ...[
-                      TextButton.icon(
-                        onPressed: () async {
-                          await AppNavigator.pushNamed(
-                            context,
-                            RouteNames.medicalTicket,
-                            arguments: MedicalTicketViewArgs(ticket: ticket),
-                          );
-                          if (!mounted) return;
-                          _viewModel.loadTicketsCommand.execute();
-                        },
-                        icon: const Icon(Icons.qr_code_rounded, size: 16),
-                        label: const Text('Chi tiết'),
-                        style: TextButton.styleFrom(
-                          foregroundColor: const Color(0xFF0D6EFD),
-                          padding: const EdgeInsets.symmetric(horizontal: 8),
-                        ),
+                    // Line 1: # Mã BN (Chỉ hiển thị khi có mã chính thức 8 số)
+                    if (ticket.patientCode.trim().length == 8 && RegExp(r'^\d+$').hasMatch(ticket.patientCode.trim())) ...[
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.center,
+                        children: [
+                          const Text(
+                            '#',
+                            style: TextStyle(
+                              fontSize: 22,
+                              fontWeight: FontWeight.bold,
+                              color: Color(0xFF4F46E5),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              'Mã BN: ${ticket.patientCode}',
+                              style: const TextStyle(
+                                fontSize: 18,
+                                fontWeight: FontWeight.bold,
+                                color: Color(0xFF4F46E5),
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
-                      const SizedBox(width: 8),
-                      TextButton.icon(
-                        onPressed: () async {
-                          await AppNavigator.pushNamed(
-                            context,
-                            RouteNames.patientProfileCreate,
-                            arguments: ticket,
-                          );
-                          if (!mounted) return;
-                          _viewModel.loadTicketsCommand.execute();
-                        },
-                        icon: const Icon(Icons.refresh_rounded, size: 16),
-                        label: const Text('Đăng ký lại'),
-                        style: TextButton.styleFrom(
-                          foregroundColor: const Color(0xFF0D6EFD),
-                          padding: const EdgeInsets.symmetric(horizontal: 8),
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      IconButton(
-                        onPressed: () => _viewModel.softDeleteTicket(ticket.id!),
-                        icon: const Icon(Icons.delete_outline_rounded, color: Colors.redAccent),
-                        tooltip: 'Xóa phiếu',
-                        padding: EdgeInsets.zero,
-                        constraints: const BoxConstraints(),
-                      ),
-                    ] else ...[
-                      TextButton.icon(
-                        onPressed: () => _viewModel.restoreTicket(ticket.id!),
-                        icon: const Icon(Icons.restore_rounded, size: 16),
-                        label: const Text('Khôi phục'),
-                        style: TextButton.styleFrom(
-                          foregroundColor: Colors.green,
-                          padding: const EdgeInsets.symmetric(horizontal: 12),
-                        ),
-                      ),
+                      const SizedBox(height: 8),
                     ],
+
+                    // Line 2: Ngày khám: ...
+                    Row(
+                      children: [
+                        const Icon(Icons.calendar_today_rounded, size: 18, color: Colors.black),
+                        const SizedBox(width: 8),
+                        Text(
+                          'Ngày khám: ${ticket.scheduleText}',
+                          style: const TextStyle(
+                            fontSize: 15,
+                            color: Color(0xFF1E293B),
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 6),
+
+                    // Line 3: # Số đăng ký: ...
+                    Row(
+                      children: [
+                        const Text(
+                          '#',
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                            color: Color(0xFF4F46E5),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Text(
+                          'Số đăng ký: ${ticket.queueNumber}',
+                          style: const TextStyle(
+                            fontSize: 15,
+                            color: Color(0xFF1E293B),
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ],
+                    ),
+
+                    const SizedBox(height: 12),
+                    const Divider(height: 1, color: Color(0xFFF1F5F9)),
+                    const SizedBox(height: 8),
+
+                    // Action buttons (retained)
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.end,
+                      children: [
+                        if (!ticket.isDeleted) ...[
+                          TextButton.icon(
+                            onPressed: () async {
+                              await AppNavigator.pushNamed(
+                                context,
+                                RouteNames.medicalTicket,
+                                arguments: MedicalTicketViewArgs(ticket: ticket),
+                              );
+                              if (!mounted) return;
+                              _viewModel.loadTicketsCommand.execute();
+                            },
+                            icon: const Icon(Icons.qr_code_rounded, size: 16),
+                            label: const Text('Chi tiết'),
+                            style: TextButton.styleFrom(
+                              foregroundColor: const Color(0xFF0D6EFD),
+                              padding: const EdgeInsets.symmetric(horizontal: 8),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          TextButton.icon(
+                            onPressed: () async {
+                              await AppNavigator.pushNamed(
+                                context,
+                                RouteNames.patientProfileCreate,
+                                arguments: ticket,
+                              );
+                              if (!mounted) return;
+                              _viewModel.loadTicketsCommand.execute();
+                            },
+                            icon: const Icon(Icons.refresh_rounded, size: 16),
+                            label: const Text('Đăng ký lại'),
+                            style: TextButton.styleFrom(
+                              foregroundColor: const Color(0xFF0D6EFD),
+                              padding: const EdgeInsets.symmetric(horizontal: 8),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          IconButton(
+                            onPressed: () => _viewModel.softDeleteTicket(ticket.id!),
+                            icon: const Icon(Icons.delete_outline_rounded, color: Colors.redAccent),
+                            tooltip: 'Xóa phiếu',
+                            padding: EdgeInsets.zero,
+                            constraints: const BoxConstraints(),
+                          ),
+                        ] else ...[
+                          TextButton.icon(
+                            onPressed: () => _viewModel.restoreTicket(ticket.id!),
+                            icon: const Icon(Icons.restore_rounded, size: 16),
+                            label: const Text('Khôi phục'),
+                            style: TextButton.styleFrom(
+                              foregroundColor: Colors.green,
+                              padding: const EdgeInsets.symmetric(horizontal: 12),
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
                   ],
                 ),
-              ],
-            ),
+              ),
+            ],
           ),
         );
       },
@@ -335,6 +416,7 @@ class _AppointmentBookingViewState extends State<AppointmentBookingView> {
                   : null,
               onChangePasswordTap: () {
                 AppNavigator.safePop(context);
+                AppNavigator.pushNamed(context, RouteNames.changePassword);
               },
               onDeleteAccountTap: () {
                 AppNavigator.safePop(context);

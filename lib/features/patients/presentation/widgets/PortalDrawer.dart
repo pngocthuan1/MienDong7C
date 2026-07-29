@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:benhvien7c/app/router/RouteNames.dart';
+import 'package:benhvien7c/core/navigation/AppNavigator.dart';
 import 'package:benhvien7c/core/theme/AppColors.dart';
 import 'package:benhvien7c/features/auth/domain/entities/AuthSessionEntity.dart';
 import 'package:benhvien7c/features/patients/domain/entities/NotificationSummaryEntity.dart';
@@ -13,7 +15,7 @@ class PortalDrawer extends StatelessWidget {
     required this.onBookingTap,
     required this.onTypeFourDemoTap,
     required this.onDevTestingTap,
-    required this.onChangePasswordTap,
+    this.onChangePasswordTap,
     required this.onDeleteAccountTap,
     required this.onAboutTap,
     required this.onLogoutTap,
@@ -30,7 +32,7 @@ class PortalDrawer extends StatelessWidget {
   final VoidCallback onTypeFourDemoTap;
   final VoidCallback onDevTestingTap;
   final VoidCallback? onUserManagementTap;
-  final VoidCallback onChangePasswordTap;
+  final VoidCallback? onChangePasswordTap;
   final VoidCallback onDeleteAccountTap;
   final VoidCallback onAboutTap;
   final VoidCallback onLogoutTap;
@@ -171,7 +173,10 @@ class PortalDrawer extends StatelessWidget {
                 _DrawerTile(
                   icon: Icons.lock_reset_rounded,
                   label: 'Đổi mật khẩu',
-                  onTap: onChangePasswordTap,
+                  onTap: onChangePasswordTap ?? () {
+                    AppNavigator.safePop(context);
+                    AppNavigator.pushNamed(context, RouteNames.changePassword);
+                  },
                 ),
                 _DrawerTile(
                   icon: Icons.person_remove_alt_1_rounded,

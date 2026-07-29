@@ -5,6 +5,7 @@ class PatientProfileDraftEntity {
     required this.birthYear,
     required this.gender,
     required this.phoneNumber,
+    this.dangKyGiup,
     this.isDeleted = false,
   });
 
@@ -13,6 +14,7 @@ class PatientProfileDraftEntity {
   final String birthYear;
   final String gender;
   final String phoneNumber;
+  final String? dangKyGiup;
   final bool isDeleted;
 
   Map<String, dynamic> toJson() {
@@ -22,6 +24,7 @@ class PatientProfileDraftEntity {
       'birthYear': birthYear,
       'gender': gender,
       'phoneNumber': phoneNumber,
+      'dangKyGiup': dangKyGiup,
       'isDeleted': isDeleted,
     };
   }
@@ -33,6 +36,7 @@ class PatientProfileDraftEntity {
       birthYear: json['birthYear'] as String? ?? '',
       gender: json['gender'] as String? ?? '',
       phoneNumber: json['phoneNumber'] as String? ?? '',
+      dangKyGiup: json['dangKyGiup'] as String?,
       isDeleted: json['isDeleted'] as bool? ?? false,
     );
   }
@@ -43,6 +47,7 @@ class PatientProfileDraftEntity {
     String? birthYear,
     String? gender,
     String? phoneNumber,
+    String? dangKyGiup,
     bool? isDeleted,
   }) {
     return PatientProfileDraftEntity(
@@ -51,6 +56,7 @@ class PatientProfileDraftEntity {
       birthYear: birthYear ?? this.birthYear,
       gender: gender ?? this.gender,
       phoneNumber: phoneNumber ?? this.phoneNumber,
+      dangKyGiup: dangKyGiup ?? this.dangKyGiup,
       isDeleted: isDeleted ?? this.isDeleted,
     );
   }

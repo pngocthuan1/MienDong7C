@@ -4,11 +4,11 @@ import 'package:benhvien7c/core/widgets/AppResponsiveContainer.dart';
 import 'package:benhvien7c/app/router/RouteNames.dart';
 import 'package:benhvien7c/core/dio/AppLocator.dart';
 import 'package:benhvien7c/core/navigation/AppNavigator.dart';
-import 'package:benhvien7c/core/utils/Validators.dart';
 import 'package:benhvien7c/core/widgets/AppTextField.dart';
 import 'package:benhvien7c/core/widgets/CloudflareTurnstile.dart';
 import 'package:benhvien7c/features/auth/presentation/views/AuthFlowArguments.dart';
 import 'package:benhvien7c/features/patients/domain/entities/MedicalTicketEntity.dart';
+import 'package:benhvien7c/features/patients/domain/entities/PatientProfileDraftEntity.dart';
 import 'package:benhvien7c/features/patients/presentation/viewmodels/PatientProfileCreateViewModel.dart';
 import 'package:benhvien7c/core/utils/CccdParserHelper.dart';
 import 'package:benhvien7c/features/patients/presentation/views/CccdScannerView.dart';
@@ -392,44 +392,21 @@ class _PatientProfileCreateViewState extends State<PatientProfileCreateView> {
                 ),
                 child: SafeArea(
                   bottom: false,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+                  child: Row(
                     children: [
-                      Row(
-                        children: [
-                          IconButton(
-                            icon: const Icon(Icons.arrow_back_ios_new_rounded, color: Colors.white),
-                            onPressed: () => AppNavigator.safePop(context),
-                            padding: EdgeInsets.zero,
-                            constraints: const BoxConstraints(),
-                          ),
-                          const SizedBox(width: 12),
-                          const Text(
-                            'BỆNH VIỆN QUÂN DÂN Y MIỀN ĐÔNG',
-                            style: TextStyle(
-                              color: Colors.white70,
-                              fontSize: 12,
-                              fontWeight: FontWeight.bold,
-                              letterSpacing: 1.2,
-                            ),
-                          ),
-                        ],
+                      IconButton(
+                        icon: const Icon(Icons.arrow_back_ios_new_rounded, color: Colors.white),
+                        onPressed: () => AppNavigator.safePop(context),
+                        padding: EdgeInsets.zero,
+                        constraints: const BoxConstraints(),
                       ),
-                      const SizedBox(height: 12),
+                      const SizedBox(width: 12),
                       const Text(
                         'Đặt lịch khám bệnh',
                         style: TextStyle(
                           color: Colors.white,
-                          fontSize: 22,
+                          fontSize: 20,
                           fontWeight: FontWeight.w800,
-                        ),
-                      ),
-                      const SizedBox(height: 6),
-                      const Text(
-                        '50 Lê Văn Việt, P. Hiệp Phú, TP. Thủ Đức',
-                        style: TextStyle(
-                          color: Colors.white70,
-                          fontSize: 12,
                         ),
                       ),
                     ],
@@ -444,7 +421,7 @@ class _PatientProfileCreateViewState extends State<PatientProfileCreateView> {
                   child: ListView(
                     padding: const EdgeInsets.fromLTRB(0, 16, 0, 28),
                     children: [
-                      // Guidance Banner
+                      // Guidance Banner matching user screenshot with red text highlights
                       Container(
                         margin: const EdgeInsets.symmetric(horizontal: 16),
                         padding: const EdgeInsets.all(12),
@@ -459,12 +436,41 @@ class _PatientProfileCreateViewState extends State<PatientProfileCreateView> {
                             const Icon(Icons.info_rounded, color: Color(0xFF0D6EFD), size: 20),
                             const SizedBox(width: 8),
                             Expanded(
-                              child: Text(
-                                'Vui lòng điền thông tin có dấu * (bắt buộc). Mã BN: 8 ký tự · Mã BHYT: 10 ký tự · CCCD: 12 ký tự. Chỉ nhận đặt lịch trong tháng hiện tại; ngày/giờ đã qua sẽ tự động ẩn. Nếu đăng ký giúp người khác, hãy điền thông tin người đó vào mục "Đăng ký giúp người khác".',
-                                style: TextStyle(
-                                  color: const Color(0xFF2C5282),
-                                  fontSize: 12,
-                                  height: 1.4,
+                              child: RichText(
+                                text: const TextSpan(
+                                  style: TextStyle(
+                                    color: Color(0xFF2C5282),
+                                    fontSize: 12,
+                                    height: 1.4,
+                                  ),
+                                  children: [
+                                    TextSpan(text: 'Vui lòng điền thông tin '),
+                                    TextSpan(
+                                      text: 'màu đỏ (bắt buộc)',
+                                      style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold),
+                                    ),
+                                    TextSpan(text: '. Mã BN: '),
+                                    TextSpan(
+                                      text: '8 ký tự',
+                                      style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold),
+                                    ),
+                                    TextSpan(text: '. Mã BHYT: '),
+                                    TextSpan(
+                                      text: '10/15 ký tự',
+                                      style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold),
+                                    ),
+                                    TextSpan(text: ', CCCD: '),
+                                    TextSpan(
+                                      text: '12 ký tự',
+                                      style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold),
+                                    ),
+                                    TextSpan(text: '. Nếu đăng ký giúp người khác, vui lòng điền thông tin người được giúp đăng ký vào phần '),
+                                    TextSpan(
+                                      text: '[Đăng ký giúp người khác]',
+                                      style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold),
+                                    ),
+                                    TextSpan(text: '.'),
+                                  ],
                                 ),
                               ),
                             ),
@@ -474,100 +480,84 @@ class _PatientProfileCreateViewState extends State<PatientProfileCreateView> {
 
                       const SizedBox(height: 20),
 
-                      // Saved Profiles List
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Padding(
-                            padding: const EdgeInsets.symmetric(horizontal: 16),
-                            child: Row(
-                              children: const [
-                                Text(
-                                  'HỒ SƠ ĐÃ LƯU',
-                                  style: TextStyle(
-                                    color: Color(0xFF8F9BB3),
-                                    fontSize: 11,
-                                    fontWeight: FontWeight.bold,
-                                    letterSpacing: 1.0,
+                      // Saved Profiles Header with navigate button to PatientProfileSelectView
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 16),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            const Text(
+                              'HỒ SƠ ĐÃ LƯU',
+                              style: TextStyle(
+                                color: Color(0xFF8F9BB3),
+                                fontSize: 11,
+                                fontWeight: FontWeight.bold,
+                                letterSpacing: 1.0,
+                              ),
+                            ),
+                            TextButton.icon(
+                              onPressed: () async {
+                                final selected = await Navigator.pushNamed(
+                                  context,
+                                  RouteNames.patientProfileSelect,
+                                );
+                                if (selected is PatientProfileDraftEntity) {
+                                  _viewModel.selectProfile(selected);
+                                }
+                              },
+                              icon: const Icon(Icons.folder_shared_rounded, size: 16, color: Color(0xFF0D6EFD)),
+                              label: const Text('Danh sách hồ sơ', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Color(0xFF0D6EFD))),
+                            ),
+                          ],
+                        ),
+                      ),
+                      if (_viewModel.isExistingProfile && _viewModel.selectedProfileIdentifier != null) ...[
+                        const SizedBox(height: 8),
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 16),
+                          child: Align(
+                            alignment: Alignment.centerLeft,
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFF1F5F9),
+                                borderRadius: BorderRadius.circular(16),
+                                border: Border.all(color: const Color(0xFFCBD5E1)),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  const Icon(Icons.check, size: 14, color: Color(0xFF0D6EFD)),
+                                  const SizedBox(width: 4),
+                                  Icon(
+                                    _viewModel.gender.toLowerCase() == 'nam' ? Icons.male : Icons.female,
+                                    color: const Color(0xFF0D6EFD),
+                                    size: 14,
                                   ),
-                                ),
-                                Expanded(child: Divider(indent: 8, color: Color(0xFFEDF1F7))),
-                              ],
+                                  const SizedBox(width: 4),
+                                  Text(
+                                    '${_viewModel.fullNameController.text} · ${_viewModel.birthYearController.text} · ${_viewModel.gender}',
+                                    style: const TextStyle(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.bold,
+                                      color: Color(0xFF1E293B),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 6),
+                                  GestureDetector(
+                                    onTap: () {
+                                      setState(() {
+                                        _viewModel.clearProfileSelection();
+                                      });
+                                    },
+                                    child: const Icon(Icons.cancel, size: 16, color: Color(0xFF94A3B8)),
+                                  ),
+                                ],
+                              ),
                             ),
                           ),
-                          const SizedBox(height: 8),
-                          if (_viewModel.savedProfiles.isEmpty)
-                            const Padding(
-                              padding: EdgeInsets.symmetric(horizontal: 16),
-                              child: Text(
-                                'Chưa có hồ sơ nào được lưu. Điền thông tin bên dưới và tick "Lưu hồ sơ này" để dùng lại lần sau.',
-                                style: TextStyle(color: Color(0xFF8F9BB3), fontSize: 12),
-                              ),
-                            )
-                          else
-                            SizedBox(
-                              height: 48,
-                              child: ListView.builder(
-                                scrollDirection: Axis.horizontal,
-                                padding: const EdgeInsets.symmetric(horizontal: 16),
-                                itemCount: _viewModel.savedProfiles.length,
-                                itemBuilder: (context, index) {
-                                  final profile = _viewModel.savedProfiles[index];
-                                  final isConfirming = _viewModel.deleteConfirmIdentifier == profile.identifier;
-                                  
-                                  return Container(
-                                    margin: const EdgeInsets.only(right: 8),
-                                    child: InputChip(
-                                      selected: _viewModel.selectedProfileIdentifier == profile.identifier,
-                                      backgroundColor: const Color(0xFFF7F9FC),
-                                      selectedColor: const Color(0xFFEBF3FF),
-                                      shape: RoundedRectangleBorder(
-                                        borderRadius: BorderRadius.circular(12),
-                                        side: const BorderSide(color: Color(0xFFE4E9F2)),
-                                      ),
-                                      onPressed: () => _viewModel.selectProfile(profile),
-                                      label: Row(
-                                        mainAxisSize: MainAxisSize.min,
-                                        children: [
-                                          Icon(
-                                            profile.gender.toLowerCase() == 'nam' ? Icons.male : Icons.female,
-                                            color: const Color(0xFF0D6EFD),
-                                            size: 14,
-                                          ),
-                                          const SizedBox(width: 4),
-                                          Text(
-                                            '${profile.fullName} · ${profile.birthYear} · ${profile.gender}',
-                                            style: const TextStyle(
-                                              color: Color(0xFF222B45),
-                                              fontSize: 12,
-                                              fontWeight: FontWeight.w600,
-                                            ),
-                                          ),
-                                          const SizedBox(width: 6),
-                                          GestureDetector(
-                                            onTap: () => _viewModel.requestDeleteProfile(profile.identifier),
-                                            child: Container(
-                                              padding: const EdgeInsets.all(2),
-                                              decoration: BoxDecoration(
-                                                color: isConfirming ? Colors.red : Colors.grey[400],
-                                                shape: BoxShape.circle,
-                                              ),
-                                              child: Icon(
-                                                isConfirming ? Icons.check : Icons.close,
-                                                color: Colors.white,
-                                                size: 10,
-                                              ),
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                  );
-                                },
-                              ),
-                            ),
-                        ],
-                      ),
+                        ),
+                      ],
 
                       const SizedBox(height: 20),
 
@@ -645,7 +635,20 @@ class _PatientProfileCreateViewState extends State<PatientProfileCreateView> {
                                   child: DropdownButtonFormField<String>(
                                     value: _viewModel.gender,
                                     decoration: const InputDecoration(
-                                      labelText: 'Giới tính *',
+                                      label: Text.rich(
+                                        TextSpan(
+                                          children: [
+                                            TextSpan(text: 'Giới tính'),
+                                            TextSpan(
+                                              text: ' *',
+                                              style: TextStyle(
+                                                color: Color(0xFFEF4444),
+                                                fontWeight: FontWeight.bold,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
                                       prefixIcon: Icon(Icons.wc_rounded),
                                     ),
                                     items: const [
@@ -695,28 +698,6 @@ class _PatientProfileCreateViewState extends State<PatientProfileCreateView> {
                                 Expanded(child: Divider(indent: 8, color: Color(0xFFEDF1F7))),
                               ],
                             ),
-                            const SizedBox(height: 12),
-                            Builder(
-                              builder: (context) {
-                                final validDepartment = _viewModel.departments.contains(_viewModel.selectedDepartment)
-                                    ? _viewModel.selectedDepartment
-                                    : _viewModel.departments.firstWhere(
-                                        (d) => _viewModel.selectedDepartment != null && (d.startsWith(_viewModel.selectedDepartment!) || _viewModel.selectedDepartment!.startsWith(d.split(' ').first)),
-                                        orElse: () => _viewModel.departments.first,
-                                      );
-                                return DropdownButtonFormField<String>(
-                                  value: validDepartment,
-                                  decoration: const InputDecoration(
-                                    labelText: 'Chuyên khoa / Phòng khám *',
-                                    prefixIcon: Icon(Icons.local_hospital_outlined),
-                                  ),
-                                  items: _viewModel.departments.map((dept) {
-                                    return DropdownMenuItem(value: dept, child: Text(dept));
-                                  }).toList(),
-                                  onChanged: _viewModel.updateDepartment,
-                                );
-                              },
-                            ),
                             const SizedBox(height: 16),
                             Row(
                               children: [
@@ -733,9 +714,13 @@ class _PatientProfileCreateViewState extends State<PatientProfileCreateView> {
                                       child: Column(
                                         crossAxisAlignment: CrossAxisAlignment.start,
                                         children: [
-                                          const Text(
-                                            'Ngày khám *',
-                                            style: TextStyle(fontSize: 11, color: Colors.grey),
+                                          const Text.rich(
+                                            TextSpan(
+                                              children: [
+                                                TextSpan(text: 'Ngày khám', style: TextStyle(fontSize: 11, color: Colors.grey)),
+                                                TextSpan(text: ' *', style: TextStyle(fontSize: 11, color: Color(0xFFEF4444), fontWeight: FontWeight.bold)),
+                                              ],
+                                            ),
                                           ),
                                           const SizedBox(height: 6),
                                           Text(
@@ -763,9 +748,13 @@ class _PatientProfileCreateViewState extends State<PatientProfileCreateView> {
                                       child: Column(
                                         crossAxisAlignment: CrossAxisAlignment.start,
                                         children: [
-                                          const Text(
-                                            'Giờ khám *',
-                                            style: TextStyle(fontSize: 11, color: Colors.grey),
+                                          const Text.rich(
+                                            TextSpan(
+                                              children: [
+                                                TextSpan(text: 'Giờ khám', style: TextStyle(fontSize: 11, color: Colors.grey)),
+                                                TextSpan(text: ' *', style: TextStyle(fontSize: 11, color: Color(0xFFEF4444), fontWeight: FontWeight.bold)),
+                                              ],
+                                            ),
                                           ),
                                           const SizedBox(height: 6),
                                           Text(
@@ -854,17 +843,16 @@ class _PatientProfileCreateViewState extends State<PatientProfileCreateView> {
                         ),
                       ),
 
-                      if (_viewModel.registerForSomeoneElse) ...[
-                        const SizedBox(height: 16),
+                      if (_viewModel.registerForSomeoneElse)
                         Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 16),
+                          padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Row(
-                                children: [
-                                  const Text(
-                                    'THÔNG TIN NGƯỜI ĐƯỢC GIÚP ĐĂNG KÝ',
+                                children: const [
+                                  Text(
+                                    'THÔNG TIN ĐĂNG KÝ GIÚP',
                                     style: TextStyle(
                                       color: Color(0xFF8F9BB3),
                                       fontSize: 11,
@@ -872,116 +860,21 @@ class _PatientProfileCreateViewState extends State<PatientProfileCreateView> {
                                       letterSpacing: 1.0,
                                     ),
                                   ),
-                                  const Expanded(child: Divider(indent: 8, color: Color(0xFFEDF1F7))),
-                                  const SizedBox(width: 8),
-                                  TextButton.icon(
-                                    onPressed: () => _startCccdScanning(context),
-                                    icon: const Icon(Icons.qr_code_scanner_rounded, size: 14, color: Color(0xFF0D6EFD)),
-                                    label: const Text('Quét CCCD / BHYT', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Color(0xFF0D6EFD))),
-                                    style: TextButton.styleFrom(
-                                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                                      minimumSize: Size.zero,
-                                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                                    ),
-                                  ),
+                                  Expanded(child: Divider(indent: 8, color: Color(0xFFEDF1F7))),
                                 ],
                               ),
                               const SizedBox(height: 12),
                               AppTextField(
-                                controller: _viewModel.otherFullNameController,
-                                label: 'Họ tên người được giúp *',
-                                hintText: 'Nhập họ tên đầy đủ',
-                                prefixIcon: Icons.person_outline_rounded,
-                                validator: _viewModel.checkOtherFullName,
-                                textInputAction: TextInputAction.next,
-                                readOnly: _viewModel.isExistingProfile,
-                                onChanged: _viewModel.updateOtherFullNameError,
-                              ),
-                              const SizedBox(height: 14),
-                              Row(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Expanded(
-                                    child: AppTextField(
-                                      controller: _viewModel.otherBirthYearController,
-                                      label: 'Năm sinh *',
-                                      hintText: 'Nhập năm sinh',
-                                      keyboardType: TextInputType.number,
-                                      prefixIcon: Icons.cake_outlined,
-                                      validator: _viewModel.checkOtherBirthYear,
-                                      textInputAction: TextInputAction.next,
-                                      readOnly: _viewModel.isExistingProfile,
-                                      onChanged: _viewModel.updateOtherBirthYearError,
-                                    ),
-                                  ),
-                                  const SizedBox(width: 16),
-                                  Expanded(
-                                    child: DropdownButtonFormField<String>(
-                                      value: _viewModel.otherGender,
-                                      decoration: const InputDecoration(
-                                        labelText: 'Giới tính *',
-                                        prefixIcon: Icon(Icons.wc_rounded),
-                                      ),
-                                      items: const [
-                                        DropdownMenuItem(value: 'Nam', child: Text('Nam')),
-                                        DropdownMenuItem(value: 'Nữ', child: Text('Nữ')),
-                                      ],
-                                      onChanged: _viewModel.isExistingProfile
-                                          ? null
-                                          : (val) {
-                                              if (val != null) {
-                                                setState(() {
-                                                  _viewModel.otherGender = val;
-                                                });
-                                              }
-                                            },
-                                    ),
-                                  ),
-                                ],
-                              ),
-                              const SizedBox(height: 14),
-                              Row(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Expanded(
-                                    child: AppTextField(
-                                      controller: _viewModel.otherPhoneController,
-                                      label: 'Số điện thoại *',
-                                      hintText: 'Nhập số điện thoại',
-                                      keyboardType: TextInputType.phone,
-                                      prefixIcon: Icons.phone_android_rounded,
-                                      validator: _viewModel.checkOtherPhone,
-                                      textInputAction: TextInputAction.done,
-                                      readOnly: _viewModel.isExistingProfile,
-                                      onChanged: _viewModel.updateOtherPhoneError,
-                                    ),
-                                  ),
-                                  const SizedBox(width: 16),
-                                  Expanded(
-                                    child: DropdownButtonFormField<String>(
-                                      value: _viewModel.selectedRelationship,
-                                      decoration: const InputDecoration(
-                                        labelText: 'Mối quan hệ *',
-                                        prefixIcon: Icon(Icons.people_alt_outlined),
-                                      ),
-                                      items: _viewModel.relationships.map((rel) {
-                                        return DropdownMenuItem(value: rel, child: Text(rel));
-                                      }).toList(),
-                                      onChanged: (val) {
-                                        if (val != null) {
-                                          setState(() {
-                                            _viewModel.selectedRelationship = val;
-                                          });
-                                        }
-                                      },
-                                    ),
-                                  ),
-                                ],
+                                controller: _viewModel.dangKyGiupController,
+                                label: 'Thông tin đăng ký giúp *',
+                                hintText: 'Ví dụ: vợ Thu Lê, Mẹ đăng ký cho con...',
+                                prefixIcon: Icons.volunteer_activism_rounded,
+                                textInputAction: TextInputAction.done,
+                                onChanged: (_) => _viewModel.refreshFormState(),
                               ),
                             ],
                           ),
                         ),
-                      ],
 
                       const SizedBox(height: 16),
 

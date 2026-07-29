@@ -1,3 +1,4 @@
+import 'package:intl/intl.dart';
 import 'package:benhvien7c/core/commands/result.dart';
 import 'package:benhvien7c/core/network/ApiException.dart';
 import 'package:benhvien7c/features/auth/domain/entities/UserRole.dart';
@@ -172,7 +173,9 @@ class PortalRepositoryImpl implements PortalRepository {
           ngayKham: formattedNgayKham,
           gioKham: formattedGioKham,
           trieuChung: symptom,
-          dangKyDum: role == UserRole.customer ? '' : draft.fullName,
+          dangKyDum: (draft.dangKyGiup != null && draft.dangKyGiup!.trim().isNotEmpty)
+              ? draft.dangKyGiup!.trim()
+              : (role == UserRole.customer ? '' : draft.fullName),
         );
         final bookingId = await remote.dangKyKham(req);
 
@@ -195,28 +198,27 @@ class PortalRepositoryImpl implements PortalRepository {
 
         final ticket = MedicalTicketEntity(
           id: bookingId.toString(),
-          hospitalName: 'BỆNH VIỆN MIỀN ĐÔNG 7C',
-          hospitalAddress: 'TP. Thủ Đức, TP. Hồ Chí Minh',
-          ticketTitle: 'PHIẾU ĐĂNG KÝ KHÁM BỆNH',
-          roomName: department ?? 'Phòng khám 1',
-          serviceName: 'Khám Nội tổng quát',
+          hospitalName: 'Bệnh viện Quân Dân Y Miền Đông',
+          hospitalAddress: '50 Lê Văn Việt, Phường Tăng Nhơn Phú, Thành Phố Hồ Chí Minh',
+          ticketTitle: 'PHIẾU ĐẶT LỊCH KHÁM',
+          roomName: '',
+          serviceName: '',
           queueNumber: queueNum,
-          scheduleText: serverPhieu?.ngayGioKham ?? '${selectedTime ?? '07g00'} - ${selectedDate ?? ''}',
+          scheduleText: _formatScheduleText(serverPhieu?.ngayGioKham, selectedDate, selectedTime),
           patientName: serverPhieu?.hoTen ?? draft.fullName,
-          gender: serverPhieu?.gioiTinh?.toString() == '0' || serverPhieu?.gioiTinh?.toString() == 'Nam'
-              ? 'Nam'
-              : (serverPhieu?.gioiTinh?.toString() == '1' || serverPhieu?.gioiTinh?.toString() == 'Nữ' ? 'Nữ' : draft.gender),
+          gender: _mapServerGender(serverPhieu?.gioiTinh, draft.gender),
           birthYear: serverPhieu?.namSinh?.toString() ?? draft.birthYear,
-          address: 'TP. Hồ Chí Minh',
+          address: '50 Lê Văn Việt, Phường Tăng Nhơn Phú, Thành Phố Hồ Chí Minh',
           insuranceText: draft.identifier.length >= 10 ? 'Có BHYT (${draft.identifier})' : 'Tự túc (Không BHYT)',
           patientCode: patientCodeStr,
-          createdAtText: 'Hôm nay',
-          note: 'Vui lòng có mặt trước 15 phút so với giờ hẹn để hoàn tất thủ tục.',
-          department: department ?? 'Phòng khám 1 - Nội tổng quát',
+          createdAtText: _formatCreatedAtText(serverPhieu?.ngayud),
+          note: 'Ghi chú: Phiếu đặt lịch khám chỉ có giá trị trong ngày đặt khám từ 6g30 - 16g30',
+          department: department,
           selectedDate: selectedDate,
           selectedTime: selectedTime,
           phoneNumber: serverPhieu?.sdt ?? draft.phoneNumber,
           symptom: serverPhieu?.trieuChung ?? symptom,
+          dangKyGiup: serverPhieu?.dangKyDum ?? draft.dangKyGiup,
         );
         return Ok(ticket);
       }
@@ -229,7 +231,13 @@ class PortalRepositoryImpl implements PortalRepository {
         selectedTime: selectedTime,
         symptom: symptom,
       );
-      return Ok(ticket);
+      return Ok(ticket.copyWith(
+        hospitalName: 'Bệnh viện Quân Dân Y Miền Đông',
+        hospitalAddress: '50 Lê Văn Việt, Phường Tăng Nhơn Phú, Thành Phố Hồ Chí Minh',
+        ticketTitle: 'PHIẾU ĐẶT LỊCH KHÁM',
+        note: 'Ghi chú: Phiếu đặt lịch khám chỉ có giá trị trong ngày đặt khám từ 6g30 - 16g30',
+        dangKyGiup: draft.dangKyGiup,
+      ));
     } on ApiException catch (e) {
       return Error(e, e.message);
     } on Exception catch (exception) {
@@ -250,26 +258,27 @@ class PortalRepositoryImpl implements PortalRepository {
             final entities = listSoKham.map((dto) {
               return MedicalTicketEntity(
                 id: dto.id.toString(),
-                hospitalName: 'BỆNH VIỆN MIỀN ĐÔNG 7C',
-                hospitalAddress: 'TP. Thủ Đức, TP. Hồ Chí Minh',
-                ticketTitle: 'PHIẾU ĐĂNG KÝ KHÁM BỆNH',
-                roomName: 'Phòng khám 1',
-                serviceName: 'Khám Nội tổng quát',
+                hospitalName: 'Bệnh viện Quân Dân Y Miền Đông',
+                hospitalAddress: '50 Lê Văn Việt, Phường Tăng Nhơn Phú, Thành Phố Hồ Chí Minh',
+                ticketTitle: 'PHIẾU ĐẶT LỊCH KHÁM',
+                roomName: '',
+                serviceName: '',
                 queueNumber: (dto.soDangKy ?? dto.id).toString().padLeft(3, '0'),
-                scheduleText: dto.ngayGioKham ?? '',
+                scheduleText: _formatScheduleText(dto.ngayGioKham, dto.ngayGioKham, ''),
                 patientName: dto.hoTen ?? '',
-                gender: dto.gioiTinh?.toString() == '1' || dto.gioiTinh?.toString() == 'Nam' ? 'Nam' : 'Nữ',
+                gender: _mapServerGender(dto.gioiTinh, 'Nam'),
                 birthYear: dto.namSinh?.toString() ?? '',
-                address: 'TP. Hồ Chí Minh',
+                address: '50 Lê Văn Việt, Phường Tăng Nhơn Phú, Thành Phố Hồ Chí Minh',
                 insuranceText: dto.maThe != null && dto.maThe!.isNotEmpty ? 'Có BHYT (${dto.maThe})' : 'Tự túc',
                 patientCode: dto.maBN ?? 'BN${dto.id.toString().padLeft(6, '0')}',
-                createdAtText: dto.ngayGioKham ?? '',
-                note: 'Vui lòng mang theo CCCD và thẻ BHYT khi đến khám.',
-                department: 'Phòng khám 1 - Nội tổng quát',
+                createdAtText: _formatCreatedAtText(dto.ngayud ?? dto.ngayGioKham),
+                note: 'Ghi chú: Phiếu đặt lịch khám chỉ có giá trị trong ngày đặt khám từ 6g30 - 16g30',
+                department: '',
                 selectedDate: dto.ngayGioKham,
                 selectedTime: '',
                 phoneNumber: dto.sdt,
                 symptom: dto.trieuChung,
+                dangKyGiup: dto.dangKyDum,
               );
             }).toList();
             return Ok(entities);
@@ -523,5 +532,94 @@ class PortalRepositoryImpl implements PortalRepository {
       RegExp(r'(\d{1,2}):(\d{2})'),
       (match) => '${int.parse(match[1]!)}g${match[2]!}',
     );
+  }
+
+  String _mapServerGender(dynamic rawGender, String fallback) {
+    if (rawGender == null) return fallback;
+    final str = rawGender.toString().trim();
+    if (str == '0' || str.toLowerCase() == 'nam') return 'Nam';
+    if (str == '1' || str.toLowerCase() == 'nữ' || str.toLowerCase() == 'nu') return 'Nữ';
+    if (str.isEmpty || str == '2') return fallback;
+    return fallback;
+  }
+
+  String _formatScheduleText(String? serverNgayGio, String? date, String? time) {
+    if (serverNgayGio != null && serverNgayGio.isNotEmpty) {
+      try {
+        final clean = serverNgayGio.replaceAll('T', ' ');
+        final parts = clean.split(' ');
+        if (parts.length >= 2) {
+          String datePart = parts[0];
+          String timePart = parts[1];
+          if (datePart.contains('-')) {
+            final d = DateTime.tryParse(datePart);
+            if (d != null) datePart = DateFormat('dd/MM/yyyy').format(d);
+          }
+          final tParts = timePart.split(':');
+          if (tParts.length >= 2) {
+            timePart = '${tParts[0].padLeft(2, '0')}:${tParts[1].padLeft(2, '0')}';
+          }
+          return '$datePart $timePart';
+        }
+      } catch (_) {}
+      return serverNgayGio;
+    }
+
+    String formattedDate = date ?? DateFormat('dd/MM/yyyy').format(DateTime.now());
+    if (formattedDate.contains('-')) {
+      final d = DateTime.tryParse(formattedDate);
+      if (d != null) formattedDate = DateFormat('dd/MM/yyyy').format(d);
+    }
+
+    String formattedTime = time ?? '10:00';
+    if (formattedTime.contains('-')) {
+      formattedTime = formattedTime.split('-').first.trim();
+    }
+    formattedTime = formattedTime.replaceAll('g', ':').replaceAll('h', ':').trim();
+    if (formattedTime.contains(':')) {
+      final tParts = formattedTime.split(':');
+      final hh = tParts[0].trim().padLeft(2, '0');
+      final mm = tParts.length > 1 ? tParts[1].trim().padLeft(2, '0') : '00';
+      formattedTime = '$hh:$mm';
+    } else {
+      formattedTime = '${formattedTime.padLeft(2, '0')}:00';
+    }
+
+    return '$formattedDate $formattedTime';
+  }
+
+  String _formatCreatedAtText(String? serverNgayUd) {
+    if (serverNgayUd != null && serverNgayUd.isNotEmpty) {
+      try {
+        final parsed = DateTime.tryParse(serverNgayUd);
+        if (parsed != null) {
+          return DateFormat('dd/MM/yyyy HH:mm:ss').format(parsed);
+        }
+        final clean = serverNgayUd.replaceAll('T', ' ');
+        final parts = clean.split(' ');
+        if (parts.length >= 2) {
+          String datePart = parts[0];
+          String timePart = parts[1];
+          if (datePart.contains('-')) {
+            final d = DateTime.tryParse(datePart);
+            if (d != null) datePart = DateFormat('dd/MM/yyyy').format(d);
+          }
+          final tParts = timePart.split(':');
+          if (tParts.length >= 3) {
+            final ss = tParts[2].split('.').first.trim().padLeft(2, '0');
+            final hh = tParts[0].trim().padLeft(2, '0');
+            final mm = tParts[1].trim().padLeft(2, '0');
+            timePart = '$hh:$mm:$ss';
+          } else if (tParts.length == 2) {
+            final hh = tParts[0].trim().padLeft(2, '0');
+            final mm = tParts[1].trim().padLeft(2, '0');
+            timePart = '$hh:$mm:00';
+          }
+          return '$datePart $timePart';
+        }
+      } catch (_) {}
+      return serverNgayUd;
+    }
+    return DateFormat('dd/MM/yyyy HH:mm:ss').format(DateTime.now());
   }
 }

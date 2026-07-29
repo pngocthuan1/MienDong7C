@@ -30,10 +30,12 @@ class DioClient {
       ),
     ]);
 
-    // Bypass chứng chỉ SSL tự ký khi dev chạy localhost/IP nội bộ
+    // Bypass chứng chỉ SSL tự ký khi dev chạy localhost/IP nội bộ/máy thật
     final isLocalhost =
+        Environment.isDevelopment ||
         Environment.baseUrl.contains('localhost') ||
         Environment.baseUrl.contains('10.0.2.2') ||
+        Environment.baseUrl.contains('127.0.0.1') ||
         Environment.baseUrl.contains('192.168.');
     if (isLocalhost) {
       final clientAdapter = this.dio.httpClientAdapter;

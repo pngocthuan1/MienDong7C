@@ -139,10 +139,7 @@ class _NotificationViewState extends State<NotificationView> {
                 : null,
             onChangePasswordTap: () {
               AppNavigator.safePop(context);
-              _showInfoDialog(
-                'Đổi mật khẩu',
-                'Bạn có thể vào lại flow quên mật khẩu từ màn hình auth. Phần này đã được tách sẵn để sau nối API thật.',
-              );
+              AppNavigator.pushNamed(context, RouteNames.changePassword);
             },
             onDeleteAccountTap: () {
               AppNavigator.safePop(context);

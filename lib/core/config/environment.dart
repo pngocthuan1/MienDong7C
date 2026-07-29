@@ -45,40 +45,37 @@ class Environment {
     if (kIsWeb) return 'android';
     return _platform;
   }
-
-  /// Gọi 1 lần duy nhất tại app_bootstrap.dart lúc khởi động app,
-  /// dùng package_info_plus / device_info_plus để lấy giá trị thật.
-  /// Có guard _initialized để tránh gọi lại nhiều lần làm sai lệch dữ liệu.
+  static bool _isPhysicalDevice = false;
+  static bool get isPhysicalDevice => _isPhysicalDevice;
 
   static void init({
     required String appPackageName,
     required String appVersion,
     required String deviceId,
     required String platform,
+    bool isPhysicalDevice = false,
   }) {
     if (_initialized) return;
     _appPackageName = appPackageName;
     _appVersion = appVersion;
     _deviceId = deviceId;
     _platform = platform;
+    _isPhysicalDevice = isPhysicalDevice;
     _initialized = true;
   }
 
   // ==================== Base URL theo môi trường ====================
 
-  /// LƯU Ý: Hiện dự án chỉ có server test chạy local (https://localhost:7185).
-  /// Chưa có server staging/production thật. Khi backend deploy lên server
-  /// thật, chỉ cần điền domain vào 2 chỗ TODO bên dưới, không cần sửa gì
-  /// ở DioClient hay bất kỳ nơi nào khác đang gọi Environment.baseUrl.
+  static const String _customBaseUrl = String.fromEnvironment('BASE_URL');
+
   static String get baseUrl {
+    if (_customBaseUrl.isNotEmpty) {
+      return _customBaseUrl;
+    }
     switch (current) {
       case AppEnv.production:
-        // TODO: điền domain server production thật khi backend deploy xong
-        // Ví dụ: return 'https://api.benhvien7c.com';
         return _localDevBaseUrl;
       case AppEnv.staging:
-        // TODO: điền domain server staging thật khi backend deploy xong
-        // Ví dụ: return 'https://staging-api.benhvien7c.com';
         return _localDevBaseUrl;
       case AppEnv.development:
         return _localDevBaseUrl;
@@ -90,7 +87,11 @@ class Environment {
       return 'https://localhost:7185';
     }
     if (defaultTargetPlatform == TargetPlatform.android) {
-      // 10.0.2.2 là địa chỉ đặc biệt Android Emulator dùng để trỏ về máy host
+      if (_isPhysicalDevice) {
+        // Điện thoại/máy tính bảng thật kết nối USB (sử dụng 127.0.0.1 qua adb reverse)
+        return 'https://127.0.0.1:7185';
+      }
+      // Máy ảo Android Emulator dùng 10.0.2.2 để trỏ về máy host
       return 'https://10.0.2.2:7185';
     }
     // iOS Simulator, macOS, Windows... hoặc thiết bị thật cùng mạng LAN

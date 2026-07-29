@@ -29,6 +29,29 @@ class AppTextField extends StatelessWidget {
   final ValueChanged<String>? onChanged;
   final bool readOnly;
 
+  Widget _buildLabelWidget(String text) {
+    if (!text.contains('*')) {
+      return Text(text);
+    }
+    final parts = text.split('*');
+    return Text.rich(
+      TextSpan(
+        children: [
+          TextSpan(text: parts[0].trimRight()),
+          const TextSpan(
+            text: ' *',
+            style: TextStyle(
+              color: Color(0xFFEF4444),
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          if (parts.length > 1 && parts[1].isNotEmpty)
+            TextSpan(text: parts[1]),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return TextFormField(
@@ -53,9 +76,11 @@ class AppTextField extends StatelessWidget {
         }
       },
       decoration: InputDecoration(
-        labelText: label,
+        label: _buildLabelWidget(label),
         hintText: hintText,
         prefixIcon: prefixIcon != null ? Icon(prefixIcon) : null,
+        filled: readOnly,
+        fillColor: readOnly ? const Color(0xFFF1F5F9) : null,
       ),
     );
   }

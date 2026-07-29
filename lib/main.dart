@@ -15,6 +15,12 @@ import 'package:benhvien7c/features/auth/data/datasources/AuthRemoteDataSource.d
 import 'package:benhvien7c/features/auth/data/repositories/AuthRepositoryImpl.dart';
 import 'package:benhvien7c/features/auth/presentation/providers/AuthProviders.dart';
 import 'package:benhvien7c/features/auth/presentation/views/LoginView.dart';
+import 'package:benhvien7c/features/auth/presentation/views/RegisterView.dart';
+import 'package:benhvien7c/features/auth/presentation/views/ForgotPasswordView.dart';
+import 'package:benhvien7c/features/auth/presentation/views/VerifyOtpView.dart';
+import 'package:benhvien7c/features/auth/presentation/views/ResetPasswordView.dart';
+import 'package:benhvien7c/features/auth/presentation/views/ChangePasswordView.dart';
+import 'package:benhvien7c/features/auth/presentation/views/AuthFlowArguments.dart';
 
 // Patients & Core Session
 import 'package:benhvien7c/features/patients/data/datasources/PortalMockDatasource.dart';
@@ -32,6 +38,7 @@ import 'package:benhvien7c/features/patients/presentation/views/NotificationDeta
 import 'package:benhvien7c/features/patients/presentation/views/NotificationPlaygroundView.dart';
 import 'package:benhvien7c/features/patients/presentation/views/AppointmentBookingView.dart';
 import 'package:benhvien7c/features/patients/presentation/views/PatientProfileCreateView.dart';
+import 'package:benhvien7c/features/patients/presentation/views/PatientProfileSelectView.dart';
 import 'package:benhvien7c/features/patients/presentation/views/DevTestingView.dart';
 import 'package:benhvien7c/features/patients/presentation/views/UserManagementView.dart';
 import 'package:benhvien7c/features/patients/presentation/views/UserManagementDetailView.dart';
@@ -40,7 +47,8 @@ import 'package:benhvien7c/features/patients/presentation/views/TypeFourProcessi
 import 'package:benhvien7c/features/patients/presentation/views/TypeFourResultView.dart';
 import 'package:benhvien7c/features/patients/presentation/views/MedicalTicketView.dart';
 import 'package:benhvien7c/features/patients/domain/entities/NotificationItemEntity.dart';
-import 'package:benhvien7c/features/auth/presentation/views/AuthFlowArguments.dart';
+
+import 'package:device_info_plus/device_info_plus.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -49,8 +57,16 @@ void main() async {
   final secureStorage = SecureStorageService();
   final deviceId = await secureStorage.getOrCreateDeviceId();
 
-  // Xác định hệ điều hành chạy ứng dụng
+  // Xác định hệ điều hành & kiểm tra thiết bị thật vs máy ảo
   String platform = kIsWeb ? 'android' : Platform.operatingSystem;
+  bool isPhysicalDevice = false;
+  if (!kIsWeb && Platform.isAndroid) {
+    try {
+      final deviceInfo = DeviceInfoPlugin();
+      final androidInfo = await deviceInfo.androidInfo;
+      isPhysicalDevice = androidInfo.isPhysicalDevice;
+    } catch (_) {}
+  }
 
   // 2. Khởi tạo môi trường ứng dụng
   Environment.init(
@@ -58,6 +74,7 @@ void main() async {
     appVersion: '1.0.30',
     deviceId: deviceId,
     platform: platform,
+    isPhysicalDevice: isPhysicalDevice,
   );
 
   // 3. Khởi tạo SharedPreferences phục vụ LocalStorage
@@ -81,28 +98,31 @@ void main() async {
   );
 
   // Phục hồi session nếu có
-  final tokens = await secureStorage.getTokensRecord();
-  final isExpired = await secureStorage.isRefreshTokenExpired();
-  if (tokens.$1 != null && tokens.$2 != null && !isExpired) {
-    final expires = await secureStorage.getExpiresRefreshToken();
-    final ticks = int.tryParse(expires ?? '');
-    final expiry = ticks != null ? DateTime.fromMillisecondsSinceEpoch(ticks) : DateTime.now().add(const Duration(days: 1));
-    
-    final savedPhone = sharedPreferences.getString('saved_phone') ?? '';
-    final role = savedPhone == AppStrings.demoEmployeePhone ? UserRole.employee : UserRole.customer;
-    
-    appSessionStore.setSession(
-      AuthSessionEntity(
-        accessToken: tokens.$1!,
-        refreshToken: tokens.$2!,
-        refreshTokenExpiry: expiry,
-      ),
-      UserProfileSession(
-        fullName: role == UserRole.employee ? 'Nhân Viên Demo' : 'Khách Hàng Demo',
-        phoneNumber: savedPhone.isNotEmpty ? savedPhone : '0902377251',
-        role: role,
-      ),
-    );
+  try {
+    final tokens = await secureStorage.getTokensRecord();
+    final isExpired = await secureStorage.isRefreshTokenExpired();
+    if (tokens.$1 != null && tokens.$2 != null && !isExpired) {
+      final expires = await secureStorage.getExpiresRefreshToken();
+      final expiry = _parseExpiry(expires);
+
+      final savedPhone = sharedPreferences.getString('saved_phone') ?? '';
+      final role = savedPhone == AppStrings.demoEmployeePhone ? UserRole.employee : UserRole.customer;
+
+      appSessionStore.setSession(
+        AuthSessionEntity(
+          accessToken: tokens.$1!,
+          refreshToken: tokens.$2!,
+          refreshTokenExpiry: expiry,
+        ),
+        UserProfileSession(
+          fullName: role == UserRole.employee ? 'Nhân Viên Demo' : 'Khách Hàng Demo',
+          phoneNumber: savedPhone.isNotEmpty ? savedPhone : '0902377251',
+          role: role,
+        ),
+      );
+    }
+  } catch (e) {
+    debugPrint('Lỗi phục hồi session: $e');
   }
 
   runApp(
@@ -123,6 +143,7 @@ class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
+      debugShowCheckedModeBanner: false,
       title: 'Bệnh viện 7C',
       theme: AppTheme.light(), // Sử dụng cấu hình theme sáng có sẵn trong dự án
       navigatorKey: AppNavigator.navigatorKey, // Đăng ký navigatorKey toàn cục
@@ -130,18 +151,14 @@ class MyApp extends StatelessWidget {
       routes: {
         RouteNames.login: (context) => const LoginView(),
         RouteNames.home: (context) => const HomeView(),
-        RouteNames.forgotPassword: (context) => const _PlaceholderPage(
-              title: 'Quên mật khẩu',
-              content: 'Chức năng lấy lại mật khẩu đang được cập nhật.',
-            ),
-        RouteNames.register: (context) => const _PlaceholderPage(
-              title: 'Đăng ký tài khoản',
-              content: 'Chức năng đăng ký tài khoản mới đang được cập nhật.',
-            ),
+        RouteNames.forgotPassword: (context) => const ForgotPasswordView(),
+        RouteNames.register: (context) => const RegisterView(),
+        RouteNames.changePassword: (context) => const ChangePasswordView(),
         RouteNames.notifications: (context) => const NotificationView(),
         RouteNames.notificationPlayground: (context) => const NotificationPlaygroundView(),
         RouteNames.appointmentBooking: (context) => const AppointmentBookingView(),
         RouteNames.patientProfileCreate: (context) => const PatientProfileCreateView(),
+        RouteNames.patientProfileSelect: (context) => const PatientProfileSelectView(),
         RouteNames.devTesting: (context) => const DevTestingView(),
         RouteNames.userManagement: (context) => const UserManagementView(),
         RouteNames.typeFourDemo: (context) => const TypeFourDemoView(),
@@ -149,6 +166,20 @@ class MyApp extends StatelessWidget {
         RouteNames.typeFourResult: (context) => const TypeFourResultView(),
       },
       onGenerateRoute: (settings) {
+        if (settings.name == RouteNames.verifyOtp) {
+          final args = settings.arguments as OtpViewArgs;
+          return MaterialPageRoute(
+            builder: (context) => VerifyOtpView(args: args),
+            settings: settings,
+          );
+        }
+        if (settings.name == RouteNames.resetPassword) {
+          final args = settings.arguments as ResetPasswordViewArgs;
+          return MaterialPageRoute(
+            builder: (context) => ResetPasswordView(args: args),
+            settings: settings,
+          );
+        }
         if (settings.name == RouteNames.notificationDetail) {
           final item = settings.arguments as NotificationItemEntity;
           return MaterialPageRoute(
@@ -255,4 +286,33 @@ class _PlaceholderPage extends StatelessWidget {
       ),
     );
   }
+}
+
+DateTime _parseExpiry(String? expiresStr) {
+  if (expiresStr == null || expiresStr.isEmpty) {
+    return DateTime.now().add(const Duration(days: 1));
+  }
+  try {
+    final parsedIso = DateTime.tryParse(expiresStr);
+    if (parsedIso != null) return parsedIso;
+
+    final numVal = int.tryParse(expiresStr);
+    if (numVal != null) {
+      if (numVal > 600000000000000000) {
+        const unixEpochTicks = 621355968000000000;
+        final ticksSince1970 = numVal - unixEpochTicks;
+        final millisSince1970 = ticksSince1970 ~/ 10000;
+        return DateTime.fromMillisecondsSinceEpoch(millisSince1970);
+      }
+      if (numVal > 100000000000) {
+        return DateTime.fromMillisecondsSinceEpoch(numVal);
+      }
+      if (numVal > 100000000) {
+        return DateTime.fromMillisecondsSinceEpoch(numVal * 1000);
+      }
+    }
+  } catch (e) {
+    debugPrint('Error parsing refreshTokenExpiry: $e');
+  }
+  return DateTime.now().add(const Duration(days: 1));
 }

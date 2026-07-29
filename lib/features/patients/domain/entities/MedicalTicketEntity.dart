@@ -21,9 +21,10 @@ class MedicalTicketEntity {
     this.department,
     this.selectedDate,
     this.selectedTime,
+    this.dangKyGiup,
     this.isDeleted = false,
-    this.isPast = false,
-  });
+    bool isPast = false,
+  }) : _isPastExplicit = isPast;
 
   final String? id;
   final String hospitalName;
@@ -46,8 +47,43 @@ class MedicalTicketEntity {
   final String? department;
   final String? selectedDate;
   final String? selectedTime;
+  final String? dangKyGiup;
   final bool isDeleted;
-  final bool isPast;
+  final bool _isPastExplicit;
+
+  bool get isPast {
+    if (_isPastExplicit) return true;
+    try {
+      final now = DateTime.now();
+      final today = DateTime(now.year, now.month, now.day);
+      final clean = scheduleText.trim();
+      final parts = clean.split(' ');
+      if (parts.isNotEmpty) {
+        final dateStr = parts[0].replaceAll(',', '').trim();
+        final dateParts = dateStr.split('/');
+        if (dateParts.length == 3) {
+          final day = int.parse(dateParts[0]);
+          final month = int.parse(dateParts[1]);
+          final year = int.parse(dateParts[2]);
+
+          final ticketDate = DateTime(year, month, day);
+          if (ticketDate.isBefore(today)) return true;
+
+          if (ticketDate.isAtSameMomentAs(today) && parts.length >= 2) {
+            final timeStr = parts[1].replaceAll('g', ':').replaceAll('h', ':').trim();
+            final timeParts = timeStr.split(':');
+            if (timeParts.isNotEmpty) {
+              final hour = int.tryParse(timeParts[0]) ?? 0;
+              final min = timeParts.length >= 2 ? (int.tryParse(timeParts[1]) ?? 0) : 0;
+              final ticketTime = DateTime(year, month, day, hour, min);
+              return ticketTime.isBefore(now);
+            }
+          }
+        }
+      }
+    } catch (_) {}
+    return _isPastExplicit;
+  }
 
   Map<String, dynamic> toJson() {
     return {
@@ -72,6 +108,7 @@ class MedicalTicketEntity {
       'department': department,
       'selectedDate': selectedDate,
       'selectedTime': selectedTime,
+      'dangKyGiup': dangKyGiup,
       'isDeleted': isDeleted,
       'isPast': isPast,
     };
@@ -100,6 +137,7 @@ class MedicalTicketEntity {
       department: json['department'] as String?,
       selectedDate: json['selectedDate'] as String?,
       selectedTime: json['selectedTime'] as String?,
+      dangKyGiup: json['dangKyGiup'] as String?,
       isDeleted: json['isDeleted'] as bool? ?? false,
       isPast: json['isPast'] as bool? ?? false,
     );
@@ -127,6 +165,7 @@ class MedicalTicketEntity {
     String? department,
     String? selectedDate,
     String? selectedTime,
+    String? dangKyGiup,
     bool? isDeleted,
     bool? isPast,
   }) {
@@ -152,6 +191,7 @@ class MedicalTicketEntity {
       department: department ?? this.department,
       selectedDate: selectedDate ?? this.selectedDate,
       selectedTime: selectedTime ?? this.selectedTime,
+      dangKyGiup: dangKyGiup ?? this.dangKyGiup,
       isDeleted: isDeleted ?? this.isDeleted,
       isPast: isPast ?? this.isPast,
     );
