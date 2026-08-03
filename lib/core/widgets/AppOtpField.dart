@@ -74,7 +74,7 @@ class _AppOtpFieldState extends State<AppOtpField> {
             GestureDetector(
               onTap: () => _focusNode.requestFocus(),
               child: SizedBox(
-                height: 60,
+                height: 56,
                 child: Stack(
                   children: [
                     Positioned.fill(
@@ -112,9 +112,6 @@ class _AppOtpFieldState extends State<AppOtpField> {
                         child: LayoutBuilder(
                           builder: (context, constraints) {
                             const spacing = 8.0;
-                            final boxWidth =
-                                ((constraints.maxWidth - (spacing * 5)) / 6)
-                                    .clamp(42.0, 56.0);
 
                             return Row(
                               mainAxisAlignment: MainAxisAlignment.center,
@@ -127,7 +124,6 @@ class _AppOtpFieldState extends State<AppOtpField> {
                                     _focusNode.hasFocus &&
                                     (index == text.length ||
                                         (text.length == 6 && index == 5));
-                                final isFilled = char.isNotEmpty;
 
                                 return Padding(
                                   padding: EdgeInsets.only(
@@ -135,27 +131,25 @@ class _AppOtpFieldState extends State<AppOtpField> {
                                   ),
                                   child: AnimatedContainer(
                                     duration: const Duration(milliseconds: 180),
-                                    width: boxWidth,
-                                    height: 48,
+                                    width: 48,
+                                    height: 56,
                                     alignment: Alignment.center,
                                     decoration: BoxDecoration(
-                                      color: isFilled
-                                          ? const Color(0xFFF3F7FF)
-                                          : Colors.white,
+                                      color: Colors.white,
                                       borderRadius: BorderRadius.circular(12),
                                       border: Border.all(
                                         color: isActive
                                             ? AppColors.primary
-                                            : const Color(0xFFD8E1F2),
-                                        width: isActive ? 1.6 : 1,
+                                            : const Color(0xFFE2E8F0),
+                                        width: isActive ? 1.5 : 1.0,
                                       ),
                                     ),
                                     child: Text(
                                       char,
                                       style: const TextStyle(
-                                        color: AppColors.textPrimary,
-                                        fontSize: 22,
-                                        fontWeight: FontWeight.w700,
+                                        color: Color(0xFF1E293B),
+                                        fontSize: 20,
+                                        fontWeight: FontWeight.bold,
                                       ),
                                     ),
                                   ),

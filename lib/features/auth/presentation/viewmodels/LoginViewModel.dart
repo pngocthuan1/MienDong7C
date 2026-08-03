@@ -68,7 +68,9 @@ class LoginViewModel extends ChangeNotifier {
   final passwordController = TextEditingController();
   String? _message;
 
-  LoginViewModel(this._authRepository, this._secureStorage);
+  LoginViewModel(this._authRepository, this._secureStorage) {
+    _isOfflineDemo = _authRepository.isOfflineDemo;
+  }
 
   String? get message => _message;
 
@@ -100,6 +102,7 @@ class LoginViewModel extends ChangeNotifier {
   void setOfflineDemo(bool val) {
     if (_isOfflineDemo == val) return;
     _isOfflineDemo = val;
+    _authRepository.setOfflineDemo(val);
     notifyListeners();
   }
 

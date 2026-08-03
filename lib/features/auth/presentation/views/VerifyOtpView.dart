@@ -9,6 +9,8 @@ import 'package:benhvien7c/features/auth/presentation/viewmodels/OtpViewModel.da
 import 'package:benhvien7c/features/auth/presentation/views/AuthFlowArguments.dart';
 import 'package:benhvien7c/features/auth/presentation/widgets/AuthFeedbackBanner.dart';
 import 'package:benhvien7c/features/auth/presentation/widgets/OtpCountdown.dart';
+import 'package:benhvien7c/features/auth/presentation/widgets/AuthGradientBackground.dart';
+import 'package:benhvien7c/features/auth/presentation/widgets/AuthCardShell.dart';
 
 class VerifyOtpView extends StatefulWidget {
   const VerifyOtpView({required this.args, super.key});
@@ -32,6 +34,10 @@ class _VerifyOtpViewState extends State<VerifyOtpView> {
       AppLocator.authRepository,
       phoneNumber: widget.args.phoneNumber,
       purpose: widget.args.purpose,
+      fullName: widget.args.fullName,
+      password: widget.args.password,
+      key: widget.args.key,
+      adjustSeconds: widget.args.adjustSeconds,
     );
     _viewModel.verifyOtpCommand.addListener(_onVerifyChanged);
   }
@@ -57,14 +63,20 @@ class _VerifyOtpViewState extends State<VerifyOtpView> {
       success: (message) {
         _viewModel.verifyOtpCommand.clearResult();
         _showSnackBar(_maskedMessage(message));
-        AppNavigator.replaceNamed(
-          context,
-          RouteNames.resetPassword,
-          arguments: ResetPasswordViewArgs(
-            phoneNumber: widget.args.phoneNumber,
-            otpCode: _viewModel.otpController.text.trim(),
-          ),
-        );
+        if (widget.args.purpose == OtpPurpose.registration) {
+          AppNavigator.resetToNamed(context, RouteNames.login);
+        } else {
+          AppNavigator.replaceNamed(
+            context,
+            RouteNames.resetPassword,
+            arguments: ResetPasswordViewArgs(
+              phoneNumber: widget.args.phoneNumber,
+              otpCode: _viewModel.otpController.text.trim(),
+              key: _viewModel.key,
+              adjustSeconds: _viewModel.adjustSeconds,
+            ),
+          );
+        }
       },
       failure: (_) {
         _viewModel.verifyOtpCommand.clearResult();
@@ -132,114 +144,113 @@ class _VerifyOtpViewState extends State<VerifyOtpView> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.white,
-      body: SafeArea(
-        child: Center(
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.symmetric(
-              horizontal: AppSizes.screenHorizontalPadding,
-              vertical: 24,
-            ),
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 440),
-              child: AnimatedBuilder(
-                animation: _viewModel,
-                builder: (context, _) {
-                  final feedbackMessage = _viewModel.message == null
-                      ? null
-                      : _maskedMessage(_viewModel.message!);
+      body: AuthGradientBackground(
+        child: AuthCardShell(
+          child: AnimatedBuilder(
+            animation: _viewModel,
+            builder: (context, _) {
+              final feedbackMessage = _viewModel.message == null
+                  ? null
+                  : _maskedMessage(_viewModel.message!);
 
-                  return Form(
-                    key: _formKey,
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        Align(
-                          alignment: Alignment.centerLeft,
-                          child: BackButton(
-                            onPressed: () => Navigator.of(context).maybePop(),
-                          ),
-                        ),
-                        const SizedBox(height: 10),
-                        const _OtpHeroIcon(),
-                        const SizedBox(height: 18),
-                        const Text(
-                          'Xác thực mã OTP',
-                          textAlign: TextAlign.center,
-                          style: TextStyle(
-                            color: AppColors.textPrimary,
-                            fontSize: 18,
-                            fontWeight: FontWeight.w800,
-                          ),
-                        ),
-                        const SizedBox(height: 10),
-                        Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 10),
-                          child: Text(
-                            'Vui lòng nhập mã 6 chữ số đã được gửi tới số điện thoại $_maskedPhoneNumber',
-                            textAlign: TextAlign.center,
-                            style: const TextStyle(
-                              color: AppColors.textSecondary,
-                              height: 1.45,
-                              fontWeight: FontWeight.w500,
+              return Form(
+                key: _formKey,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Center(
+                      child: Column(
+                        children: [
+                          Container(
+                            width: 64,
+                            height: 64,
+                            decoration: const BoxDecoration(
+                              color: Color(0xFFEFF6FF), // bg-blue-50
+                              shape: BoxShape.circle,
+                            ),
+                            alignment: Alignment.center,
+                            child: const Icon(
+                              Icons.message_outlined,
+                              color: AppColors.primary,
+                              size: 32,
                             ),
                           ),
-                        ),
-                        const SizedBox(height: 22),
-                        AppOtpField(
-                          controller: _viewModel.otpController,
-                          validator: _viewModel.checkOtp,
-                          autofocus: true,
-                          onChanged: _viewModel.updateOtpError,
-                        ),
-                        if (feedbackMessage != null) ...[
-                          const SizedBox(height: AppSizes.itemSpacing),
-                          AuthFeedbackBanner(message: feedbackMessage),
+                          const SizedBox(height: 16),
+                          Text(
+                            'Xác thực số điện thoại',
+                            textAlign: TextAlign.center,
+                            style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                                  fontWeight: FontWeight.bold,
+                                  color: const Color(0xFF1E3A8A),
+                                ),
+                          ),
+                          const SizedBox(height: 8),
+                          Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 16),
+                            child: RichText(
+                              textAlign: TextAlign.center,
+                              text: TextSpan(
+                                style: const TextStyle(
+                                  color: Color(0xFF64748B),
+                                  fontSize: 14,
+                                  height: 1.4,
+                                ),
+                                children: [
+                                  const TextSpan(text: 'Vui lòng nhập mã OTP 6 số vừa được gửi đến '),
+                                  TextSpan(
+                                    text: _maskedPhoneNumber,
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                      color: Color(0xFF334155),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
                         ],
-                        const SizedBox(height: 14),
-                        OtpCountdown(
-                          isBusy: _viewModel.resendOtpCommand.running,
-                          onResend: _resendOtp,
-                        ),
-                        const SizedBox(height: 14),
-                        _OtpSubmitButton(
-                          isEnabled: _viewModel.isOtpComplete,
-                          isLoading: _viewModel.verifyOtpCommand.running,
-                          onPressed: _submit,
-                        ),
-                        const SizedBox(height: 22),
-                        const _OtpImagePlaceholder(),
-                      ],
+                      ),
                     ),
-                  );
-                },
-              ),
-            ),
+                    const SizedBox(height: 24),
+                    AppOtpField(
+                      controller: _viewModel.otpController,
+                      validator: _viewModel.checkOtp,
+                      autofocus: true,
+                      onChanged: _viewModel.updateOtpError,
+                    ),
+                    if (feedbackMessage != null) ...[
+                      const SizedBox(height: AppSizes.itemSpacing),
+                      AuthFeedbackBanner(message: feedbackMessage),
+                    ],
+                    const SizedBox(height: 20),
+                    _OtpSubmitButton(
+                      isEnabled: _viewModel.isOtpComplete,
+                      isLoading: _viewModel.verifyOtpCommand.running,
+                      onPressed: _submit,
+                    ),
+                    const SizedBox(height: 20),
+                    OtpCountdown(
+                      isBusy: _viewModel.resendOtpCommand.running,
+                      onResend: _resendOtp,
+                    ),
+                    const SizedBox(height: 20),
+                    TextButton.icon(
+                      onPressed: () => Navigator.of(context).maybePop(),
+                      icon: const Icon(Icons.arrow_back, size: 16, color: Color(0xFF64748B)),
+                      label: const Text(
+                        'Quay lại sửa số điện thoại',
+                        style: TextStyle(
+                          color: Color(0xFF64748B),
+                          fontWeight: FontWeight.w600,
+                          fontSize: 14,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            },
           ),
-        ),
-      ),
-    );
-  }
-}
-
-class _OtpHeroIcon extends StatelessWidget {
-  const _OtpHeroIcon();
-
-  @override
-  Widget build(BuildContext context) {
-    return Center(
-      child: Container(
-        width: 62,
-        height: 62,
-        decoration: BoxDecoration(
-          color: const Color(0xFFEAF2FF),
-          borderRadius: BorderRadius.circular(31),
-        ),
-        alignment: Alignment.center,
-        child: const Icon(
-          Icons.shield_outlined,
-          color: AppColors.primary,
-          size: 28,
         ),
       ),
     );
@@ -268,9 +279,12 @@ class _OtpSubmitButton extends StatelessWidget {
         foregroundColor: Colors.white,
         disabledBackgroundColor: const Color(0xFFE3E7F2),
         disabledForegroundColor: Colors.white,
-        padding: const EdgeInsets.symmetric(vertical: 15, horizontal: 20),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        textStyle: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
+        minimumSize: const Size.fromHeight(56),
+        padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 20),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(AppSizes.buttonRadius),
+        ),
+        textStyle: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
       ),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.center,
@@ -284,57 +298,11 @@ class _OtpSubmitButton extends StatelessWidget {
                 valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
               ),
             )
-          else
-            const Text('Xác thực ngay'),
-          if (!isLoading) ...[
+          else ...[
+            const Icon(Icons.check_circle_outline_rounded, size: 18),
             const SizedBox(width: 8),
-            const Icon(Icons.chevron_right_rounded, size: 20),
+            const Text('Xác nhận'),
           ],
-        ],
-      ),
-    );
-  }
-}
-
-class _OtpImagePlaceholder extends StatelessWidget {
-  const _OtpImagePlaceholder();
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      height: 160,
-      decoration: BoxDecoration(
-        color: const Color(0xFFF7F9FD),
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: const Color(0xFFD9E2F2)),
-      ),
-      alignment: Alignment.center,
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: const [
-          Icon(
-            Icons.add_photo_alternate_outlined,
-            color: AppColors.primary,
-            size: 34,
-          ),
-          SizedBox(height: 10),
-          Text(
-            'Chỗ để thêm ảnh',
-            style: TextStyle(
-              color: AppColors.textPrimary,
-              fontSize: 15,
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-          SizedBox(height: 4),
-          Text(
-            'Bạn có thể tự chèn ảnh vào đây sau.',
-            textAlign: TextAlign.center,
-            style: TextStyle(
-              color: AppColors.textSecondary,
-              fontWeight: FontWeight.w500,
-            ),
-          ),
         ],
       ),
     );

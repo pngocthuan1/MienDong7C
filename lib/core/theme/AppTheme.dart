@@ -27,6 +27,13 @@ class AppTheme {
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
         fillColor: Colors.white,
+        prefixIconColor: const Color(0xFF94A3B8),
+        suffixIconColor: const Color(0xFF94A3B8),
+        hintStyle: const TextStyle(
+          color: Color(0xFF94A3B8),
+          fontWeight: FontWeight.w400,
+          fontSize: 14,
+        ),
         contentPadding: const EdgeInsets.symmetric(
           horizontal: 18,
           vertical: 16,

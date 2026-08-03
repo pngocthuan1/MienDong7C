@@ -9,6 +9,7 @@ import 'package:benhvien7c/core/widgets/AppPasswordField.dart';
 import 'package:benhvien7c/core/widgets/AppTextField.dart';
 import 'package:benhvien7c/core/widgets/CloudflareTurnstile.dart';
 import 'package:benhvien7c/app/router/RouteNames.dart';
+import 'package:benhvien7c/features/auth/presentation/views/AuthFlowArguments.dart';
 import 'package:benhvien7c/features/auth/presentation/viewmodels/RegisterViewModel.dart';
 import 'package:benhvien7c/features/auth/presentation/widgets/AuthCardShell.dart';
 import 'package:benhvien7c/features/auth/presentation/widgets/AuthFeedbackBanner.dart';
@@ -70,23 +71,20 @@ class _RegisterViewState extends State<RegisterView> {
     result.when(
       success: (message) async {
         _viewModel.registerCommand.clearResult();
-        await showDialog<void>(
-          context: context,
-          builder: (dialogContext) {
-            return AlertDialog(
-              title: const Text('Đăng ký thành công'),
-              content: Text(message),
-              actions: [
-                TextButton(
-                  onPressed: () {
-                    Navigator.of(dialogContext).pop();
-                    AppNavigator.resetToNamed(context, RouteNames.login);
-                  },
-                  child: const Text('Về đăng nhập'),
-                ),
-              ],
-            );
-          },
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(message)),
+        );
+        AppNavigator.pushNamed(
+          context,
+          RouteNames.verifyOtp,
+          arguments: OtpViewArgs(
+            phoneNumber: _viewModel.phoneController.text.trim(),
+            purpose: OtpPurpose.registration,
+            fullName: _viewModel.fullNameController.text.trim(),
+            password: _viewModel.passwordController.text,
+            key: _viewModel.otpKey,
+            adjustSeconds: _viewModel.adjustSeconds,
+          ),
         );
       },
       failure: (_) {
@@ -117,11 +115,29 @@ class _RegisterViewState extends State<RegisterView> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const AuthHeader(
-                    title: 'Tạo tài khoản mới',
-                    subtitle:
-                        'Bạn có thể đăng ký theo nhóm khách hàng hoặc nhân viên. Giao diện và menu bên trong sẽ tự đổi theo quyền đã chọn.',
-                    icon: Icons.person_add_alt_1_rounded,
+                  Center(
+                    child: Column(
+                      children: [
+                        Text(
+                          'Tạo tài khoản mới',
+                          textAlign: TextAlign.center,
+                          style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                                fontWeight: FontWeight.bold,
+                                color: const Color(0xFF1E3A8A),
+                              ),
+                        ),
+                        const SizedBox(height: 8),
+                        const Text(
+                          'Bạn có thể đăng ký theo nhóm khách hàng hoặc nhân viên. Giao diện và menu bên trong sẽ tự đổi theo quyền đã chọn.',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            color: Color(0xFF64748B),
+                            fontSize: 14,
+                            height: 1.4,
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                   const SizedBox(height: AppSizes.itemSpacing),
                   AuthRoleSwitcher(
@@ -153,19 +169,7 @@ class _RegisterViewState extends State<RegisterView> {
                     textInputAction: TextInputAction.next,
                     onChanged: _viewModel.updatePhoneError,
                   ),
-                  const SizedBox(height: AppSizes.itemSpacing),
-                  AppTextField(
-                    controller: _viewModel.emailController,
-                    label: 'Email (không bắt buộc)',
-                    hintText: 'Nhập email để nhận thông báo',
-                    keyboardType: TextInputType.emailAddress,
-                    prefixIcon: Icons.email_outlined,
-                    validator: _viewModel.checkEmail,
-                    textInputAction: TextInputAction.next,
-                    onChanged: _viewModel.updateEmailError,
-                  ),
-                  const SizedBox(height: AppSizes.itemSpacing),
-                  AppPasswordField(
+                   AppPasswordField(
                     controller: _viewModel.passwordController,
                     focusNode: _passwordFocusNode,
                     label: 'Mật khẩu',
@@ -203,75 +207,66 @@ class _RegisterViewState extends State<RegisterView> {
                     const SizedBox(height: AppSizes.itemSpacing),
                     AuthFeedbackBanner(message: _viewModel.message!),
                   ],
-                  Center(
-                    child: CloudflareTurnstile(
-                      siteKey: Environment.turnstileSiteKey,
-                      simulateBot: _isBotSimulation,
-                      onVerified: (token) {
-                        setState(() {
-                          _captchaToken = token;
-                        });
-                      },
-                    ),
+                  const SizedBox(height: AppSizes.itemSpacing),
+                  CloudflareTurnstile(
+                    siteKey: Environment.turnstileSiteKey,
+                    simulateBot: _isBotSimulation,
+                    onVerified: (token) {
+                      setState(() {
+                        _captchaToken = token;
+                      });
+                    },
                   ),
                   const SizedBox(height: 10),
-                  Center(
-                    child: Container(
-                      constraints: const BoxConstraints(maxWidth: 300),
-                      padding: const EdgeInsets.symmetric(horizontal: 8),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          const Row(
-                            children: [
-                              Icon(Icons.psychology_outlined, size: 16, color: Color(0xFFE05252)),
-                              SizedBox(width: 6),
-                              Text(
-                                'Giả lập hành vi Bot (Spam)',
-                                style: TextStyle(
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.bold,
-                                  color: Color(0xFF6B7280),
-                                ),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 4),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Row(
+                          children: [
+                            Icon(Icons.bug_report_outlined, size: 16, color: Color(0xFFE05252)),
+                            SizedBox(width: 6),
+                            Text(
+                              'Giả lập hành vi Bot (Spam)',
+                              style: TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w600,
+                                color: Color(0xFF475569),
                               ),
-                            ],
-                          ),
-                          SizedBox(
-                            height: 24,
-                            child: Switch(
-                              value: _isBotSimulation,
-                              activeThumbColor: const Color(0xFFE05252),
-                              onChanged: (val) {
-                                setState(() {
-                                  _isBotSimulation = val;
-                                  if (val) {
-                                    _captchaToken = null;
-                                  }
-                                });
-                              },
                             ),
+                          ],
+                        ),
+                        SizedBox(
+                          height: 24,
+                          child: Switch(
+                            value: _isBotSimulation,
+                            activeThumbColor: const Color(0xFFE05252),
+                            onChanged: (val) {
+                              setState(() {
+                                _isBotSimulation = val;
+                                if (val) {
+                                  _captchaToken = null;
+                                }
+                              });
+                            },
                           ),
-                        ],
-                      ),
+                        ),
+                      ],
                     ),
                   ),
                   const SizedBox(height: AppSizes.sectionSpacing),
-                  Center(
-                    child: ConstrainedBox(
-                      constraints: const BoxConstraints(maxWidth: 280),
-                      child: ListenableBuilder(
-                        listenable: _viewModel.registerCommand,
-                        builder: (context, _) {
-                          final isCaptchaVerified = _captchaToken != null;
-                          return AppButton(
-                            label: 'Đăng ký bằng số điện thoại',
-                            icon: Icons.verified_user_outlined,
-                            isLoading: _viewModel.registerCommand.running,
-                            onPressed: isCaptchaVerified ? _submit : null,
-                          );
-                        },
-                      ),
-                    ),
+                  ListenableBuilder(
+                    listenable: _viewModel.registerCommand,
+                    builder: (context, _) {
+                      final isCaptchaVerified = _captchaToken != null;
+                      return AppButton(
+                        label: 'Đăng ký bằng số điện thoại',
+                        icon: Icons.verified_user_outlined,
+                        isLoading: _viewModel.registerCommand.running,
+                        onPressed: isCaptchaVerified ? _submit : null,
+                      );
+                    },
                   ),
                   const SizedBox(height: AppSizes.sectionSpacing),
                   AuthFooterLink(

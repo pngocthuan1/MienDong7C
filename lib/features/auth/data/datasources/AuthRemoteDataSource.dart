@@ -2,6 +2,7 @@ import 'package:benhvien7c/core/network/ApiException.dart';
 import 'package:benhvien7c/core/network/ApiValidator.dart';
 import 'package:benhvien7c/core/network/DioClient.dart';
 import 'package:benhvien7c/features/auth/data/models/AuthResponseModel.dart';
+import 'package:benhvien7c/features/auth/data/models/DkkAuthModels.dart';
 import 'package:benhvien7c/features/auth/data/models/LoginHisRequestModel.dart';
 import 'package:benhvien7c/features/auth/data/models/LoginRequestModel.dart';
 import 'package:benhvien7c/features/auth/data/models/UserProfileModel.dart';
@@ -47,6 +48,108 @@ class AuthRemoteDataSource {
         json: response.data as Map<String, dynamic>,
         fromJsonT: (data) =>
             UserProfileModel.fromJson(data as Map<String, dynamic>),
+      );
+    } on DioException catch (e) {
+      throw e.error is ApiException
+          ? e.error as ApiException
+          : ApiException.fromDioError(e);
+    }
+  }
+
+  // --- OTP & Account APIs ---
+
+  Future<String> generateRandomKey() async {
+    try {
+      final response = await _dioClient.dio.get('/api/Otp/GenerateRandomKey');
+      return ApiValidator.validateResponse(
+        json: response.data as Map<String, dynamic>,
+        fromJsonT: (data) => data as String,
+      );
+    } on DioException catch (e) {
+      throw e.error is ApiException
+          ? e.error as ApiException
+          : ApiException.fromDioError(e);
+    }
+  }
+
+  Future<SendOtpResponseModel> sendOtp(OtpSendInputModel request) async {
+    try {
+      final response = await _dioClient.dio.post(
+        '/api/Otp/SendOtp',
+        data: request.toJson(),
+      );
+      return ApiValidator.validateResponse(
+        json: response.data as Map<String, dynamic>,
+        fromJsonT: (data) =>
+            SendOtpResponseModel.fromJson(data as Map<String, dynamic>),
+      );
+    } on DioException catch (e) {
+      throw e.error is ApiException
+          ? e.error as ApiException
+          : ApiException.fromDioError(e);
+    }
+  }
+
+  Future<int> verifyOtp(OtpVerifyInputModel request) async {
+    try {
+      final response = await _dioClient.dio.post(
+        '/api/Otp/VerifyOtp',
+        data: request.toJson(),
+      );
+      return ApiValidator.validateResponse(
+        json: response.data as Map<String, dynamic>,
+        fromJsonT: (data) => (data as num).toInt(),
+      );
+    } on DioException catch (e) {
+      throw e.error is ApiException
+          ? e.error as ApiException
+          : ApiException.fromDioError(e);
+    }
+  }
+
+  Future<String> signUp(DkkSignUpRequestModel request) async {
+    try {
+      final response = await _dioClient.dio.post(
+        '/api/TaiKhoan/SignUp',
+        data: request.toJson(),
+      );
+      return ApiValidator.validateResponse(
+        json: response.data as Map<String, dynamic>,
+        fromJsonT: (data) => data as String,
+      );
+    } on DioException catch (e) {
+      throw e.error is ApiException
+          ? e.error as ApiException
+          : ApiException.fromDioError(e);
+    }
+  }
+
+  Future<String> resetPassword(DkkResetPasswordRequestModel request) async {
+    try {
+      final response = await _dioClient.dio.post(
+        '/api/TaiKhoan/ResetPassword',
+        data: request.toJson(),
+      );
+      return ApiValidator.validateResponse(
+        json: response.data as Map<String, dynamic>,
+        fromJsonT: (data) => data as String,
+      );
+    } on DioException catch (e) {
+      throw e.error is ApiException
+          ? e.error as ApiException
+          : ApiException.fromDioError(e);
+    }
+  }
+
+  Future<bool> changePassword(ChangePasswordRequestModel request) async {
+    try {
+      final response = await _dioClient.dio.post(
+        '/api/TaiKhoan/ChangePassword',
+        data: request.toJson(),
+      );
+      return ApiValidator.validateResponse(
+        json: response.data as Map<String, dynamic>,
+        fromJsonT: (data) => data as bool,
       );
     } on DioException catch (e) {
       throw e.error is ApiException

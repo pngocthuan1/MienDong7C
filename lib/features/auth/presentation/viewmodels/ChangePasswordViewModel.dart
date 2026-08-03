@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:benhvien7c/core/network/ApiResult.dart';
+import 'package:benhvien7c/core/network/ApiException.dart';
 import 'package:benhvien7c/core/utils/Validators.dart';
 import 'package:benhvien7c/features/auth/domain/repositories/AuthRepository.dart';
 import 'package:benhvien7c/features/auth/presentation/viewmodels/RegisterViewModel.dart';
@@ -62,9 +63,27 @@ class ChangePasswordViewModel extends ChangeNotifier {
   }
 
   Future<ApiResult<String>> _changePassword() async {
-    // ignore: unused_local_variable
-    final repo = _authRepository;
-    await Future.delayed(const Duration(seconds: 1));
+    _message = null;
+    notifyListeners();
+
+    final currentPw = currentPasswordController.text;
+    final newPw = newPasswordController.text;
+    final confirmNewPw = confirmNewPasswordController.text;
+
+    final res = await _authRepository.changePassword(currentPw, newPw, confirmNewPw);
+    if (res is ApiFailure<bool>) {
+      _message = res.exception.message;
+      notifyListeners();
+      return ApiFailure(res.exception);
+    }
+
+    final isSuccess = (res as ApiSuccess<bool>).data;
+      if (!isSuccess) {
+        _message = 'Đổi mật khẩu không thành công.';
+        notifyListeners();
+        return ApiFailure(ApiException.validation(_message!));
+      }
+
     return const ApiSuccess('Đổi mật khẩu thành công! Vui lòng đăng nhập lại với mật khẩu mới.');
   }
 

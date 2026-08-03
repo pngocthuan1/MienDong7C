@@ -8,6 +8,8 @@ class ResetPasswordViewModel extends ChangeNotifier {
   final AuthRepository _authRepository;
   final String phoneNumber;
   final String otpCode;
+  final String key;
+  final int adjustSeconds;
 
   final passwordController = TextEditingController();
   final confirmPasswordController = TextEditingController();
@@ -20,6 +22,8 @@ class ResetPasswordViewModel extends ChangeNotifier {
     this._authRepository, {
     required this.phoneNumber,
     required this.otpCode,
+    this.key = '',
+    this.adjustSeconds = 0,
   }) {
     resetPasswordCommand = Command<String>(_resetPassword);
   }
@@ -49,8 +53,26 @@ class ResetPasswordViewModel extends ChangeNotifier {
   }
 
   Future<ApiResult<String>> _resetPassword() async {
-    await Future.delayed(const Duration(seconds: 1));
-    return const ApiSuccess('Đặt lại mật khẩu thành công! Vui lòng đăng nhập.');
+    _message = null;
+    notifyListeners();
+
+    final password = passwordController.text;
+
+    final res = await _authRepository.resetPassword(
+      phoneNumber,
+      password,
+      otpCode,
+      key,
+      adjustSeconds,
+    );
+
+    if (res is ApiFailure<String>) {
+      _message = res.exception.message;
+      notifyListeners();
+      return res;
+    }
+
+    return res;
   }
 
   @override

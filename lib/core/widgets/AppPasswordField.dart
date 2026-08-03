@@ -38,6 +38,7 @@ class _AppPasswordFieldState extends State<AppPasswordField> {
       textInputAction: widget.textInputAction,
       decoration: InputDecoration(
         labelText: widget.label,
+        floatingLabelBehavior: FloatingLabelBehavior.never,
         hintText: widget.hintText,
         prefixIcon: const Icon(Icons.lock_outline_rounded),
         suffixIcon: IconButton(

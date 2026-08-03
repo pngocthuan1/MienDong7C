@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:benhvien7c/core/network/ApiResult.dart';
 import 'package:benhvien7c/core/utils/Validators.dart';
 import 'package:benhvien7c/features/auth/domain/repositories/AuthRepository.dart';
+import 'package:benhvien7c/features/auth/data/models/DkkAuthModels.dart';
 import 'package:benhvien7c/features/auth/presentation/viewmodels/RegisterViewModel.dart';
 
 class ForgotPasswordViewModel extends ChangeNotifier {
@@ -29,9 +30,37 @@ class ForgotPasswordViewModel extends ChangeNotifier {
     }
   }
 
+  String otpKey = '';
+  int adjustSeconds = 0;
+
   Future<ApiResult<String>> _requestOtp() async {
-    await Future.delayed(const Duration(seconds: 1));
-    return ApiSuccess('Mã OTP 123456 đã được gửi tới số điện thoại ${phoneController.text.trim()}');
+    _message = null;
+    notifyListeners();
+
+    final phone = phoneController.text.trim();
+
+    // 1. Sinh khóa ngẫu nhiên
+    final keyResult = await _authRepository.generateRandomKey();
+    if (keyResult is ApiFailure<String>) {
+      _message = keyResult.exception.message;
+      notifyListeners();
+      return keyResult;
+    }
+    final key = (keyResult as ApiSuccess<String>).data;
+
+    // 2. Gửi mã OTP
+    final otpResult = await _authRepository.sendOtp(phone, key, 'ResetPassword');
+    if (otpResult is ApiFailure<SendOtpResponseModel>) {
+      _message = otpResult.exception.message;
+      notifyListeners();
+      return ApiFailure(otpResult.exception);
+    }
+    final otpData = (otpResult as ApiSuccess<SendOtpResponseModel>).data;
+
+    otpKey = key;
+    adjustSeconds = otpData.adjustSeconds;
+
+    return ApiSuccess(otpData.message ?? 'Đã gửi mã OTP thành công!');
   }
 
   @override
