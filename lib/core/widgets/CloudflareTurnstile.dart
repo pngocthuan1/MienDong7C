@@ -58,6 +58,7 @@ class _CloudflareTurnstileState extends State<CloudflareTurnstile> {
             _isLoading = false;
             _isSuccess = false;
           });
+          widget.onVerified('cf-token-bot-failed');
           if (widget.onExpired != null) {
             widget.onExpired!();
           }
@@ -77,37 +78,26 @@ class _CloudflareTurnstileState extends State<CloudflareTurnstile> {
   Widget build(BuildContext context) {
     return Container(
       width: double.infinity,
-      constraints: const BoxConstraints(
-        maxWidth: 300,
-        minHeight: 60,
-      ),
       decoration: BoxDecoration(
-        color: const Color(0xFFFBFBFB),
+        color: const Color(0xFFF8FAFC), // bg-slate-50/50
         border: Border.all(
           color: _isLoading
               ? const Color(0xFFE2E8F0)
               : widget.simulateBot
-                  ? const Color(0xFFFED7D7)
+                  ? const Color(0xFFFCA5A5)
                   : const Color(0xFFE2E8F0),
           width: 1,
         ),
-        borderRadius: BorderRadius.circular(4),
-        boxShadow: const [
-          BoxShadow(
-            color: Color(0x05000000),
-            blurRadius: 2,
-            offset: Offset(0, 1),
-          ),
-        ],
+        borderRadius: BorderRadius.circular(12),
       ),
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
           // Checkbox / Loading section
           SizedBox(
-            width: 28,
-            height: 28,
+            width: 32,
+            height: 32,
             child: Center(
               child: _isLoading
                   ? const SizedBox(
@@ -115,19 +105,19 @@ class _CloudflareTurnstileState extends State<CloudflareTurnstile> {
                       height: 18,
                       child: CircularProgressIndicator(
                         strokeWidth: 2.0,
-                        valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF2F7DE1)),
+                        valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF1976D2)),
                       ),
                     )
                   : widget.simulateBot
                       ? const Icon(
                           Icons.cancel_rounded,
-                          color: Color(0xFFD32F2F),
-                          size: 24,
+                          color: Color(0xFFDC2626),
+                          size: 26,
                         )
                       : const Icon(
                           Icons.check_circle_rounded,
-                          color: Color(0xFF2E7D32),
-                          size: 24,
+                          color: Color(0xFF22C55E),
+                          size: 26,
                         ),
             ),
           ),
@@ -148,13 +138,13 @@ class _CloudflareTurnstileState extends State<CloudflareTurnstile> {
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
-                    fontSize: 12,
-                    fontWeight: (_isSuccess || widget.simulateBot) ? FontWeight.w600 : FontWeight.w500,
+                    fontSize: 14,
+                    fontWeight: FontWeight.bold,
                     color: _isLoading
-                        ? const Color(0xFF4A5568)
+                        ? const Color(0xFF475569)
                         : widget.simulateBot
-                            ? const Color(0xFFD32F2F)
-                            : const Color(0xFF2E7D32),
+                            ? const Color(0xFFDC2626)
+                            : const Color(0xFF15803D),
                   ),
                 ),
                 if (_isLoading)
@@ -163,8 +153,8 @@ class _CloudflareTurnstileState extends State<CloudflareTurnstile> {
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(
-                      fontSize: 9,
-                      color: Color(0xFF718096),
+                      fontSize: 10,
+                      color: Color(0xFF64748B),
                     ),
                   ),
                 if (!_isLoading && widget.simulateBot)
@@ -173,8 +163,8 @@ class _CloudflareTurnstileState extends State<CloudflareTurnstile> {
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(
-                      fontSize: 9,
-                      color: Color(0xFFD32F2F),
+                      fontSize: 10,
+                      color: Color(0xFFDC2626),
                     ),
                   ),
               ],
@@ -189,19 +179,19 @@ class _CloudflareTurnstileState extends State<CloudflareTurnstile> {
             children: [
               Row(
                 mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Icon(
-                    Icons.cloud_rounded,
-                    color: Color(0xFFF38020),
-                    size: 13,
+                children: const [
+                  Icon(
+                    Icons.cloud_outlined,
+                    color: Color(0xFFF97316),
+                    size: 14,
                   ),
-                  const SizedBox(width: 3),
+                  SizedBox(width: 4),
                   Text(
                     'Turnstile',
                     style: TextStyle(
-                      fontSize: 9,
+                      fontSize: 11,
                       fontWeight: FontWeight.bold,
-                      color: const Color(0xFF4A5568),
+                      color: Color(0xFF475569),
                     ),
                   ),
                 ],
@@ -210,8 +200,8 @@ class _CloudflareTurnstileState extends State<CloudflareTurnstile> {
               const Text(
                 'Bảo mật - Điều khoản',
                 style: TextStyle(
-                  fontSize: 8,
-                  color: Color(0xFF718096),
+                  fontSize: 9,
+                  color: Color(0xFF94A3B8),
                   decoration: TextDecoration.underline,
                 ),
               ),

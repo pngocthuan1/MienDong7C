@@ -94,6 +94,7 @@ class _LoginViewState extends State<LoginView> {
                 captchaToken: _captchaToken,
                 simulateBot: _isBotSimulation,
                 onCaptchaVerified: (token) {
+                  _viewModel.captchaToken = token;
                   setState(() {
                     _captchaToken = token;
                   });
@@ -122,8 +123,6 @@ class _LoginIntro extends StatelessWidget {
   Widget build(BuildContext context) {
     return Column(
       children: [
-        const _LogoPlaceholder(),
-        const SizedBox(height: 22),
         Text(
           'Đăng nhập hệ thống',
           textAlign: TextAlign.center,
@@ -136,65 +135,6 @@ class _LoginIntro extends StatelessWidget {
           style: AppTextStyles.pageSubtitle,
         ),
       ],
-    );
-  }
-}
-
-class _LogoPlaceholder extends StatelessWidget {
-  const _LogoPlaceholder();
-
-  @override
-  Widget build(BuildContext context) {
-    return Center(
-      child: Container(
-        width: 220,
-        constraints: const BoxConstraints(minHeight: 160),
-        padding: const EdgeInsets.all(18),
-        decoration: BoxDecoration(
-          color: const Color(0xFFF4FAFF),
-          borderRadius: BorderRadius.circular(22),
-          border: Border.all(color: const Color(0xFFCDE2F6), width: 1.4),
-        ),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Container(
-              width: 56,
-              height: 56,
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(16),
-              ),
-              alignment: Alignment.center,
-              child: const Icon(
-                Icons.add_photo_alternate_outlined,
-                color: AppColors.primary,
-                size: 30,
-              ),
-            ),
-            const SizedBox(height: 14),
-            const Text(
-              'Vị trí chèn logo bệnh viện',
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                color: AppColors.textPrimary,
-                fontSize: 16,
-                fontWeight: FontWeight.w800,
-              ),
-            ),
-            const SizedBox(height: 6),
-            const Text(
-              'Bạn có thể thay khung này bằng ảnh logo sau.',
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                color: AppColors.textSecondary,
-                height: 1.4,
-                fontWeight: FontWeight.w500,
-              ),
-            ),
-          ],
-        ),
-      ),
     );
   }
 }
@@ -370,37 +310,34 @@ class _LoginForm extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 10),
-        Center(
-          child: Container(
-            constraints: const BoxConstraints(maxWidth: 300),
-            padding: const EdgeInsets.symmetric(horizontal: 8),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                const Row(
-                  children: [
-                    Icon(Icons.psychology_outlined, size: 16, color: Color(0xFFE05252)),
-                    SizedBox(width: 6),
-                    Text(
-                      'Giả lập hành vi Bot (Spam)',
-                      style: TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.bold,
-                        color: Color(0xFF6B7280),
-                      ),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 4),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Row(
+                children: [
+                  Icon(Icons.bug_report_outlined, size: 16, color: Color(0xFFE05252)),
+                  SizedBox(width: 6),
+                  Text(
+                    'Giả lập hành vi Bot (Spam)',
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      color: Color(0xFF475569),
                     ),
-                  ],
-                ),
-                SizedBox(
-                  height: 24,
-                  child: Switch(
-                    value: simulateBot,
-                    activeColor: const Color(0xFFE05252),
-                    onChanged: onBotToggled,
                   ),
+                ],
+              ),
+              SizedBox(
+                height: 24,
+                child: Switch(
+                  value: simulateBot,
+                  activeColor: const Color(0xFFE05252),
+                  onChanged: onBotToggled,
                 ),
-              ],
-            ),
+              ),
+            ],
           ),
         ),
         const SizedBox(height: AppSizes.itemSpacing),

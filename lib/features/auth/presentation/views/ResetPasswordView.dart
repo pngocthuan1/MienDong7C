@@ -35,6 +35,8 @@ class _ResetPasswordViewState extends State<ResetPasswordView> {
       AppLocator.authRepository,
       phoneNumber: widget.args.phoneNumber,
       otpCode: widget.args.otpCode,
+      key: widget.args.key,
+      adjustSeconds: widget.args.adjustSeconds,
     );
     _passwordFocusNode = FocusNode()..addListener(_onPasswordFocusChanged);
     _viewModel.resetPasswordCommand.addListener(_onResetChanged);
@@ -109,10 +111,44 @@ class _ResetPasswordViewState extends State<ResetPasswordView> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const AuthHeader(
-                    title: 'Tạo mật khẩu mới',
-                    subtitle: 'Nhập mật khẩu mới cho tài khoản của bạn để hoàn tất lấy lại mật khẩu.',
-                    icon: Icons.lock_reset_rounded,
+                  Center(
+                    child: Column(
+                      children: [
+                        Container(
+                          width: 64,
+                          height: 64,
+                          decoration: const BoxDecoration(
+                            color: Color(0xFFF0FDF4),
+                            shape: BoxShape.circle,
+                          ),
+                          alignment: Alignment.center,
+                          child: const Icon(
+                            Icons.lock_reset_rounded,
+                            color: Color(0xFF16A34A),
+                            size: 32,
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                        Text(
+                          'Tạo mật khẩu mới',
+                          textAlign: TextAlign.center,
+                          style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                                fontWeight: FontWeight.bold,
+                                color: const Color(0xFF1E3A8A),
+                              ),
+                        ),
+                        const SizedBox(height: 8),
+                        const Text(
+                          'Mã OTP đã được xác minh. Vui lòng nhập mật khẩu mới cho tài khoản của bạn.',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            color: Color(0xFF64748B),
+                            fontSize: 14,
+                            height: 1.4,
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                   const SizedBox(height: AppSizes.sectionSpacing),
                   AppPasswordField(

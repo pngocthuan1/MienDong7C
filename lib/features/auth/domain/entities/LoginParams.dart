@@ -6,6 +6,7 @@ class LoginParams {
   final String device;
   final String platform;
   final String version;
+  final String? captchaToken;
 
   const LoginParams({
     required this.tenDangNhapHis,
@@ -15,5 +16,6 @@ class LoginParams {
     required this.device,
     required this.platform,
     required this.version,
+    this.captchaToken,
   });
 }

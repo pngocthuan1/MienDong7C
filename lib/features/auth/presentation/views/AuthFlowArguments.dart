@@ -9,20 +9,32 @@ class OtpViewArgs {
   const OtpViewArgs({
     required this.phoneNumber,
     this.purpose = OtpPurpose.passwordReset,
+    this.fullName = '',
+    this.password = '',
+    this.key = '',
+    this.adjustSeconds = 0,
   });
 
   final String phoneNumber;
   final OtpPurpose purpose;
+  final String fullName;
+  final String password;
+  final String key;
+  final int adjustSeconds;
 }
 
 class ResetPasswordViewArgs {
   const ResetPasswordViewArgs({
     required this.phoneNumber,
     required this.otpCode,
+    this.key = '',
+    this.adjustSeconds = 0,
   });
 
   final String phoneNumber;
   final String otpCode;
+  final String key;
+  final int adjustSeconds;
 }
 
 class MedicalTicketViewArgs {

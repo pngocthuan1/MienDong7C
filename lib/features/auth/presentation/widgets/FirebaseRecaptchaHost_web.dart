@@ -31,9 +31,9 @@ class _FirebaseRecaptchaHostState extends State<FirebaseRecaptchaHost> {
       (int _) {
         return html.DivElement()
           ..id = FirebaseRecaptchaConfig.containerId
-          ..style.width = '100%'
-          ..style.minHeight = '80px'
-          ..style.display = 'block';
+          ..style.width = '0px'
+          ..style.height = '0px'
+          ..style.display = 'none';
       },
     );
 
@@ -46,14 +46,11 @@ class _FirebaseRecaptchaHostState extends State<FirebaseRecaptchaHost> {
       return const SizedBox.shrink();
     }
 
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-      child: const SizedBox(
-        height: 80,
-        child: HtmlElementView(
-          viewType: FirebaseRecaptchaConfig.containerId,
-        ),
+    return const SizedBox(
+      width: 0,
+      height: 0,
+      child: HtmlElementView(
+        viewType: FirebaseRecaptchaConfig.containerId,
       ),
     );
   }

@@ -65,6 +65,8 @@ class _ForgotPasswordViewState extends State<ForgotPasswordView> {
           arguments: OtpViewArgs(
             phoneNumber: _viewModel.phoneController.text.trim(),
             purpose: OtpPurpose.passwordReset,
+            key: _viewModel.otpKey,
+            adjustSeconds: _viewModel.adjustSeconds,
           ),
         );
       },
@@ -96,78 +98,68 @@ class _ForgotPasswordViewState extends State<ForgotPasswordView> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const AuthHeader(
-                    title: 'Quên mật khẩu',
-                    subtitle:
-                        'Nhập số điện thoại đã đăng ký. Hệ thống sẽ gửi OTP để bạn xác minh và tạo mật khẩu mới.',
-                    icon: Icons.lock_reset_rounded,
-                  ),
-                  const SizedBox(height: AppSizes.sectionSpacing),
-                  Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.all(14),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFF4FBFF),
-                      borderRadius: BorderRadius.circular(AppSizes.fieldRadius),
-                      border: Border.all(color: const Color(0xFFD7EDFF)),
-                    ),
-                    child: Text(
-                      FirebaseBootstrap.isInitialized
-                          ? 'Khi bạn bấm Gửi mã OTP, Firebase sẽ hiển thị Google reCAPTCHA để xác minh số điện thoại.'
-                          : 'Firebase chưa được cấu hình nên app đang chạy chế độ demo. OTP hiện tại vẫn dùng mã 123456.',
-                      style: const TextStyle(
-                        color: Color(0xFF0A4F95),
-                        fontWeight: FontWeight.w600,
-                        height: 1.4,
+                    Center(
+                      child: Column(
+                        children: [
+                          Text(
+                            'Quên mật khẩu',
+                            textAlign: TextAlign.center,
+                            style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                                  fontWeight: FontWeight.bold,
+                                  color: const Color(0xFF1E3A8A),
+                                ),
+                          ),
+                          const SizedBox(height: 8),
+                          const Text(
+                            'Nhập số điện thoại đã đăng ký. Hệ thống sẽ gửi OTP để bạn xác minh và tạo mật khẩu mới.',
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                              color: Color(0xFF64748B),
+                              fontSize: 14,
+                              height: 1.4,
+                            ),
+                          ),
+                        ],
                       ),
                     ),
-                  ),
-                  const SizedBox(height: AppSizes.compactSpacing),
-                  const FirebaseRecaptchaHost(),
-                  const SizedBox(height: AppSizes.itemSpacing),
-                  AppTextField(
-                    controller: _viewModel.phoneController,
-                    label: 'Số điện thoại',
-                    hintText: 'Nhập số điện thoại đã đăng ký',
-                    keyboardType: TextInputType.phone,
-                    prefixIcon: Icons.phone_android_rounded,
-                    inputFormatters: AppInputFormatters.phoneNumber,
-                    validator: _viewModel.checkPhone,
-                    textInputAction: TextInputAction.done,
-                    onChanged: _viewModel.updatePhoneError,
-                  ),
-                  if (_viewModel.message != null) ...[
+                    const FirebaseRecaptchaHost(),
                     const SizedBox(height: AppSizes.itemSpacing),
-                    AuthFeedbackBanner(message: _viewModel.message!),
-                  ],
-                  const SizedBox(height: AppSizes.itemSpacing),
-                  Center(
-                    child: CloudflareTurnstile(
+                    AppTextField(
+                      controller: _viewModel.phoneController,
+                      label: 'Số điện thoại',
+                      hintText: 'Nhập số điện thoại đã đăng ký',
+                      keyboardType: TextInputType.phone,
+                      prefixIcon: Icons.phone_iphone,
+                      inputFormatters: AppInputFormatters.phoneNumber,
+                      validator: _viewModel.checkPhone,
+                      textInputAction: TextInputAction.done,
+                      onChanged: _viewModel.updatePhoneError,
+                    ),
+                    if (_viewModel.message != null) ...[
+                      const SizedBox(height: AppSizes.itemSpacing),
+                      AuthFeedbackBanner(message: _viewModel.message!),
+                    ],
+                    const SizedBox(height: AppSizes.itemSpacing),
+                    CloudflareTurnstile(
                       onVerified: (token) {
                         setState(() {
                           _captchaToken = token;
                         });
                       },
                     ),
-                  ),
-                  const SizedBox(height: AppSizes.sectionSpacing),
-                  Center(
-                    child: ConstrainedBox(
-                      constraints: const BoxConstraints(maxWidth: 280),
-                      child: ListenableBuilder(
-                        listenable: _viewModel.requestOtpCommand,
-                        builder: (context, _) {
-                          final isCaptchaVerified = _captchaToken != null;
-                          return AppButton(
-                            label: 'Gửi mã OTP',
-                            icon: Icons.sms_outlined,
-                            isLoading: _viewModel.requestOtpCommand.running,
-                            onPressed: isCaptchaVerified ? _submit : null,
-                          );
-                        },
-                      ),
+                    const SizedBox(height: AppSizes.sectionSpacing),
+                    ListenableBuilder(
+                      listenable: _viewModel.requestOtpCommand,
+                      builder: (context, _) {
+                        final isCaptchaVerified = _captchaToken != null;
+                        return AppButton(
+                          label: 'Gửi mã OTP',
+                          icon: Icons.sms_outlined,
+                          isLoading: _viewModel.requestOtpCommand.running,
+                          onPressed: isCaptchaVerified ? _submit : null,
+                        );
+                      },
                     ),
-                  ),
                   const SizedBox(height: AppSizes.sectionSpacing),
                   AuthFooterLink(
                     label: 'Nhớ lại mật khẩu?',

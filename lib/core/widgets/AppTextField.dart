@@ -77,6 +77,7 @@ class AppTextField extends StatelessWidget {
       },
       decoration: InputDecoration(
         label: _buildLabelWidget(label),
+        floatingLabelBehavior: FloatingLabelBehavior.never,
         hintText: hintText,
         prefixIcon: prefixIcon != null ? Icon(prefixIcon) : null,
         filled: readOnly,

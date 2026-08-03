@@ -190,11 +190,9 @@ class PortalRepositoryImpl implements PortalRepository {
             ? serverPhieu!.soDangKy!.toString().padLeft(3, '0')
             : (bookingId > 0 ? bookingId : 1).toString().padLeft(3, '0');
 
-        final patientCodeStr = (serverPhieu?.maBN != null && serverPhieu!.maBN!.isNotEmpty)
-            ? serverPhieu.maBN!
-            : (draft.identifier.isNotEmpty
-                ? draft.identifier
-                : 'BN${(bookingId > 0 ? bookingId : 1).toString().padLeft(6, '0')}');
+        final patientCodeStr = (serverPhieu?.maBN != null && serverPhieu!.maBN!.trim().isNotEmpty)
+            ? serverPhieu.maBN!.trim()
+            : '';
 
         final ticket = MedicalTicketEntity(
           id: bookingId.toString(),
@@ -270,7 +268,7 @@ class PortalRepositoryImpl implements PortalRepository {
                 birthYear: dto.namSinh?.toString() ?? '',
                 address: '50 Lê Văn Việt, Phường Tăng Nhơn Phú, Thành Phố Hồ Chí Minh',
                 insuranceText: dto.maThe != null && dto.maThe!.isNotEmpty ? 'Có BHYT (${dto.maThe})' : 'Tự túc',
-                patientCode: dto.maBN ?? 'BN${dto.id.toString().padLeft(6, '0')}',
+                patientCode: (dto.maBN != null && dto.maBN!.trim().isNotEmpty) ? dto.maBN!.trim() : '',
                 createdAtText: _formatCreatedAtText(dto.ngayud ?? dto.ngayGioKham),
                 note: 'Ghi chú: Phiếu đặt lịch khám chỉ có giá trị trong ngày đặt khám từ 6g30 - 16g30',
                 department: '',
