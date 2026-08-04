@@ -169,6 +169,7 @@ class _RegisterViewState extends State<RegisterView> {
                     textInputAction: TextInputAction.next,
                     onChanged: _viewModel.updatePhoneError,
                   ),
+                  const SizedBox(height: AppSizes.itemSpacing),
                    AppPasswordField(
                     controller: _viewModel.passwordController,
                     focusNode: _passwordFocusNode,
