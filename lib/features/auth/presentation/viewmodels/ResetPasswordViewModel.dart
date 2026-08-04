@@ -72,6 +72,13 @@ class ResetPasswordViewModel extends ChangeNotifier {
       return res;
     }
 
+    final data = (res as ApiSuccess<String>).data;
+    if (data == 'Invalid') {
+      _message = 'Mã OTP không hợp lệ hoặc đã hết hạn';
+      notifyListeners();
+      return ApiFailure(ApiException.validation(_message!));
+    }
+
     return res;
   }
 

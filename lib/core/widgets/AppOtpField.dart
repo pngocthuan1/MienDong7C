@@ -78,33 +78,32 @@ class _AppOtpFieldState extends State<AppOtpField> {
                 child: Stack(
                   children: [
                     Positioned.fill(
-                      child: Opacity(
-                        opacity: 0,
-                        child: TextField(
-                          controller: widget.controller,
-                          focusNode: _focusNode,
-                          autofocus: widget.autofocus,
-                          keyboardType: TextInputType.number,
-                          textInputAction: TextInputAction.done,
-                          inputFormatters: AppInputFormatters.otp,
-                          maxLength: 6,
-                          showCursor: false,
-                          style: const TextStyle(color: Colors.transparent),
-                          decoration: const InputDecoration(
-                            counterText: '',
-                            border: InputBorder.none,
-                            enabledBorder: InputBorder.none,
-                            focusedBorder: InputBorder.none,
-                            contentPadding: EdgeInsets.zero,
-                          ),
-                          onChanged: (value) {
-                            field.didChange(value);
-                            if (field.hasError) {
-                              field.validate();
-                            }
-                            widget.onChanged?.call(value);
-                          },
+                      child: TextField(
+                        controller: widget.controller,
+                        focusNode: _focusNode,
+                        autofocus: widget.autofocus,
+                        keyboardType: TextInputType.number,
+                        textInputAction: TextInputAction.done,
+                        inputFormatters: AppInputFormatters.otp,
+                        maxLength: 6,
+                        showCursor: false,
+                        style: const TextStyle(color: Colors.transparent, fontSize: 18),
+                        decoration: const InputDecoration(
+                          counterText: '',
+                          border: InputBorder.none,
+                          enabledBorder: InputBorder.none,
+                          focusedBorder: InputBorder.none,
+                          contentPadding: EdgeInsets.zero,
+                          fillColor: Colors.transparent,
+                          filled: false,
                         ),
+                        onChanged: (value) {
+                          field.didChange(value);
+                          if (field.hasError) {
+                            field.validate();
+                          }
+                          widget.onChanged?.call(value);
+                        },
                       ),
                     ),
                     Positioned.fill(

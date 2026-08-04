@@ -71,9 +71,9 @@ class _RegisterViewState extends State<RegisterView> {
     result.when(
       success: (message) async {
         _viewModel.registerCommand.clearResult();
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(message)),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(message)));
         AppNavigator.pushNamed(
           context,
           RouteNames.verifyOtp,
@@ -84,6 +84,7 @@ class _RegisterViewState extends State<RegisterView> {
             password: _viewModel.passwordController.text,
             key: _viewModel.otpKey,
             adjustSeconds: _viewModel.adjustSeconds,
+            remainingSeconds: _viewModel.remainingSeconds,
           ),
         );
       },
@@ -121,7 +122,8 @@ class _RegisterViewState extends State<RegisterView> {
                         Text(
                           'Tạo tài khoản mới',
                           textAlign: TextAlign.center,
-                          style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                          style: Theme.of(context).textTheme.headlineSmall
+                              ?.copyWith(
                                 fontWeight: FontWeight.bold,
                                 color: const Color(0xFF1E3A8A),
                               ),
@@ -169,7 +171,10 @@ class _RegisterViewState extends State<RegisterView> {
                     textInputAction: TextInputAction.next,
                     onChanged: _viewModel.updatePhoneError,
                   ),
-                   AppPasswordField(
+                  const SizedBox(
+                    height: AppSizes.itemSpacing,
+                  ), // ngăn cách trường thông tin
+                  AppPasswordField(
                     controller: _viewModel.passwordController,
                     focusNode: _passwordFocusNode,
                     label: 'Mật khẩu',
@@ -225,7 +230,11 @@ class _RegisterViewState extends State<RegisterView> {
                       children: [
                         const Row(
                           children: [
-                            Icon(Icons.bug_report_outlined, size: 16, color: Color(0xFFE05252)),
+                            Icon(
+                              Icons.bug_report_outlined,
+                              size: 16,
+                              color: Color(0xFFE05252),
+                            ),
                             SizedBox(width: 6),
                             Text(
                               'Giả lập hành vi Bot (Spam)',

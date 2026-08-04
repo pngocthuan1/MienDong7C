@@ -155,7 +155,7 @@ class _ResetPasswordViewState extends State<ResetPasswordView> {
                     controller: _viewModel.passwordController,
                     focusNode: _passwordFocusNode,
                     label: 'Mật khẩu mới',
-                    hintText: 'Nhập mật khẩu mới',
+                    hintText: 'Mật khẩu mới',
                     validator: _viewModel.checkPassword,
                     textInputAction: TextInputAction.next,
                     onChanged: (_) => _viewModel.onPasswordChanged(),
@@ -175,8 +175,9 @@ class _ResetPasswordViewState extends State<ResetPasswordView> {
                   const SizedBox(height: AppSizes.itemSpacing),
                   AppPasswordField(
                     controller: _viewModel.confirmPasswordController,
-                    label: 'Xác nhận mật khẩu mới',
+                    label: 'Nhập lại mật khẩu mới',
                     hintText: 'Nhập lại mật khẩu mới',
+                    prefixIcon: Icons.check_circle_outline,
                     validator: _viewModel.checkConfirmPassword,
                     textInputAction: TextInputAction.done,
                     onChanged: _viewModel.updateConfirmPasswordError,
@@ -186,21 +187,16 @@ class _ResetPasswordViewState extends State<ResetPasswordView> {
                     AuthFeedbackBanner(message: _viewModel.message!),
                   ],
                   const SizedBox(height: AppSizes.sectionSpacing),
-                  Center(
-                    child: ConstrainedBox(
-                      constraints: const BoxConstraints(maxWidth: 280),
-                      child: ListenableBuilder(
-                        listenable: _viewModel.resetPasswordCommand,
-                        builder: (context, _) {
-                          return AppButton(
-                            label: 'Lưu mật khẩu mới',
-                            icon: Icons.check_circle_outline,
-                            isLoading: _viewModel.resetPasswordCommand.running,
-                            onPressed: _submit,
-                          );
-                        },
-                      ),
-                    ),
+                  ListenableBuilder(
+                    listenable: _viewModel.resetPasswordCommand,
+                    builder: (context, _) {
+                      return AppButton(
+                        label: 'Xác nhận & Đăng nhập',
+                        icon: Icons.assignment_turned_in_outlined,
+                        isLoading: _viewModel.resetPasswordCommand.running,
+                        onPressed: _submit,
+                      );
+                    },
                   ),
                   const SizedBox(height: AppSizes.sectionSpacing),
                   AuthFooterLink(

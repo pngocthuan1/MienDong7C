@@ -13,6 +13,7 @@ class OtpViewArgs {
     this.password = '',
     this.key = '',
     this.adjustSeconds = 0,
+    this.remainingSeconds = 60,
   });
 
   final String phoneNumber;
@@ -21,6 +22,7 @@ class OtpViewArgs {
   final String password;
   final String key;
   final int adjustSeconds;
+  final int remainingSeconds;
 }
 
 class ResetPasswordViewArgs {

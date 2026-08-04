@@ -71,6 +71,12 @@ class OtpViewModel extends ChangeNotifier {
         notifyListeners();
         return res;
       }
+      final data = (res as ApiSuccess<String>).data;
+      if (data == 'Invalid') {
+        _message = 'Mã OTP không hợp lệ hoặc đăng ký thất bại';
+        notifyListeners();
+        return ApiFailure(ApiException.validation(_message!));
+      }
       return res;
     } else {
       final res = await _authRepository.verifyOtp(
@@ -83,6 +89,12 @@ class OtpViewModel extends ChangeNotifier {
         _message = res.exception.message;
         notifyListeners();
         return ApiFailure(res.exception);
+      }
+      final isValid = (res as ApiSuccess<int>).data;
+      if (isValid != 1) {
+        _message = 'Mã OTP không chính xác hoặc đã hết hạn';
+        notifyListeners();
+        return ApiFailure(ApiException.validation(_message!));
       }
       return const ApiSuccess('Xác thực OTP thành công!');
     }

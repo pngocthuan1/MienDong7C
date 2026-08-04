@@ -67,6 +67,7 @@ class _ForgotPasswordViewState extends State<ForgotPasswordView> {
             purpose: OtpPurpose.passwordReset,
             key: _viewModel.otpKey,
             adjustSeconds: _viewModel.adjustSeconds,
+            remainingSeconds: _viewModel.remainingSeconds,
           ),
         );
       },
