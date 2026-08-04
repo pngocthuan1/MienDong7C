@@ -157,4 +157,21 @@ class AuthRemoteDataSource {
           : ApiException.fromDioError(e);
     }
   }
+
+  Future<String> deleteAccount(DkkResetPasswordRequestModel request) async {
+    try {
+      final response = await _dioClient.dio.post(
+        '/api/TaiKhoan/DeleteAccount',
+        data: request.toJson(),
+      );
+      return ApiValidator.validateResponse(
+        json: response.data as Map<String, dynamic>,
+        fromJsonT: (data) => data as String,
+      );
+    } on DioException catch (e) {
+      throw e.error is ApiException
+          ? e.error as ApiException
+          : ApiException.fromDioError(e);
+    }
+  }
 }

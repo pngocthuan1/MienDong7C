@@ -28,4 +28,5 @@ abstract class AuthRepository {
   Future<ApiResult<String>> signUp(String fullName, String phone, String password, String otp, String key, int adjustSeconds);
   Future<ApiResult<String>> resetPassword(String phone, String password, String otp, String key, int adjustSeconds);
   Future<ApiResult<bool>> changePassword(String oldPassword, String newPassword, String confirmNewPassword);
+  Future<ApiResult<String>> deleteAccount(String phone, String password, String otp, String key, int adjustSeconds);
 }

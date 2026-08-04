@@ -32,6 +32,7 @@ class ForgotPasswordViewModel extends ChangeNotifier {
 
   String otpKey = '';
   int adjustSeconds = 0;
+  int remainingSeconds = 60;
 
   Future<ApiResult<String>> _requestOtp() async {
     _message = null;
@@ -59,6 +60,7 @@ class ForgotPasswordViewModel extends ChangeNotifier {
 
     otpKey = key;
     adjustSeconds = otpData.adjustSeconds;
+    remainingSeconds = otpData.remainingSeconds;
 
     return ApiSuccess(otpData.message ?? 'Đã gửi mã OTP thành công!');
   }

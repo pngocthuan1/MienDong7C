@@ -10,6 +10,7 @@ class AppPasswordField extends StatefulWidget {
     this.validator,
     this.onChanged,
     this.textInputAction,
+    this.prefixIcon = Icons.lock_outline_rounded,
   });
 
   final TextEditingController controller;
@@ -19,6 +20,7 @@ class AppPasswordField extends StatefulWidget {
   final String? Function(String?)? validator;
   final ValueChanged<String>? onChanged;
   final TextInputAction? textInputAction;
+  final IconData prefixIcon;
 
   @override
   State<AppPasswordField> createState() => _AppPasswordFieldState();
@@ -40,7 +42,7 @@ class _AppPasswordFieldState extends State<AppPasswordField> {
         labelText: widget.label,
         floatingLabelBehavior: FloatingLabelBehavior.never,
         hintText: widget.hintText,
-        prefixIcon: const Icon(Icons.lock_outline_rounded),
+        prefixIcon: Icon(widget.prefixIcon),
         suffixIcon: IconButton(
           onPressed: () {
             setState(() {

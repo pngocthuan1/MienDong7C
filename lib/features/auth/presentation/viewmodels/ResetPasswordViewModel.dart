@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:benhvien7c/core/network/ApiException.dart';
 import 'package:benhvien7c/core/network/ApiResult.dart';
 import 'package:benhvien7c/core/utils/Validators.dart';
 import 'package:benhvien7c/features/auth/domain/repositories/AuthRepository.dart';
@@ -70,6 +71,13 @@ class ResetPasswordViewModel extends ChangeNotifier {
       _message = res.exception.message;
       notifyListeners();
       return res;
+    }
+
+    final data = (res as ApiSuccess<String>).data;
+    if (data == 'Invalid') {
+      _message = 'Mã OTP không hợp lệ hoặc đã hết hạn';
+      notifyListeners();
+      return ApiFailure(ApiException.validation(_message!));
     }
 
     return res;

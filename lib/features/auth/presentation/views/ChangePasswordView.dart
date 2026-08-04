@@ -131,11 +131,10 @@ class _ChangePasswordViewState extends State<ChangePasswordView> {
                         ],
                       ),
                     ),
-                    const SizedBox(height: AppSizes.sectionSpacing),
-                    AppPasswordField(
+                              AppPasswordField(
                       controller: _viewModel.currentPasswordController,
                       label: 'Mật khẩu hiện tại',
-                      hintText: 'Nhập mật khẩu hiện tại',
+                      hintText: 'Mật khẩu hiện tại',
                       validator: _viewModel.checkCurrentPassword,
                       textInputAction: TextInputAction.next,
                       onChanged: _viewModel.updateCurrentPasswordError,
@@ -145,7 +144,7 @@ class _ChangePasswordViewState extends State<ChangePasswordView> {
                       controller: _viewModel.newPasswordController,
                       focusNode: _newPasswordFocusNode,
                       label: 'Mật khẩu mới',
-                      hintText: 'Tạo mật khẩu mới',
+                      hintText: 'Mật khẩu mới',
                       validator: _viewModel.checkNewPassword,
                       textInputAction: TextInputAction.next,
                       onChanged: (_) => _viewModel.onPasswordChanged(),
@@ -166,7 +165,8 @@ class _ChangePasswordViewState extends State<ChangePasswordView> {
                     AppPasswordField(
                       controller: _viewModel.confirmNewPasswordController,
                       label: 'Nhập lại mật khẩu mới',
-                      hintText: 'Nhập lại mật khẩu mới để xác nhận',
+                      hintText: 'Nhập lại mật khẩu mới',
+                      prefixIcon: Icons.check_circle_outline,
                       validator: _viewModel.checkConfirmNewPassword,
                       textInputAction: TextInputAction.done,
                       onChanged: _viewModel.updateConfirmNewPasswordError,
@@ -176,21 +176,16 @@ class _ChangePasswordViewState extends State<ChangePasswordView> {
                       AuthFeedbackBanner(message: _viewModel.message!),
                     ],
                     const SizedBox(height: AppSizes.sectionSpacing),
-                    Center(
-                      child: ConstrainedBox(
-                        constraints: const BoxConstraints(maxWidth: 280),
-                        child: ListenableBuilder(
-                          listenable: _viewModel.changePasswordCommand,
-                          builder: (context, _) {
-                            return AppButton(
-                              label: 'Cập nhật mật khẩu',
-                              icon: Icons.check_circle_outline,
-                              isLoading: _viewModel.changePasswordCommand.running,
-                              onPressed: _submit,
-                            );
-                          },
-                        ),
-                      ),
+                    ListenableBuilder(
+                      listenable: _viewModel.changePasswordCommand,
+                      builder: (context, _) {
+                        return AppButton(
+                          label: 'Xác nhận & Đổi mật khẩu',
+                          icon: Icons.assignment_turned_in_outlined,
+                          isLoading: _viewModel.changePasswordCommand.running,
+                          onPressed: _submit,
+                        );
+                      },
                     ),
                   ],
                 ),

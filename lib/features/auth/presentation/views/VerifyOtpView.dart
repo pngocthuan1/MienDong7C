@@ -231,6 +231,7 @@ class _VerifyOtpViewState extends State<VerifyOtpView> {
                     const SizedBox(height: 20),
                     OtpCountdown(
                       isBusy: _viewModel.resendOtpCommand.running,
+                      seconds: widget.args.remainingSeconds,
                       onResend: _resendOtp,
                     ),
                     const SizedBox(height: 20),
