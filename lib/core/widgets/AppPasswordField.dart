@@ -11,6 +11,7 @@ class AppPasswordField extends StatefulWidget {
     this.onChanged,
     this.textInputAction,
     this.prefixIcon = Icons.lock_outline_rounded,
+    this.autovalidateMode = AutovalidateMode.onUserInteraction,
   });
 
   final TextEditingController controller;
@@ -21,6 +22,7 @@ class AppPasswordField extends StatefulWidget {
   final ValueChanged<String>? onChanged;
   final TextInputAction? textInputAction;
   final IconData prefixIcon;
+  final AutovalidateMode autovalidateMode;
 
   @override
   State<AppPasswordField> createState() => _AppPasswordFieldState();
@@ -35,6 +37,7 @@ class _AppPasswordFieldState extends State<AppPasswordField> {
       controller: widget.controller,
       focusNode: widget.focusNode,
       validator: widget.validator,
+      autovalidateMode: widget.autovalidateMode,
       obscureText: _obscureText,
       onChanged: widget.onChanged,
       textInputAction: widget.textInputAction,

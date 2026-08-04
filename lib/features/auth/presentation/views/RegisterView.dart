@@ -15,7 +15,6 @@ import 'package:benhvien7c/features/auth/presentation/widgets/AuthCardShell.dart
 import 'package:benhvien7c/features/auth/presentation/widgets/AuthFeedbackBanner.dart';
 import 'package:benhvien7c/features/auth/presentation/widgets/AuthFooterLink.dart';
 import 'package:benhvien7c/features/auth/presentation/widgets/AuthGradientBackground.dart';
-import 'package:benhvien7c/features/auth/presentation/widgets/AuthHeader.dart';
 import 'package:benhvien7c/features/auth/presentation/widgets/AuthRoleSwitcher.dart';
 import 'package:benhvien7c/features/auth/presentation/widgets/PasswordRuleBox.dart';
 

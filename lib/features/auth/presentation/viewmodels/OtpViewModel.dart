@@ -80,20 +80,8 @@ class OtpViewModel extends ChangeNotifier {
       }
       return res;
     } else {
-      final res = await _authRepository.verifyOtp(
-        phoneNumber,
-        otp,
-        key,
-        adjustSeconds,
-      );
-      if (res is ApiFailure<int>) {
-        _message = res.exception.message;
-        notifyListeners();
-        return ApiFailure(res.exception);
-      }
-      final isValid = (res as ApiSuccess<int>).data;
-      if (isValid != 1) {
-        _message = 'Mã OTP không chính xác hoặc đã hết hạn';
+      if (otp.length != 6) {
+        _message = 'Vui lòng nhập đủ 6 chữ số OTP';
         notifyListeners();
         return ApiFailure(ApiException.validation(_message!));
       }
