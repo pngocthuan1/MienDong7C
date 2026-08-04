@@ -235,4 +235,32 @@ class AuthRepositoryImpl implements AuthRepository {
       return ApiFailure(UnknownException('Đã xảy ra lỗi đổi mật khẩu: $e'));
     }
   }
+
+  @override
+  Future<ApiResult<String>> deleteAccount(
+    String phone,
+    String password,
+    String otp,
+    String key,
+    int adjustSeconds,
+  ) async {
+    if (_isOfflineDemo) {
+      return const ApiSuccess('Xóa tài khoản thành công!');
+    }
+    try {
+      final input = DkkResetPasswordRequestModel(
+        soDienThoai: phone,
+        matKhau: password,
+        otp: otp,
+        key: key,
+        adjustSeconds: adjustSeconds,
+      );
+      final res = await _remoteDataSource.deleteAccount(input);
+      return ApiSuccess(res);
+    } on ApiException catch (e) {
+      return ApiFailure(e);
+    } catch (e) {
+      return ApiFailure(UnknownException('Đã xảy ra lỗi xóa tài khoản: $e'));
+    }
+  }
 }

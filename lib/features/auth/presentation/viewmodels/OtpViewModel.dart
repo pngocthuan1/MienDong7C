@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:benhvien7c/core/network/ApiException.dart';
 import 'package:benhvien7c/core/network/ApiResult.dart';
 import 'package:benhvien7c/features/auth/domain/repositories/AuthRepository.dart';
 import 'package:benhvien7c/features/auth/data/models/DkkAuthModels.dart';
@@ -71,18 +72,18 @@ class OtpViewModel extends ChangeNotifier {
         notifyListeners();
         return res;
       }
+      final data = (res as ApiSuccess<String>).data;
+      if (data == 'Invalid') {
+        _message = 'Mã OTP không hợp lệ hoặc đăng ký thất bại';
+        notifyListeners();
+        return ApiFailure(ApiException.validation(_message!));
+      }
       return res;
     } else {
-      final res = await _authRepository.verifyOtp(
-        phoneNumber,
-        otp,
-        key,
-        adjustSeconds,
-      );
-      if (res is ApiFailure<int>) {
-        _message = res.exception.message;
+      if (otp.length != 6) {
+        _message = 'Vui lòng nhập đủ 6 chữ số OTP';
         notifyListeners();
-        return ApiFailure(res.exception);
+        return ApiFailure(ApiException.validation(_message!));
       }
       return const ApiSuccess('Xác thực OTP thành công!');
     }

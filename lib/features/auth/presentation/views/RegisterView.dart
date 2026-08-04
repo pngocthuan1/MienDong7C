@@ -15,7 +15,6 @@ import 'package:benhvien7c/features/auth/presentation/widgets/AuthCardShell.dart
 import 'package:benhvien7c/features/auth/presentation/widgets/AuthFeedbackBanner.dart';
 import 'package:benhvien7c/features/auth/presentation/widgets/AuthFooterLink.dart';
 import 'package:benhvien7c/features/auth/presentation/widgets/AuthGradientBackground.dart';
-import 'package:benhvien7c/features/auth/presentation/widgets/AuthHeader.dart';
 import 'package:benhvien7c/features/auth/presentation/widgets/AuthRoleSwitcher.dart';
 import 'package:benhvien7c/features/auth/presentation/widgets/PasswordRuleBox.dart';
 
@@ -71,9 +70,9 @@ class _RegisterViewState extends State<RegisterView> {
     result.when(
       success: (message) async {
         _viewModel.registerCommand.clearResult();
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(message)),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(message)));
         AppNavigator.pushNamed(
           context,
           RouteNames.verifyOtp,
@@ -84,6 +83,7 @@ class _RegisterViewState extends State<RegisterView> {
             password: _viewModel.passwordController.text,
             key: _viewModel.otpKey,
             adjustSeconds: _viewModel.adjustSeconds,
+            remainingSeconds: _viewModel.remainingSeconds,
           ),
         );
       },
@@ -121,7 +121,8 @@ class _RegisterViewState extends State<RegisterView> {
                         Text(
                           'Tạo tài khoản mới',
                           textAlign: TextAlign.center,
-                          style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                          style: Theme.of(context).textTheme.headlineSmall
+                              ?.copyWith(
                                 fontWeight: FontWeight.bold,
                                 color: const Color(0xFF1E3A8A),
                               ),
@@ -169,8 +170,10 @@ class _RegisterViewState extends State<RegisterView> {
                     textInputAction: TextInputAction.next,
                     onChanged: _viewModel.updatePhoneError,
                   ),
-                  const SizedBox(height: AppSizes.itemSpacing),
-                   AppPasswordField(
+                  const SizedBox(
+                    height: AppSizes.itemSpacing,
+                  ), // ngăn cách trường thông tin
+                  AppPasswordField(
                     controller: _viewModel.passwordController,
                     focusNode: _passwordFocusNode,
                     label: 'Mật khẩu',
@@ -226,7 +229,11 @@ class _RegisterViewState extends State<RegisterView> {
                       children: [
                         const Row(
                           children: [
-                            Icon(Icons.bug_report_outlined, size: 16, color: Color(0xFFE05252)),
+                            Icon(
+                              Icons.bug_report_outlined,
+                              size: 16,
+                              color: Color(0xFFE05252),
+                            ),
                             SizedBox(width: 6),
                             Text(
                               'Giả lập hành vi Bot (Spam)',
