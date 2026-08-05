@@ -33,6 +33,17 @@ class AppSessionStore extends ChangeNotifier {
     notifyListeners();
   }
 
+  void updateFullName(String name) {
+    if (_currentUser != null && name.trim().isNotEmpty) {
+      _currentUser = UserProfileSession(
+        fullName: name.trim(),
+        phoneNumber: _currentUser!.phoneNumber,
+        role: _currentUser!.role,
+      );
+      notifyListeners();
+    }
+  }
+
   void clear() {
     _session = null;
     _currentUser = null;

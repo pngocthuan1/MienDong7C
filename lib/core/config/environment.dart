@@ -67,8 +67,27 @@ class Environment {
   // ==================== Base URL theo môi trường ====================
 
   static const String _customBaseUrl = String.fromEnvironment('BASE_URL');
+  static String? _overriddenBaseUrl;
+
+  static void setCustomBaseUrl(String? url) {
+    if (url == null || url.trim().isEmpty) {
+      _overriddenBaseUrl = null;
+    } else {
+      var clean = url.trim();
+      if (!clean.startsWith('http://') && !clean.startsWith('https://')) {
+        clean = 'https://$clean';
+      }
+      if (clean.endsWith('/')) {
+        clean = clean.substring(0, clean.length - 1);
+      }
+      _overriddenBaseUrl = clean;
+    }
+  }
 
   static String get baseUrl {
+    if (_overriddenBaseUrl != null && _overriddenBaseUrl!.isNotEmpty) {
+      return _overriddenBaseUrl!;
+    }
     if (_customBaseUrl.isNotEmpty) {
       return _customBaseUrl;
     }

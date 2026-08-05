@@ -15,7 +15,6 @@ import 'package:benhvien7c/features/auth/presentation/widgets/AuthCardShell.dart
 import 'package:benhvien7c/features/auth/presentation/widgets/AuthFeedbackBanner.dart';
 import 'package:benhvien7c/features/auth/presentation/widgets/AuthFooterLink.dart';
 import 'package:benhvien7c/features/auth/presentation/widgets/AuthGradientBackground.dart';
-import 'package:benhvien7c/features/auth/presentation/widgets/AuthRoleSwitcher.dart';
 import 'package:benhvien7c/features/auth/presentation/widgets/PasswordRuleBox.dart';
 
 class RegisterView extends StatefulWidget {
@@ -129,7 +128,7 @@ class _RegisterViewState extends State<RegisterView> {
                         ),
                         const SizedBox(height: 8),
                         const Text(
-                          'Bạn có thể đăng ký theo nhóm khách hàng hoặc nhân viên. Giao diện và menu bên trong sẽ tự đổi theo quyền đã chọn.',
+                          'Đăng ký tài khoản Khách hàng / Bệnh nhân để tra cứu hồ sơ và đặt lịch khám.',
                           textAlign: TextAlign.center,
                           style: TextStyle(
                             color: Color(0xFF64748B),
@@ -139,14 +138,6 @@ class _RegisterViewState extends State<RegisterView> {
                         ),
                       ],
                     ),
-                  ),
-                  const SizedBox(height: AppSizes.itemSpacing),
-                  AuthRoleSwitcher(
-                    selectedRole: _viewModel.selectedRole,
-                    onChanged: (role) {
-                      _viewModel.updateRole(role);
-                      _viewModel.clearMessage();
-                    },
                   ),
                   const SizedBox(height: AppSizes.itemSpacing),
                   AppTextField(
@@ -167,6 +158,7 @@ class _RegisterViewState extends State<RegisterView> {
                     prefixIcon: Icons.phone_outlined,
                     inputFormatters: AppInputFormatters.phoneNumber,
                     validator: _viewModel.checkPhone,
+                    autovalidateMode: AutovalidateMode.onUserInteraction,
                     textInputAction: TextInputAction.next,
                     onChanged: _viewModel.updatePhoneError,
                   ),

@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:benhvien7c/core/network/ApiResult.dart';
+import 'package:benhvien7c/core/network/ApiException.dart';
 import 'package:benhvien7c/core/utils/Validators.dart';
 import 'package:benhvien7c/features/auth/domain/entities/UserRole.dart';
 import 'package:benhvien7c/features/auth/data/models/DkkAuthModels.dart';
@@ -75,7 +77,10 @@ class RegisterViewModel extends ChangeNotifier {
     return null;
   }
 
+  String? phoneError;
+
   String? checkPhone(String? value) {
+    if (phoneError != null) return phoneError;
     return Validators.validatePhone(value);
   }
 
@@ -105,7 +110,8 @@ class RegisterViewModel extends ChangeNotifier {
   }
 
   void updatePhoneError(String? val) {
-    if (_message != null) {
+    if (phoneError != null || _message != null) {
+      phoneError = null;
       _message = null;
       notifyListeners();
     }
@@ -135,9 +141,22 @@ class RegisterViewModel extends ChangeNotifier {
 
   Future<ApiResult<String>> _register() async {
     _message = null;
+    phoneError = null;
     notifyListeners();
 
     final phone = phoneController.text.trim();
+    final cleanPhone = phone.replaceAll(RegExp(r'\D'), '');
+
+    // 0. Kiểm tra số điện thoại đã tồn tại
+    final prefs = await SharedPreferences.getInstance();
+    final registeredPhones = (prefs.getStringList('registered_phone_numbers') ??
+        ['0822380103', '0902377251', '0987654321']).map((e) => e.replaceAll(RegExp(r'\D'), '')).toSet();
+
+    if (registeredPhones.contains(cleanPhone)) {
+      phoneError = 'Số điện thoại này đã được đăng ký tài khoản. Vui lòng đăng nhập hoặc dùng tính năng Quên mật khẩu.';
+      notifyListeners();
+      return ApiFailure(ApiException.validation(phoneError!));
+    }
 
     // 1. Sinh khóa ngẫu nhiên
     final keyResult = await _authRepository.generateRandomKey();
@@ -151,7 +170,17 @@ class RegisterViewModel extends ChangeNotifier {
     // 2. Gửi mã OTP
     final otpResult = await _authRepository.sendOtp(phone, key, 'SignUp');
     if (otpResult is ApiFailure<SendOtpResponseModel>) {
-      _message = otpResult.exception.message;
+      final msg = otpResult.exception.message;
+      if (msg.contains('tồn tại') ||
+          msg.contains('đã được') ||
+          msg.contains('đã sử dụng') ||
+          msg.contains('đã đăng ký') ||
+          msg.contains('104') ||
+          msg.contains('Exist')) {
+        phoneError = 'Số điện thoại này đã được đăng ký tài khoản. Vui lòng đăng nhập hoặc dùng tính năng Quên mật khẩu.';
+      } else {
+        _message = msg;
+      }
       notifyListeners();
       return ApiFailure(otpResult.exception);
     }

@@ -15,6 +15,7 @@ class AppTextField extends StatelessWidget {
     this.textInputAction,
     this.onChanged,
     this.readOnly = false,
+    this.autovalidateMode,
   });
 
   final TextEditingController controller;
@@ -28,6 +29,7 @@ class AppTextField extends StatelessWidget {
   final TextInputAction? textInputAction;
   final ValueChanged<String>? onChanged;
   final bool readOnly;
+  final AutovalidateMode? autovalidateMode;
 
   Widget _buildLabelWidget(String text) {
     if (!text.contains('*')) {
@@ -59,6 +61,7 @@ class AppTextField extends StatelessWidget {
       keyboardType: keyboardType,
       textCapitalization: textCapitalization ?? TextCapitalization.none,
       validator: validator,
+      autovalidateMode: autovalidateMode,
       inputFormatters: inputFormatters,
       textInputAction: textInputAction,
       onChanged: onChanged,

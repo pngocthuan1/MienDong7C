@@ -252,37 +252,38 @@ class PortalRepositoryImpl implements PortalRepository {
       if (remote != null) {
         try {
           final listSoKham = await remote.getListSoKham();
-          if (listSoKham.isNotEmpty) {
-            final entities = listSoKham.map((dto) {
-              return MedicalTicketEntity(
-                id: dto.id.toString(),
-                hospitalName: 'Bệnh viện Quân Dân Y Miền Đông',
-                hospitalAddress: '50 Lê Văn Việt, Phường Tăng Nhơn Phú, Thành Phố Hồ Chí Minh',
-                ticketTitle: 'PHIẾU ĐẶT LỊCH KHÁM',
-                roomName: '',
-                serviceName: '',
-                queueNumber: (dto.soDangKy ?? dto.id).toString().padLeft(3, '0'),
-                scheduleText: _formatScheduleText(dto.ngayGioKham, dto.ngayGioKham, ''),
-                patientName: dto.hoTen ?? '',
-                gender: _mapServerGender(dto.gioiTinh, 'Nam'),
-                birthYear: dto.namSinh?.toString() ?? '',
-                address: '50 Lê Văn Việt, Phường Tăng Nhơn Phú, Thành Phố Hồ Chí Minh',
-                insuranceText: dto.maThe != null && dto.maThe!.isNotEmpty ? 'Có BHYT (${dto.maThe})' : 'Tự túc',
-                patientCode: (dto.maBN != null && dto.maBN!.trim().isNotEmpty) ? dto.maBN!.trim() : '',
-                createdAtText: _formatCreatedAtText(dto.ngayud ?? dto.ngayGioKham),
-                note: 'Ghi chú: Phiếu đặt lịch khám chỉ có giá trị trong ngày đặt khám từ 6g30 - 16g30',
-                department: '',
-                selectedDate: dto.ngayGioKham,
-                selectedTime: '',
-                phoneNumber: dto.sdt,
-                symptom: dto.trieuChung,
-                dangKyGiup: dto.dangKyDum,
-              );
-            }).toList();
-            return Ok(entities);
-          }
+          final entities = listSoKham.map((dto) {
+            final serviceNameText = (dto.trieuChung != null && dto.trieuChung!.trim().isNotEmpty)
+                ? dto.trieuChung!.trim()
+                : 'Khám bệnh';
+            return MedicalTicketEntity(
+              id: dto.id.toString(),
+              hospitalName: 'Bệnh viện Quân Dân Y Miền Đông',
+              hospitalAddress: '50 Lê Văn Việt, Phường Tăng Nhơn Phú, Thành Phố Hồ Chí Minh',
+              ticketTitle: 'PHIẾU ĐẶT LỊCH KHÁM',
+              roomName: '',
+              serviceName: serviceNameText,
+              queueNumber: (dto.soDangKy ?? dto.id).toString().padLeft(3, '0'),
+              scheduleText: _formatScheduleText(dto.ngayGioKham, dto.ngayGioKham, ''),
+              patientName: dto.hoTen ?? '',
+              gender: _mapServerGender(dto.gioiTinh, 'Nam'),
+              birthYear: dto.namSinh?.toString() ?? '',
+              address: '50 Lê Văn Việt, Phường Tăng Nhơn Phú, Thành Phố Hồ Chí Minh',
+              insuranceText: dto.maThe != null && dto.maThe!.isNotEmpty ? 'Có BHYT (${dto.maThe})' : 'Tự túc',
+              patientCode: (dto.maBN != null && dto.maBN!.trim().isNotEmpty) ? dto.maBN!.trim() : '',
+              createdAtText: _formatCreatedAtText(dto.ngayud ?? dto.ngayGioKham),
+              note: 'Ghi chú: Phiếu đặt lịch khám chỉ có giá trị trong ngày đặt khám từ 6g30 - 16g30',
+              department: '',
+              selectedDate: dto.ngayGioKham,
+              selectedTime: '',
+              phoneNumber: dto.sdt,
+              symptom: dto.trieuChung,
+              dangKyGiup: dto.dangKyDum,
+            );
+          }).toList();
+          return Ok(entities);
         } catch (_) {
-          // Fallback to mock datasource
+          // Fallback to mock datasource if network fails
         }
       }
 
@@ -298,6 +299,16 @@ class PortalRepositoryImpl implements PortalRepository {
   @override
   Future<Result<void>> softDeleteMedicalTicket(String id) async {
     try {
+      final remote = _remoteDatasource;
+      if (remote != null) {
+        final ticketId = int.tryParse(id) ?? 0;
+        if (ticketId > 0) {
+          try {
+            await remote.xoaSoKham(ticketId);
+          } catch (_) {
+          }
+        }
+      }
       await _datasource.softDeleteMedicalTicket(id);
       return const Ok(null);
     } on Exception catch (exception) {
@@ -322,8 +333,47 @@ class PortalRepositoryImpl implements PortalRepository {
   @override
   Future<Result<List<PatientProfileDraftEntity>>> loadPatientProfiles() async {
     try {
-      final list = await _datasource.loadPatientProfiles();
-      return Ok(list);
+      final remote = _remoteDatasource;
+      if (remote != null) {
+        try {
+          final listHoSo = await remote.getListHoSo('');
+          final List<PatientProfileDraftEntity> remoteProfiles = listHoSo.map((dto) {
+            final identifier = (dto.maThe != null && dto.maThe!.trim().isNotEmpty)
+                ? dto.maThe!.trim()
+                : ((dto.maBhyt != null && dto.maBhyt!.trim().isNotEmpty)
+                    ? dto.maBhyt!.trim()
+                    : ((dto.maSo != null && dto.maSo!.trim().isNotEmpty)
+                        ? dto.maSo!.trim()
+                        : (dto.cccd ?? '')));
+            return PatientProfileDraftEntity(
+              identifier: identifier,
+              maSo: dto.maSo,
+              fullName: dto.hoTen ?? '',
+              birthYear: dto.namSinh ?? '',
+              gender: _mapServerGender(dto.gioiTinh, 'Nam'),
+              phoneNumber: dto.soDienThoai ?? '',
+            );
+          }).toList();
+
+          return Ok(remoteProfiles);
+        } catch (_) {}
+      }
+
+      final localProfiles = await _datasource.loadPatientProfiles();
+      final Map<String, PatientProfileDraftEntity> profileMap = {};
+
+      for (var p in localProfiles) {
+        if (p.isDeleted) continue;
+        final key = (p.maSo != null && p.maSo!.isNotEmpty)
+            ? p.maSo!.trim().toLowerCase()
+            : '${p.fullName.trim().toLowerCase()}_${p.birthYear.trim()}_${p.identifier.trim().toLowerCase()}';
+
+        if (!profileMap.containsKey(key)) {
+          profileMap[key] = p;
+        }
+      }
+
+      return Ok(profileMap.values.toList());
     } on Exception catch (exception) {
       return Error(exception, exception.toString());
     } catch (error) {
@@ -344,9 +394,20 @@ class PortalRepositoryImpl implements PortalRepository {
   }
 
   @override
-  Future<Result<void>> softDeletePatientProfile(String identifier) async {
+  Future<Result<void>> softDeletePatientProfile(PatientProfileDraftEntity profile) async {
     try {
-      await _datasource.softDeletePatientProfile(identifier);
+      final remote = _remoteDatasource;
+      final targetMaHs = (profile.maSo != null && profile.maSo!.trim().isNotEmpty)
+          ? profile.maSo!.trim()
+          : profile.identifier.trim();
+
+      if (remote != null && targetMaHs.isNotEmpty && targetMaHs != 'N/A') {
+        try {
+          await remote.xoaHoSo(targetMaHs);
+        } catch (_) {
+        }
+      }
+      await _datasource.softDeletePatientProfile(profile);
       return const Ok(null);
     } on Exception catch (exception) {
       return Error(exception, exception.toString());

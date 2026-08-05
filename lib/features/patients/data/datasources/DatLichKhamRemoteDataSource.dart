@@ -84,6 +84,34 @@ class DatLichKhamRemoteDataSource {
     }
   }
 
+  Future<bool> xoaHoSo(String maHs) async {
+    try {
+      final response = await _dioClient.dio.delete(
+        '/api/DatLichKham/XoaHoSo',
+        queryParameters: {'maHs': maHs},
+      );
+      final data = _extractData(response.data);
+      if (data is bool) return data;
+      return true;
+    } on DioException catch (e) {
+      throw ApiException.fromDioError(e);
+    }
+  }
+
+  Future<bool> xoaSoKham(int id) async {
+    try {
+      final response = await _dioClient.dio.delete(
+        '/api/DatLichKham/XoaSoKham',
+        queryParameters: {'id': id},
+      );
+      final data = _extractData(response.data);
+      if (data is bool) return data;
+      return true;
+    } on DioException catch (e) {
+      throw ApiException.fromDioError(e);
+    }
+  }
+
   dynamic _extractData(dynamic body) {
     if (body is Map<String, dynamic>) {
       final responseDto = ApiResponseDto<dynamic>.fromJson(body, (data) => data);

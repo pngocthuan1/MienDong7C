@@ -1,3 +1,5 @@
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:benhvien7c/core/session/AppSessionStore.dart';
 import 'package:benhvien7c/core/network/ApiException.dart';
 import 'package:benhvien7c/core/network/ApiResult.dart';
 import 'package:benhvien7c/core/storage/SecureStorageService.dart';
@@ -85,6 +87,11 @@ class AuthRepositoryImpl implements AuthRepository {
   @override
   Future<void> logout() async {
     await _secureStorage.clearSession();
+    AppSessionStore.instance.clear();
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove('saved_phone');
+    } catch (_) {}
   }
 
   // --- OTP & Account APIs Implementation ---

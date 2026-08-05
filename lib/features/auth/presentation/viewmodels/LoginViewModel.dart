@@ -12,6 +12,8 @@ import 'package:benhvien7c/features/auth/domain/entities/UserRole.dart';
 import 'package:benhvien7c/core/constants/AppStrings.dart';
 import 'package:benhvien7c/core/dio/AppLocator.dart';
 import 'package:benhvien7c/core/services/TurnstileVerifyService.dart';
+import 'package:benhvien7c/core/commands/result.dart';
+import 'package:benhvien7c/features/patients/domain/entities/PatientProfileDraftEntity.dart';
 import 'package:benhvien7c/features/auth/domain/entities/UserProfileEntity.dart';
 
 /// Lớp phụ trợ Command hỗ trợ quản lý trạng thái tải (loading) và kết quả thực thi
@@ -67,9 +69,19 @@ class LoginViewModel extends ChangeNotifier {
   final phoneController = TextEditingController();
   final passwordController = TextEditingController();
   String? _message;
+  UserRole _selectedRole = UserRole.customer;
+  UserRole get selectedRole => _selectedRole;
 
   LoginViewModel(this._authRepository, this._secureStorage) {
-    _isOfflineDemo = _authRepository.isOfflineDemo;
+    _isOfflineDemo = false;
+    _authRepository.setOfflineDemo(false);
+  }
+
+  void updateRole(UserRole role) {
+    if (_selectedRole == role) return;
+    _selectedRole = role;
+    _message = null;
+    notifyListeners();
   }
 
   String? get message => _message;
@@ -133,6 +145,9 @@ class LoginViewModel extends ChangeNotifier {
 
       SharedPreferences.getInstance().then((prefs) {
         prefs.setString('saved_phone', phoneVal);
+        final list = (prefs.getStringList('registered_phone_numbers') ?? ['0822380103', '0902377251', '0987654321']).toSet();
+        if (phoneVal.isNotEmpty) list.add(phoneVal.replaceAll(RegExp(r'\D'), ''));
+        prefs.setStringList('registered_phone_numbers', list.toList());
       });
 
       AppSessionStore.instance.setSession(
@@ -184,23 +199,43 @@ class LoginViewModel extends ChangeNotifier {
 
     final session = (tokenResult as ApiSuccess<AuthSessionEntity>).data;
 
-    // Bước 2: Thử lấy thông tin hồ sơ HIS (nếu là tài khoản Bác sĩ / Nhân viên như 'hunglng')
-    final hisResult = await _authRepository.loginHis(phoneVal, passwordVal);
-
     String userFullName = 'Khách Hàng';
     UserRole userRole = UserRole.customer;
 
-    if (hisResult is ApiSuccess<UserProfileEntity>) {
-      final profile = hisResult.data;
-      userFullName = profile.hoTenHis.isNotEmpty
-          ? profile.hoTenHis
-          : (profile.tenDangNhapHis.isNotEmpty
-              ? profile.tenDangNhapHis
-              : 'Bác sĩ / Nhân viên');
+    final prefs = await SharedPreferences.getInstance();
+    final cleanPhone = phoneVal.replaceAll(RegExp(r'\D'), '');
+    var savedName = prefs.getString('full_name_$cleanPhone') ?? prefs.getString('saved_full_name');
+
+    if (_selectedRole == UserRole.employee) {
+      final hisResult = await _authRepository.loginHis(phoneVal, passwordVal);
+      if (hisResult is ApiSuccess<UserProfileEntity>) {
+        final profile = hisResult.data;
+        userFullName = profile.hoTenHis.isNotEmpty
+            ? profile.hoTenHis
+            : (profile.tenDangNhapHis.isNotEmpty
+                ? profile.tenDangNhapHis
+                : 'Bác sĩ / Nhân viên');
+      } else {
+        userFullName = phoneVal.isNotEmpty ? phoneVal : 'Bác sĩ / Nhân viên';
+      }
       userRole = UserRole.employee;
     } else {
-      // Nếu đăng nhập bằng SĐT bệnh nhân (không phải tài khoản HIS nhân viên)
-      userFullName = phoneVal.isNotEmpty ? phoneVal : 'Khách Hàng';
+      if (savedName == null || savedName.trim().isEmpty || savedName.trim() == phoneVal.trim()) {
+        try {
+          final res = await AppLocator.portalRepository.loadPatientProfiles();
+          if (res is Ok<List<PatientProfileDraftEntity>> && res.data.isNotEmpty) {
+            final firstHoTen = res.data.first.fullName.trim();
+            if (firstHoTen.isNotEmpty) {
+              savedName = firstHoTen;
+              prefs.setString('full_name_$cleanPhone', savedName);
+            }
+          }
+        } catch (_) {}
+      }
+
+      userFullName = (savedName != null && savedName.trim().isNotEmpty && savedName.trim() != phoneVal.trim())
+          ? savedName.trim()
+          : 'Khách hàng';
       userRole = UserRole.customer;
     }
 

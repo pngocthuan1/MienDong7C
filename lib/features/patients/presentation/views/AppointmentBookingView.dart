@@ -310,7 +310,29 @@ class _AppointmentBookingViewState extends State<AppointmentBookingView> {
                           ),
                           const SizedBox(width: 8),
                           IconButton(
-                            onPressed: () => _viewModel.softDeleteTicket(ticket.id!),
+                            onPressed: () async {
+                              final confirm = await showDialog<bool>(
+                                context: context,
+                                builder: (ctx) => AlertDialog(
+                                  title: const Text('Xác nhận xóa phiếu'),
+                                  content: Text('Bạn có chắc chắn muốn xóa phiếu đặt lịch khám "${ticket.serviceName}" của bệnh nhân ${ticket.patientName} không?'),
+                                  actions: [
+                                    TextButton(
+                                      onPressed: () => Navigator.of(ctx).pop(false),
+                                      child: const Text('Bỏ qua'),
+                                    ),
+                                    TextButton(
+                                      onPressed: () => Navigator.of(ctx).pop(true),
+                                      style: TextButton.styleFrom(foregroundColor: Colors.red),
+                                      child: const Text('Xóa phiếu', style: TextStyle(fontWeight: FontWeight.bold)),
+                                    ),
+                                  ],
+                                ),
+                              );
+                              if (confirm == true) {
+                                await _viewModel.softDeleteTicket(ticket.id!);
+                              }
+                            },
                             icon: const Icon(Icons.delete_outline_rounded, color: Colors.redAccent),
                             tooltip: 'Xóa phiếu',
                             padding: EdgeInsets.zero,
@@ -445,10 +467,15 @@ class _AppointmentBookingViewState extends State<AppointmentBookingView> {
                 ),
               ],
               bottom: TabBar(
+                isScrollable: true,
+                tabAlignment: TabAlignment.start,
                 labelColor: Colors.white,
                 unselectedLabelColor: Colors.white60,
                 indicatorColor: Colors.white,
                 indicatorWeight: 3,
+                labelPadding: const EdgeInsets.symmetric(horizontal: 14),
+                labelStyle: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                unselectedLabelStyle: const TextStyle(fontWeight: FontWeight.w500, fontSize: 14),
                 tabs: [
                   Tab(text: 'Tất cả (${_viewModel.filteredActiveTickets.length})'),
                   Tab(text: 'Sắp tới (${_viewModel.filteredUpcomingTickets.length})'),

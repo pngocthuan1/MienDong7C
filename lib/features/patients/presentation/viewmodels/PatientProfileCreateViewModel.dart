@@ -319,12 +319,14 @@ class PatientProfileCreateViewModel extends BasePortalViewModel {
     notifyListeners();
   }
 
+  MedicalTicketEntity? _initialTicket;
+
   // Pre-fill from existing ticket for rebooking
   void prefillFromTicket(MedicalTicketEntity ticket) {
-    identifierController.text = ticket.patientCode;
-    
+    _initialTicket = ticket;
+
     // Check if name matches main user
-    final isMainUser = ticket.patientName.toUpperCase() == session.user.fullName.toUpperCase();
+    final isMainUser = ticket.patientName.trim().toUpperCase() == session.user.fullName.trim().toUpperCase();
     if (!isMainUser) {
       _registerForSomeoneElse = true;
       otherFullNameController.text = ticket.patientName;
@@ -338,6 +340,15 @@ class PatientProfileCreateViewModel extends BasePortalViewModel {
       _gender = ticket.gender;
       phoneController.text = ticket.phoneNumber ?? '';
     }
+
+    // Set card / BHYT / patient code identifier
+    final cardCode = (ticket.insuranceText.trim().isNotEmpty && ticket.insuranceText != 'Không có BHYT')
+        ? ticket.insuranceText.trim()
+        : ticket.patientCode.trim();
+    if (cardCode.isNotEmpty && cardCode != 'N/A') {
+      identifierController.text = cardCode;
+    }
+
     final deptVal = ticket.department ?? '';
     selectedDepartment = departments.firstWhere(
       (d) => d == deptVal || (deptVal.isNotEmpty && (d.startsWith(deptVal) || deptVal.startsWith(d.split(' ').first))),
@@ -345,8 +356,38 @@ class PatientProfileCreateViewModel extends BasePortalViewModel {
     );
     symptomController.text = ticket.symptom ?? '';
     isExistingProfile = true;
-    selectedProfileIdentifier = ticket.patientCode;
+    selectedProfileIdentifier = identifierController.text.isNotEmpty ? identifierController.text : ticket.patientCode;
+
+    _tryAutoMatchProfileWithTicket(ticket);
     notifyListeners();
+  }
+
+  void _tryAutoMatchProfileWithTicket(MedicalTicketEntity ticket) {
+    if (savedProfiles.isEmpty) return;
+
+    final targetName = ticket.patientName.trim().toLowerCase();
+    final targetYear = ticket.birthYear.trim();
+    final targetCode = ticket.patientCode.trim();
+    final targetInsurance = ticket.insuranceText.trim();
+
+    PatientProfileDraftEntity? matched;
+    for (final p in savedProfiles) {
+      final pName = p.fullName.trim().toLowerCase();
+      final pYear = p.birthYear.trim();
+      final pId = p.identifier.trim();
+      final pMaSo = (p.maSo ?? '').trim();
+
+      if ((targetCode.isNotEmpty && (targetCode == pId || targetCode == pMaSo)) ||
+          (targetInsurance.isNotEmpty && targetInsurance == pId) ||
+          (pName == targetName && (pYear.isEmpty || targetYear.isEmpty || pYear == targetYear))) {
+        matched = p;
+        break;
+      }
+    }
+
+    if (matched != null) {
+      selectProfile(matched);
+    }
   }
 
   // Load patient profiles from storage
@@ -356,6 +397,9 @@ class PatientProfileCreateViewModel extends BasePortalViewModel {
       result.when(
         ok: (list) {
           savedProfiles = list;
+          if (_initialTicket != null) {
+            _tryAutoMatchProfileWithTicket(_initialTicket!);
+          }
           notifyListeners();
         },
         error: (_, __) {},
@@ -365,15 +409,14 @@ class PatientProfileCreateViewModel extends BasePortalViewModel {
   }
 
   // Soft delete patient profile card (2 clicks)
-  Future<void> requestDeleteProfile(String identifier) async {
-    if (deleteConfirmIdentifier == identifier) {
-      // Second click: execute delete
-      await portalRepository.softDeletePatientProfile(identifier);
+  Future<void> requestDeleteProfile(PatientProfileDraftEntity profile) async {
+    final key = profile.identifier.isNotEmpty ? profile.identifier : profile.fullName;
+    if (deleteConfirmIdentifier == key) {
+      await portalRepository.softDeletePatientProfile(profile);
       deleteConfirmIdentifier = null;
       loadProfilesCommand.execute();
     } else {
-      // First click: prompt delete confirmation
-      deleteConfirmIdentifier = identifier;
+      deleteConfirmIdentifier = key;
       notifyListeners();
     }
   }
@@ -484,10 +527,16 @@ class PatientProfileCreateViewModel extends BasePortalViewModel {
     return runSafely(() async {
       final draft = PatientProfileDraftEntity(
         identifier: identifierController.text.trim(),
-        fullName: fullNameController.text.trim().isEmpty ? session.user.fullName : fullNameController.text.trim(),
-        birthYear: birthYearController.text.trim().isEmpty ? '1997' : birthYearController.text.trim(),
-        gender: _gender,
-        phoneNumber: phoneController.text.trim(),
+        fullName: registerForSomeoneElse
+            ? (otherFullNameController.text.trim().isEmpty ? 'Người thân' : otherFullNameController.text.trim())
+            : (fullNameController.text.trim().isEmpty ? session.user.fullName : fullNameController.text.trim()),
+        birthYear: registerForSomeoneElse
+            ? (otherBirthYearController.text.trim().isEmpty ? '1997' : otherBirthYearController.text.trim())
+            : (birthYearController.text.trim().isEmpty ? '1997' : birthYearController.text.trim()),
+        gender: registerForSomeoneElse ? otherGender : _gender,
+        phoneNumber: registerForSomeoneElse
+            ? otherPhoneController.text.trim()
+            : phoneController.text.trim(),
         dangKyGiup: registerForSomeoneElse ? dangKyGiupController.text.trim() : null,
       );
 
@@ -518,11 +567,15 @@ class PatientProfileCreateViewModel extends BasePortalViewModel {
         final ticket = result.data;
         if (saveProfile) {
           final profileToSave = PatientProfileDraftEntity(
-            identifier: ticket.patientCode,
+            identifier: (ticket.patientCode.trim().isNotEmpty && ticket.patientCode != 'N/A')
+                ? ticket.patientCode.trim()
+                : (draft.identifier.trim().isNotEmpty ? draft.identifier.trim() : 'N/A'),
             fullName: ticket.patientName,
             birthYear: ticket.birthYear,
             gender: ticket.gender,
-            phoneNumber: ticket.phoneNumber ?? draft.phoneNumber,
+            phoneNumber: (ticket.phoneNumber != null && ticket.phoneNumber!.isNotEmpty)
+                ? ticket.phoneNumber!
+                : draft.phoneNumber,
           );
           await portalRepository.savePatientProfile(profileToSave);
         }

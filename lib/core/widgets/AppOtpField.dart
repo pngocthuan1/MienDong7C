@@ -110,32 +110,44 @@ class _AppOtpFieldState extends State<AppOtpField> {
                       child: IgnorePointer(
                         child: LayoutBuilder(
                           builder: (context, constraints) {
-                            const spacing = 8.0;
+                            final totalWidth = constraints.maxWidth;
+                            const count = 6;
+                            const idealBoxWidth = 48.0;
+                            const minSpacing = 4.0;
+                            const maxSpacing = 8.0;
 
-                            return Row(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: List.generate(6, (index) {
-                                final text = widget.controller.text;
-                                final char = index < text.length
-                                    ? text[index]
-                                    : '';
-                                final isActive =
-                                    _focusNode.hasFocus &&
-                                    (index == text.length ||
-                                        (text.length == 6 && index == 5));
+                            double boxWidth = (totalWidth - (minSpacing * (count - 1))) / count;
+                            if (boxWidth > idealBoxWidth) {
+                              boxWidth = idealBoxWidth;
+                            }
 
-                                return Padding(
-                                  padding: EdgeInsets.only(
-                                    right: index == 5 ? 0 : spacing,
-                                  ),
-                                  child: AnimatedContainer(
-                                    duration: const Duration(milliseconds: 180),
-                                    width: 48,
-                                    height: 56,
+                            double spacing = (totalWidth - (boxWidth * count)) / (count - 1);
+                            if (spacing > maxSpacing) {
+                              spacing = maxSpacing;
+                            }
+                            if (spacing < 0) spacing = 0;
+
+                            return FittedBox(
+                              fit: BoxFit.scaleDown,
+                              alignment: Alignment.center,
+                              child: Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: List.generate(count, (index) {
+                                  final text = widget.controller.text;
+                                  final char = index < text.length ? text[index] : '';
+                                  final isActive = _focusNode.hasFocus &&
+                                      (index == text.length || (text.length == 6 && index == 5));
+
+                                  return Container(
+                                    margin: EdgeInsets.only(
+                                      right: index == count - 1 ? 0 : spacing,
+                                    ),
+                                    width: boxWidth,
+                                    height: 54,
                                     alignment: Alignment.center,
                                     decoration: BoxDecoration(
                                       color: Colors.white,
-                                      borderRadius: BorderRadius.circular(12),
+                                      borderRadius: BorderRadius.circular(10),
                                       border: Border.all(
                                         color: isActive
                                             ? AppColors.primary
@@ -151,9 +163,9 @@ class _AppOtpFieldState extends State<AppOtpField> {
                                         fontWeight: FontWeight.bold,
                                       ),
                                     ),
-                                  ),
-                                );
-                              }),
+                                  );
+                                }),
+                              ),
                             );
                           },
                         ),

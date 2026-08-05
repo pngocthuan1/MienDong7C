@@ -1,9 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:benhvien7c/app/router/RouteNames.dart';
-import 'package:benhvien7c/core/constants/AppStrings.dart';
 import 'package:benhvien7c/core/dio/AppLocator.dart';
 import 'package:benhvien7c/core/navigation/AppNavigator.dart';
-import 'package:benhvien7c/core/theme/AppColors.dart';
 import 'package:benhvien7c/core/theme/AppSizes.dart';
 import 'package:benhvien7c/core/theme/AppTextStyles.dart';
 import 'package:benhvien7c/core/widgets/AppButton.dart';
@@ -11,12 +9,15 @@ import 'package:benhvien7c/core/widgets/AppPasswordField.dart';
 import 'package:benhvien7c/core/widgets/AppTextField.dart';
 import 'package:benhvien7c/features/auth/domain/entities/AuthSessionEntity.dart';
 import 'package:benhvien7c/features/auth/presentation/viewmodels/LoginViewModel.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:benhvien7c/core/config/environment.dart';
 import 'package:benhvien7c/core/widgets/CloudflareTurnstile.dart';
 import 'package:benhvien7c/features/auth/presentation/widgets/AuthCardShell.dart';
 import 'package:benhvien7c/features/auth/presentation/widgets/AuthFeedbackBanner.dart';
 import 'package:benhvien7c/features/auth/presentation/widgets/AuthFooterLink.dart';
 import 'package:benhvien7c/features/auth/presentation/widgets/AuthGradientBackground.dart';
+import 'package:benhvien7c/features/auth/domain/entities/UserRole.dart';
+import 'package:benhvien7c/features/auth/presentation/widgets/AuthRoleSwitcher.dart';
 
 class LoginView extends StatefulWidget {
   const LoginView({super.key});
@@ -79,10 +80,129 @@ class _LoginViewState extends State<LoginView> {
     } catch (_) {}
   }
 
+  int _logoTapCount = 0;
+  DateTime? _lastLogoTapTime;
+
+  void _onLogoTapped() {
+    final now = DateTime.now();
+    if (_lastLogoTapTime == null || now.difference(_lastLogoTapTime!) > const Duration(milliseconds: 1500)) {
+      _logoTapCount = 1;
+    } else {
+      _logoTapCount++;
+    }
+    _lastLogoTapTime = now;
+
+    if (_logoTapCount >= 5) {
+      _logoTapCount = 0;
+      _showServerConfigDialog();
+    }
+  }
+
+  void _showServerConfigDialog() {
+    final controller = TextEditingController(text: Environment.baseUrl);
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Row(
+          children: const [
+            Icon(Icons.settings_suggest_rounded, color: Color(0xFF0D6EFD)),
+            SizedBox(width: 8),
+            Text('Cấu hình Server API', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Nhập địa chỉ Server API Backend (Bao gồm http:// hoặc https://):',
+              style: TextStyle(fontSize: 13, color: Color(0xFF475569)),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: controller,
+              decoration: InputDecoration(
+                hintText: 'https://api.benhvien7c.vn',
+                prefixIcon: const Icon(Icons.link_rounded),
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              ),
+            ),
+            const SizedBox(height: 14),
+            const Text('Gợi ý URL nhanh:', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Color(0xFF64748B))),
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 6,
+              runSpacing: 6,
+              children: [
+                ActionChip(
+                  label: const Text('Localhost (7185)', style: TextStyle(fontSize: 11)),
+                  onPressed: () => controller.text = 'https://localhost:7185',
+                ),
+                ActionChip(
+                  label: const Text('Localhost (7157)', style: TextStyle(fontSize: 11)),
+                  onPressed: () => controller.text = 'https://localhost:7157',
+                ),
+                ActionChip(
+                  label: const Text('Android (10.0.2.2)', style: TextStyle(fontSize: 11)),
+                  onPressed: () => controller.text = 'https://10.0.2.2:7185',
+                ),
+              ],
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () async {
+              final prefs = await SharedPreferences.getInstance();
+              await prefs.remove('custom_base_url');
+              Environment.setCustomBaseUrl(null);
+              AppLocator.dioClient.dio.options.baseUrl = Environment.baseUrl;
+              if (mounted) {
+                Navigator.of(ctx).pop();
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text('Đã khôi phục Server mặc định: ${Environment.baseUrl}'),
+                    backgroundColor: Colors.blueAccent,
+                  ),
+                );
+              }
+            },
+            child: const Text('Khôi phục mặc định', style: TextStyle(color: Colors.grey)),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              final newUrl = controller.text.trim();
+              if (newUrl.isNotEmpty) {
+                final prefs = await SharedPreferences.getInstance();
+                await prefs.setString('custom_base_url', newUrl);
+                Environment.setCustomBaseUrl(newUrl);
+                AppLocator.dioClient.dio.options.baseUrl = Environment.baseUrl;
+                if (mounted) {
+                  Navigator.of(ctx).pop();
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text('Đã cập nhật Server API thành: ${Environment.baseUrl}'),
+                      backgroundColor: Colors.green,
+                    ),
+                  );
+                }
+              }
+            },
+            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF0D6EFD)),
+            child: const Text('Lưu & Cập nhật', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return AuthGradientBackground(
       child: AuthCardShell(
+        onLogoTap: _onLogoTapped,
         child: AnimatedBuilder(
           animation: _viewModel,
           builder: (context, _) {
@@ -124,7 +244,7 @@ class _LoginIntro extends StatelessWidget {
     return Column(
       children: [
         Text(
-          'Đăng nhập hệ thống',
+          'Đăng nhập bệnh viện Miền Đông 7C',
           textAlign: TextAlign.center,
           style: AppTextStyles.pageTitle.copyWith(fontSize: 24),
         ),
@@ -169,12 +289,23 @@ class _LoginForm extends StatelessWidget {
           title: 'Thông tin đăng nhập',
         ),
         const SizedBox(height: 12),
+        AuthRoleSwitcher(
+          selectedRole: viewModel.selectedRole,
+          onChanged: viewModel.updateRole,
+        ),
+        const SizedBox(height: 12),
         AppTextField(
           controller: viewModel.phoneController,
-          label: 'Số điện thoại / Tên đăng nhập',
-          hintText: 'Nhập số điện thoại hoặc tên đăng nhập',
+          label: viewModel.selectedRole == UserRole.employee
+              ? 'Tên đăng nhập HIS / Số điện thoại'
+              : 'Số điện thoại đăng ký',
+          hintText: viewModel.selectedRole == UserRole.employee
+              ? 'Nhập mã tài khoản HIS (VD: hunglng)'
+              : 'Nhập số điện thoại đăng ký',
           keyboardType: TextInputType.text,
-          prefixIcon: Icons.person_outline_rounded,
+          prefixIcon: viewModel.selectedRole == UserRole.employee
+              ? Icons.badge_outlined
+              : Icons.phone_outlined,
           validator: viewModel.checkPhone,
           textInputAction: TextInputAction.next,
           onChanged: viewModel.updatePhoneError,
@@ -189,104 +320,7 @@ class _LoginForm extends StatelessWidget {
           onChanged: viewModel.updatePasswordError,
         ),
         const SizedBox(height: AppSizes.itemSpacing),
-        // Section Demo Accounts & Server Mode Toggle
-        Container(
-          width: double.infinity,
-          padding: const EdgeInsets.all(14),
-          decoration: BoxDecoration(
-            color: viewModel.isOfflineDemo ? const Color(0xFFF2FAFF) : const Color(0xFFFFF8F2),
-            borderRadius: BorderRadius.circular(AppSizes.fieldRadius),
-            border: Border.all(color: viewModel.isOfflineDemo ? const Color(0xFFCDEBFF) : const Color(0xFFFFE2CC)),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  Icon(
-                    viewModel.isOfflineDemo ? Icons.bolt_rounded : Icons.cloud_done_rounded,
-                    color: viewModel.isOfflineDemo ? const Color(0xFF0A5FB6) : const Color(0xFFD97706),
-                    size: 22,
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          viewModel.isOfflineDemo ? 'Chế độ Demo (Không cần Server)' : 'Chế độ Server Thật (API Backend)',
-                          style: TextStyle(
-                            color: viewModel.isOfflineDemo ? const Color(0xFF0A4F95) : const Color(0xFFB45309),
-                            fontSize: 13,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                        Text(
-                          viewModel.isOfflineDemo ? 'Cho phép dùng thử UI mà không cần bật máy chủ.' : 'Gửi yêu cầu đăng nhập trực tiếp tới Server.',
-                          style: TextStyle(
-                            color: viewModel.isOfflineDemo ? const Color(0xFF4A729D) : const Color(0xFF92400E),
-                            fontSize: 11,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  SizedBox(
-                    height: 28,
-                    child: Switch(
-                      value: viewModel.isOfflineDemo,
-                      activeColor: const Color(0xFF0A5FB6),
-                      onChanged: (val) => viewModel.setOfflineDemo(val),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 10),
-              const Divider(height: 1, color: Color(0xFFDDEEFE)),
-              const SizedBox(height: 10),
-              const Text(
-                'Điền nhanh tài khoản mẫu:',
-                style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: Color(0xFF475569)),
-              ),
-              const SizedBox(height: 8),
-              Row(
-                children: [
-                  Expanded(
-                    child: OutlinedButton.icon(
-                      onPressed: () {
-                        viewModel.phoneController.text = AppStrings.demoCustomerPhone;
-                        viewModel.passwordController.text = AppStrings.demoPassword;
-                        viewModel.updatePhoneError(null);
-                      },
-                      style: OutlinedButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(vertical: 8),
-                        side: const BorderSide(color: Color(0xFFBBE0FF)),
-                      ),
-                      icon: const Icon(Icons.person_outline_rounded, size: 16, color: Color(0xFF0A5FB6)),
-                      label: const Text('Khách hàng', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Color(0xFF0A5FB6))),
-                    ),
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: OutlinedButton.icon(
-                      onPressed: () {
-                        viewModel.phoneController.text = AppStrings.demoEmployeePhone;
-                        viewModel.passwordController.text = AppStrings.demoPassword;
-                        viewModel.updatePhoneError(null);
-                      },
-                      style: OutlinedButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(vertical: 8),
-                        side: const BorderSide(color: Color(0xFFBBE0FF)),
-                      ),
-                      icon: const Icon(Icons.badge_outlined, size: 16, color: Color(0xFF0A5FB6)),
-                      label: const Text('Bác sĩ/Nhân viên', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Color(0xFF0A5FB6))),
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ),
-        ),
+
         const SizedBox(height: 6),
         Align(
           alignment: Alignment.centerRight,
@@ -333,7 +367,7 @@ class _LoginForm extends StatelessWidget {
                 height: 24,
                 child: Switch(
                   value: simulateBot,
-                  activeColor: const Color(0xFFE05252),
+                  activeThumbColor: const Color(0xFFE05252),
                   onChanged: onBotToggled,
                 ),
               ),
@@ -345,7 +379,7 @@ class _LoginForm extends StatelessWidget {
           width: double.infinity,
           child: ListenableBuilder(
             listenable: viewModel.loginCommand,
-            builder: (context, __) {
+            builder: (context, _) {
               final isCaptchaVerified = captchaToken != null;
               return AppButton(
                 label: 'Đăng nhập',

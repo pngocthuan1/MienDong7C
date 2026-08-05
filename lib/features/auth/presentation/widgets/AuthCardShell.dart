@@ -2,9 +2,14 @@ import 'package:flutter/material.dart';
 import 'package:benhvien7c/core/theme/AppSizes.dart';
 
 class AuthCardShell extends StatelessWidget {
-  const AuthCardShell({required this.child, super.key});
+  const AuthCardShell({
+    required this.child,
+    this.onLogoTap,
+    super.key,
+  });
 
   final Widget child;
+  final VoidCallback? onLogoTap;
 
   @override
   Widget build(BuildContext context) {
@@ -32,39 +37,42 @@ class AuthCardShell extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 // Shared Logo Placeholder
-                Container(
-                  padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 16),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFF4F8FD),
-                    borderRadius: BorderRadius.circular(16),
-                    border: Border.all(color: const Color(0xFFDBEAFE)),
-                  ),
-                  child: Column(
-                    children: const [
-                      Icon(
-                        Icons.add_photo_alternate_outlined,
-                        size: 40,
-                        color: Color(0xFF2563EB),
-                      ),
-                      SizedBox(height: 12),
-                      Text(
-                        'Vị trí chèn logo bệnh viện',
-                        style: TextStyle(
-                          color: Color(0xFF1E3A8A),
-                          fontWeight: FontWeight.bold,
-                          fontSize: 16,
+                GestureDetector(
+                  onTap: onLogoTap,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 16),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFF4F8FD),
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(color: const Color(0xFFDBEAFE)),
+                    ),
+                    child: Column(
+                      children: const [
+                        Icon(
+                          Icons.local_hospital_rounded,
+                          size: 44,
+                          color: Color(0xFF2563EB),
                         ),
-                      ),
-                      SizedBox(height: 4),
-                      Text(
-                        'Bạn có thể thay khung này\nbằng ảnh logo sau.',
-                        textAlign: TextAlign.center,
-                        style: TextStyle(
-                          color: Color(0xFF64748B),
-                          fontSize: 14,
+                        SizedBox(height: 10),
+                        Text(
+                          'Bệnh viện Miền Đông 7C',
+                          style: TextStyle(
+                            color: Color(0xFF1E3A8A),
+                            fontWeight: FontWeight.bold,
+                            fontSize: 17,
+                          ),
                         ),
-                      ),
-                    ],
+                        SizedBox(height: 4),
+                        Text(
+                          'Hệ thống Đăng ký & Đặt lịch khám bệnh',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            color: Color(0xFF64748B),
+                            fontSize: 13,
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
                 const SizedBox(height: 32),

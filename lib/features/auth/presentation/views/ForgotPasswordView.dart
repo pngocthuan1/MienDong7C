@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:benhvien7c/core/theme/AppSizes.dart';
 import 'package:benhvien7c/core/dio/AppLocator.dart';
-import 'package:benhvien7c/core/firebase/FirebaseBootstrap.dart';
 import 'package:benhvien7c/core/navigation/AppNavigator.dart';
 import 'package:benhvien7c/core/utils/AppInputFormatters.dart';
 import 'package:benhvien7c/core/widgets/AppButton.dart';
@@ -14,7 +13,6 @@ import 'package:benhvien7c/features/auth/presentation/widgets/AuthCardShell.dart
 import 'package:benhvien7c/features/auth/presentation/widgets/AuthFeedbackBanner.dart';
 import 'package:benhvien7c/features/auth/presentation/widgets/AuthFooterLink.dart';
 import 'package:benhvien7c/features/auth/presentation/widgets/AuthGradientBackground.dart';
-import 'package:benhvien7c/features/auth/presentation/widgets/AuthHeader.dart';
 import 'package:benhvien7c/features/auth/presentation/widgets/FirebaseRecaptchaHost.dart';
 
 class ForgotPasswordView extends StatefulWidget {

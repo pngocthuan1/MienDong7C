@@ -58,7 +58,7 @@ abstract class PortalRepository {
 
   Future<Result<void>> savePatientProfile(PatientProfileDraftEntity profile);
 
-  Future<Result<void>> softDeletePatientProfile(String identifier);
+  Future<Result<void>> softDeletePatientProfile(PatientProfileDraftEntity profile);
 
   Future<Result<List<UserManagementUserEntity>>> loadManagedUsers(
     UserRole role,

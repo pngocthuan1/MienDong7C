@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:benhvien7c/core/network/ApiException.dart';
 import 'package:benhvien7c/core/network/ApiResult.dart';
 import 'package:benhvien7c/features/auth/domain/repositories/AuthRepository.dart';
@@ -78,6 +79,18 @@ class OtpViewModel extends ChangeNotifier {
         notifyListeners();
         return ApiFailure(ApiException.validation(_message!));
       }
+      SharedPreferences.getInstance().then((prefs) {
+        final list = (prefs.getStringList('registered_phone_numbers') ?? ['0822380103', '0902377251', '0987654321']).toSet();
+        final clean = phoneNumber.replaceAll(RegExp(r'\D'), '');
+        if (clean.isNotEmpty) {
+          list.add(clean);
+          if (fullName.trim().isNotEmpty) {
+            prefs.setString('full_name_$clean', fullName.trim());
+            prefs.setString('saved_full_name', fullName.trim());
+          }
+        }
+        prefs.setStringList('registered_phone_numbers', list.toList());
+      });
       return res;
     } else {
       if (otp.length != 6) {

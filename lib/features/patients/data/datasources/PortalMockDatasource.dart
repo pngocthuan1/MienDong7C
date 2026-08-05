@@ -658,20 +658,32 @@ class PortalMockDatasource {
     } catch (_) {}
   }
 
-  Future<void> softDeletePatientProfile(String identifier) async {
+  Future<void> softDeletePatientProfile(PatientProfileDraftEntity profile) async {
     try {
       final prefs = await SharedPreferences.getInstance();
       final key = 'cached_patient_profiles';
+
+      final deletedKeySet = (prefs.getStringList('deleted_patient_profile_keys') ?? []).toSet();
+      final pKey = (profile.identifier.isNotEmpty && profile.identifier != 'N/A')
+          ? profile.identifier.trim().toLowerCase()
+          : '${profile.fullName.trim().toLowerCase()}_${profile.birthYear.trim()}_${profile.phoneNumber.trim()}';
+
+      deletedKeySet.add(pKey);
+      await prefs.setStringList('deleted_patient_profile_keys', deletedKeySet.toList());
+
       final cachedJson = prefs.getString(key);
       if (cachedJson != null) {
         final List<dynamic> decoded = jsonDecode(cachedJson);
         final list = decoded.map((item) => PatientProfileDraftEntity.fromJson(item as Map<String, dynamic>)).toList();
-        final idx = list.indexWhere((element) => element.identifier == identifier);
-        if (idx >= 0) {
-          list[idx] = list[idx].copyWith(isDeleted: true);
-          final encoded = jsonEncode(list.map((e) => e.toJson()).toList());
-          await prefs.setString(key, encoded);
-        }
+        list.removeWhere((element) {
+          if (profile.identifier.isNotEmpty && profile.identifier != 'N/A' && element.identifier == profile.identifier) {
+            return true;
+          }
+          final keyEl = '${element.fullName.trim().toLowerCase()}_${element.birthYear.trim()}_${element.phoneNumber.trim()}';
+          return keyEl == pKey;
+        });
+        final encoded = jsonEncode(list.map((e) => e.toJson()).toList());
+        await prefs.setString(key, encoded);
       }
     } catch (_) {}
   }

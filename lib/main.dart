@@ -80,6 +80,11 @@ void main() async {
   // 3. Khởi tạo SharedPreferences phục vụ LocalStorage
   final sharedPreferences = await SharedPreferences.getInstance();
 
+  final customBaseUrl = sharedPreferences.getString('custom_base_url');
+  if (customBaseUrl != null && customBaseUrl.trim().isNotEmpty) {
+    Environment.setCustomBaseUrl(customBaseUrl.trim());
+  }
+
   // 4. Khởi tạo các Service phụ trợ và gán vào AppLocator tĩnh
   final dioClient = DioClient(secureStorage: secureStorage);
   final remoteDataSource = AuthRemoteDataSource(dioClient);
@@ -95,6 +100,7 @@ void main() async {
     storage: secureStorage,
     portalRepo: portalRepository,
     session: appSessionStore,
+    dio: dioClient,
   );
 
   // Phục hồi session nếu có
@@ -106,7 +112,12 @@ void main() async {
       final expiry = _parseExpiry(expires);
 
       final savedPhone = sharedPreferences.getString('saved_phone') ?? '';
+      final cleanPhone = savedPhone.replaceAll(RegExp(r'\D'), '');
+      final savedName = sharedPreferences.getString('full_name_$cleanPhone') ?? sharedPreferences.getString('saved_full_name');
       final role = savedPhone == AppStrings.demoEmployeePhone ? UserRole.employee : UserRole.customer;
+      final displayName = (savedName != null && savedName.trim().isNotEmpty)
+          ? savedName.trim()
+          : (role == UserRole.employee ? 'BS. Nguyễn Văn Nam' : (savedPhone.isNotEmpty ? savedPhone : 'Khách hàng'));
 
       appSessionStore.setSession(
         AuthSessionEntity(
@@ -115,7 +126,7 @@ void main() async {
           refreshTokenExpiry: expiry,
         ),
         UserProfileSession(
-          fullName: role == UserRole.employee ? 'Nhân Viên Demo' : 'Khách Hàng Demo',
+          fullName: displayName,
           phoneNumber: savedPhone.isNotEmpty ? savedPhone : '0902377251',
           role: role,
         ),

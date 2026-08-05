@@ -86,7 +86,7 @@ class _PatientProfileSelectViewState extends State<PatientProfileSelectView> {
     );
 
     if (confirm == true) {
-      await _repository.softDeletePatientProfile(profile.identifier);
+      await _repository.softDeletePatientProfile(profile);
       await _loadProfiles();
     }
   }
@@ -187,188 +187,201 @@ class _PatientProfileSelectViewState extends State<PatientProfileSelectView> {
             child: _isLoading
                 ? const Center(child: CircularProgressIndicator())
                 : _filteredProfiles.isEmpty
-                    ? Center(
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            const Icon(Icons.folder_off_outlined, size: 48, color: Colors.grey),
-                            const SizedBox(height: 12),
-                            Text(
-                              _searchQuery.isNotEmpty
-                                  ? 'Không tìm thấy hồ sơ phù hợp'
-                                  : 'Chưa có hồ sơ nào được lưu',
-                              style: const TextStyle(color: Colors.grey, fontSize: 14),
+                    ? RefreshIndicator(
+                        onRefresh: _loadProfiles,
+                        child: SingleChildScrollView(
+                          physics: const AlwaysScrollableScrollPhysics(),
+                          child: SizedBox(
+                            height: 300,
+                            child: Center(
+                              child: Column(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  const Icon(Icons.folder_off_outlined, size: 48, color: Colors.grey),
+                                  const SizedBox(height: 12),
+                                  Text(
+                                    _searchQuery.isNotEmpty
+                                        ? 'Không tìm thấy hồ sơ phù hợp'
+                                        : 'Chưa có hồ sơ nào được lưu',
+                                    style: const TextStyle(color: Colors.grey, fontSize: 14),
+                                  ),
+                                ],
+                              ),
                             ),
-                          ],
+                          ),
                         ),
                       )
-                    : ListView.separated(
-                        padding: const EdgeInsets.all(16),
-                        itemCount: _filteredProfiles.length,
-                        separatorBuilder: (_, __) => const SizedBox(height: 16),
-                        itemBuilder: (context, index) {
-                          final profile = _filteredProfiles[index];
+                    : RefreshIndicator(
+                        onRefresh: _loadProfiles,
+                        child: ListView.separated(
+                          physics: const AlwaysScrollableScrollPhysics(),
+                          padding: const EdgeInsets.all(16),
+                          itemCount: _filteredProfiles.length,
+                          separatorBuilder: (_, __) => const SizedBox(height: 16),
+                          itemBuilder: (context, index) {
+                            final profile = _filteredProfiles[index];
 
-                          return Container(
-                            decoration: BoxDecoration(
-                              color: Colors.white,
-                              borderRadius: BorderRadius.circular(10),
-                              border: Border.all(color: const Color(0xFFE2E8F0)),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: Colors.black.withOpacity(0.03),
-                                  blurRadius: 8,
-                                  offset: const Offset(0, 2),
-                                ),
-                              ],
-                            ),
-                            clipBehavior: Clip.antiAlias,
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                // Top Header Bar: Person icon + Name - BirthYear
-                                Container(
-                                  width: double.infinity,
-                                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                                  color: const Color(0xFFF8FAFC),
-                                  child: Row(
-                                    children: [
-                                      const Icon(
-                                        Icons.person_rounded,
-                                        color: Color(0xFF4F46E5),
-                                        size: 22,
-                                      ),
-                                      const SizedBox(width: 8),
-                                      Expanded(
-                                        child: Text(
-                                          '${profile.fullName.toUpperCase()} - ${profile.birthYear}',
-                                          style: const TextStyle(
-                                            fontSize: 17,
-                                            fontWeight: FontWeight.bold,
-                                            color: Color(0xFF4F46E5),
+                            return Container(
+                              decoration: BoxDecoration(
+                                color: Colors.white,
+                                borderRadius: BorderRadius.circular(10),
+                                border: Border.all(color: const Color(0xFFE2E8F0)),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: Colors.black.withValues(alpha: 0.03),
+                                    blurRadius: 8,
+                                    offset: const Offset(0, 2),
+                                  ),
+                                ],
+                              ),
+                              clipBehavior: Clip.antiAlias,
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  // Top Header Bar: Person icon + Name - BirthYear
+                                  Container(
+                                    width: double.infinity,
+                                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                                    color: const Color(0xFFF8FAFC),
+                                    child: Row(
+                                      children: [
+                                        const Icon(
+                                          Icons.person_rounded,
+                                          color: Color(0xFF0D6EFD),
+                                          size: 22,
+                                        ),
+                                        const SizedBox(width: 8),
+                                        Expanded(
+                                          child: Text(
+                                            '${profile.fullName.toUpperCase()} - ${profile.birthYear}',
+                                            style: const TextStyle(
+                                              fontSize: 17,
+                                              fontWeight: FontWeight.bold,
+                                              color: Color(0xFF0D6EFD),
+                                            ),
                                           ),
                                         ),
-                                      ),
-                                    ],
+                                      ],
+                                    ),
                                   ),
-                                ),
 
-                                const Divider(height: 1, color: Color(0xFFE2E8F0)),
+                                  const Divider(height: 1, color: Color(0xFFE2E8F0)),
 
-                                Padding(
-                                  padding: const EdgeInsets.all(14),
-                                  child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      // Mã thẻ / CCCD / Mã BN
-                                      Row(
-                                        crossAxisAlignment: CrossAxisAlignment.center,
-                                        children: [
-                                          const Text(
-                                            '#',
-                                            style: TextStyle(
-                                              fontSize: 22,
-                                              fontWeight: FontWeight.bold,
-                                              color: Color(0xFF4F46E5),
-                                            ),
-                                          ),
-                                          const SizedBox(width: 8),
-                                          Expanded(
-                                            child: Text(
-                                              'Mã thẻ: ${(profile.identifier.isNotEmpty && profile.identifier != 'N/A') ? profile.identifier : '<Tự động cấp tạo mới>'}',
-                                              style: const TextStyle(
-                                                fontSize: 18,
+                                  Padding(
+                                    padding: const EdgeInsets.all(14),
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        // Mã thẻ / CCCD / Mã BN
+                                        Row(
+                                          crossAxisAlignment: CrossAxisAlignment.center,
+                                          children: [
+                                            const Text(
+                                              '#',
+                                              style: TextStyle(
+                                                fontSize: 22,
                                                 fontWeight: FontWeight.bold,
-                                                color: Color(0xFF4F46E5),
+                                                color: Color(0xFF0D6EFD),
                                               ),
                                             ),
-                                          ),
-                                        ],
-                                      ),
-                                      const SizedBox(height: 8),
-
-                                      // Giới tính
-                                      Row(
-                                        children: [
-                                          const Icon(Icons.smartphone_rounded, size: 18, color: Colors.black),
-                                          const SizedBox(width: 8),
-                                          Text(
-                                            'Giới tính: ${profile.gender}',
-                                            style: const TextStyle(
-                                              fontSize: 15,
-                                              color: Color(0xFF1E293B),
-                                              fontWeight: FontWeight.w500,
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                      const SizedBox(height: 6),
-
-                                      // SĐT
-                                      Row(
-                                        children: [
-                                          const Icon(Icons.smartphone_rounded, size: 18, color: Colors.black),
-                                          const SizedBox(width: 8),
-                                          Text(
-                                            'SĐT: ${profile.phoneNumber}',
-                                            style: const TextStyle(
-                                              fontSize: 15,
-                                              color: Color(0xFF1E293B),
-                                              fontWeight: FontWeight.w500,
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-
-                                      const SizedBox(height: 16),
-
-                                      // Action Buttons: Chọn hồ sơ | Xóa hồ sơ
-                                      Row(
-                                        mainAxisAlignment: MainAxisAlignment.center,
-                                        children: [
-                                          ElevatedButton(
-                                            onPressed: () {
-                                              Navigator.of(context).pop(profile);
-                                            },
-                                            style: ElevatedButton.styleFrom(
-                                              backgroundColor: const Color(0xFF4F46E5),
-                                              foregroundColor: Colors.white,
-                                              elevation: 0,
-                                              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-                                              shape: RoundedRectangleBorder(
-                                                borderRadius: BorderRadius.circular(6),
+                                            const SizedBox(width: 8),
+                                            Expanded(
+                                              child: Text(
+                                                'Mã thẻ: ${(profile.identifier.isNotEmpty && profile.identifier != 'N/A') ? profile.identifier : '<Tự động cấp tạo mới>'}',
+                                                style: const TextStyle(
+                                                  fontSize: 18,
+                                                  fontWeight: FontWeight.bold,
+                                                  color: Color(0xFF0D6EFD),
+                                                ),
                                               ),
                                             ),
-                                            child: const Text(
-                                              'Chọn hồ sơ',
-                                              style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
-                                            ),
-                                          ),
-                                          const SizedBox(width: 12),
-                                          OutlinedButton(
-                                            onPressed: () => _deleteProfile(profile),
-                                            style: OutlinedButton.styleFrom(
-                                              foregroundColor: const Color(0xFFEF4444),
-                                              side: const BorderSide(color: Color(0xFFEF4444)),
-                                              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                                              shape: RoundedRectangleBorder(
-                                                borderRadius: BorderRadius.circular(6),
+                                          ],
+                                        ),
+                                        const SizedBox(height: 8),
+
+                                        // Giới tính
+                                        Row(
+                                          children: [
+                                            const Icon(Icons.wc_rounded, size: 18, color: Color(0xFF0D6EFD)),
+                                            const SizedBox(width: 8),
+                                            Text(
+                                              'Giới tính: ${profile.gender}',
+                                              style: const TextStyle(
+                                                fontSize: 15,
+                                                color: Color(0xFF1E293B),
+                                                fontWeight: FontWeight.w500,
                                               ),
                                             ),
-                                            child: const Text(
-                                              'Xóa hồ sơ',
-                                              style: TextStyle(fontSize: 14),
+                                          ],
+                                        ),
+                                        const SizedBox(height: 6),
+
+                                        // SĐT
+                                        Row(
+                                          children: [
+                                            const Icon(Icons.smartphone_rounded, size: 18, color: Colors.black87),
+                                            const SizedBox(width: 8),
+                                            Text(
+                                              'SĐT: ${profile.phoneNumber}',
+                                              style: const TextStyle(
+                                                fontSize: 15,
+                                                color: Color(0xFF1E293B),
+                                                fontWeight: FontWeight.w500,
+                                              ),
                                             ),
-                                          ),
-                                        ],
-                                      ),
-                                    ],
+                                          ],
+                                        ),
+
+                                        const SizedBox(height: 16),
+
+                                        // Action Buttons: Chọn hồ sơ | Xóa hồ sơ
+                                        Row(
+                                          mainAxisAlignment: MainAxisAlignment.center,
+                                          children: [
+                                            ElevatedButton(
+                                              onPressed: () {
+                                                Navigator.of(context).pop(profile);
+                                              },
+                                              style: ElevatedButton.styleFrom(
+                                                backgroundColor: const Color(0xFF0D6EFD),
+                                                foregroundColor: Colors.white,
+                                                elevation: 0,
+                                                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                                                shape: RoundedRectangleBorder(
+                                                  borderRadius: BorderRadius.circular(6),
+                                                ),
+                                              ),
+                                              child: const Text(
+                                                'Chọn hồ sơ',
+                                                style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
+                                              ),
+                                            ),
+                                            const SizedBox(width: 12),
+                                            OutlinedButton(
+                                              onPressed: () => _deleteProfile(profile),
+                                              style: OutlinedButton.styleFrom(
+                                                foregroundColor: const Color(0xFFEF4444),
+                                                side: const BorderSide(color: Color(0xFFEF4444)),
+                                                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                                                shape: RoundedRectangleBorder(
+                                                  borderRadius: BorderRadius.circular(6),
+                                                ),
+                                              ),
+                                              child: const Text(
+                                                'Xóa hồ sơ',
+                                                style: TextStyle(fontSize: 14),
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ],
+                                    ),
                                   ),
-                                ),
-                              ],
-                            ),
-                          );
-                        },
+                                ],
+                              ),
+                            );
+                          },
+                        ),
                       ),
           ),
         ],
