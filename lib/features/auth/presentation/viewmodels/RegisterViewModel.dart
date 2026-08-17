@@ -158,6 +158,12 @@ class RegisterViewModel extends ChangeNotifier {
       return ApiFailure(ApiException.validation(phoneError!));
     }
 
+    final name = fullNameController.text.trim();
+    if (cleanPhone.isNotEmpty && name.isNotEmpty) {
+      await prefs.setString('full_name_$cleanPhone', name);
+      await prefs.setString('saved_full_name', name);
+    }
+
     // 1. Sinh khóa ngẫu nhiên
     final keyResult = await _authRepository.generateRandomKey();
     if (keyResult is ApiFailure<String>) {

@@ -46,6 +46,7 @@ import 'package:benhvien7c/features/patients/presentation/views/TypeFourDemoView
 import 'package:benhvien7c/features/patients/presentation/views/TypeFourProcessingView.dart';
 import 'package:benhvien7c/features/patients/presentation/views/TypeFourResultView.dart';
 import 'package:benhvien7c/features/patients/presentation/views/MedicalTicketView.dart';
+import 'package:benhvien7c/features/patients/presentation/views/CreateNotificationView.dart';
 import 'package:benhvien7c/features/patients/domain/entities/NotificationItemEntity.dart';
 
 import 'package:device_info_plus/device_info_plus.dart';
@@ -175,6 +176,7 @@ class MyApp extends StatelessWidget {
         RouteNames.typeFourDemo: (context) => const TypeFourDemoView(),
         RouteNames.typeFourProcessing: (context) => const TypeFourProcessingView(),
         RouteNames.typeFourResult: (context) => const TypeFourResultView(),
+        RouteNames.createNotification: (context) => const CreateNotificationView(),
       },
       onGenerateRoute: (settings) {
         if (settings.name == RouteNames.verifyOtp) {

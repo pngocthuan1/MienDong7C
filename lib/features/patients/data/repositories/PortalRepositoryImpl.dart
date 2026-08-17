@@ -1,4 +1,6 @@
 import 'package:intl/intl.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:benhvien7c/core/session/AppSessionStore.dart';
 import 'package:benhvien7c/core/commands/result.dart';
 import 'package:benhvien7c/core/network/ApiException.dart';
 import 'package:benhvien7c/features/auth/domain/entities/UserRole.dart';
@@ -110,6 +112,46 @@ class PortalRepositoryImpl implements PortalRepository {
         approved: approved,
       );
       return Ok(message);
+    } on Exception catch (exception) {
+      return Error(exception, exception.toString());
+    } catch (error) {
+      return Error(Exception(error.toString()), error.toString());
+    }
+  }
+
+  @override
+  Future<Result<NotificationItemEntity>> createNotification({
+    required UserRole role,
+    required String content,
+    required List<String> attachments,
+    required String targetMode,
+    required List<String> recipientIds,
+    required String senderName,
+    required String senderDepartment,
+  }) async {
+    try {
+      final now = DateTime.now();
+      final timeStr = DateFormat('HH:mm - dd/MM/yyyy').format(now);
+      final id = 'NOTIF_${now.millisecondsSinceEpoch}';
+
+      final newItem = NotificationItemEntity(
+        id: id,
+        title: senderDepartment.isNotEmpty ? senderDepartment : 'Thông báo nội bộ',
+        message: content.length > 80 ? '${content.substring(0, 80)}...' : content,
+        details: content,
+        category: 'Thông báo nội bộ',
+        timeLabel: timeStr,
+        senderName: senderName.isNotEmpty ? senderName : 'Lê Nguyễn Gia Hưng',
+        senderDepartment: senderDepartment.isNotEmpty ? senderDepartment : 'Hệ thống thông báo nội bộ',
+        number: now.millisecondsSinceEpoch % 1000,
+        createdAt: now,
+        isRead: false,
+        isImportant: true,
+        attachmentName: attachments.isNotEmpty ? attachments.join(', ') : null,
+      );
+
+      await _datasource.addTestNotification(role, newItem);
+      return Ok(newItem);
     } on Exception catch (exception) {
       return Error(exception, exception.toString());
     } catch (error) {
@@ -354,6 +396,21 @@ class PortalRepositoryImpl implements PortalRepository {
               phoneNumber: dto.soDienThoai ?? '',
             );
           }).toList();
+
+          if (remoteProfiles.isNotEmpty) {
+            final firstProfileName = remoteProfiles.first.fullName.trim();
+            if (firstProfileName.isNotEmpty) {
+              AppSessionStore.instance.updateFullName(firstProfileName);
+              SharedPreferences.getInstance().then((prefs) {
+                final currentPhone = AppSessionStore.instance.currentUser?.phoneNumber ?? '';
+                final cleanPhone = currentPhone.replaceAll(RegExp(r'\D'), '');
+                if (cleanPhone.isNotEmpty) {
+                  prefs.setString('full_name_$cleanPhone', firstProfileName);
+                  prefs.setString('saved_full_name', firstProfileName);
+                }
+              });
+            }
+          }
 
           return Ok(remoteProfiles);
         } catch (_) {}

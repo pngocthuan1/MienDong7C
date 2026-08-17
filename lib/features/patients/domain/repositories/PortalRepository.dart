@@ -34,6 +34,16 @@ abstract class PortalRepository {
     required bool approved,
   });
 
+  Future<Result<NotificationItemEntity>> createNotification({
+    required UserRole role,
+    required String content,
+    required List<String> attachments,
+    required String targetMode,
+    required List<String> recipientIds,
+    required String senderName,
+    required String senderDepartment,
+  });
+
   Future<Result<MedicalTicketEntity>> loadSampleMedicalTicket(
     UserRole role,
     String patientName,

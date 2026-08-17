@@ -169,9 +169,21 @@ class _NotificationViewState extends State<NotificationView> {
               style: const TextStyle(fontWeight: FontWeight.w700),
             ),
             actions: [
+              if (session.isEmployee) ...[
+                IconButton(
+                  icon: const Icon(Icons.post_add_rounded, color: Colors.white),
+                  tooltip: 'Đăng thông báo mới',
+                  onPressed: () async {
+                    final res = await Navigator.of(context).pushNamed(RouteNames.createNotification);
+                    if (res == true && mounted) {
+                      _viewModel.loadCommand.execute();
+                    }
+                  },
+                ),
+              ],
               Center(
                 child: Padding(
-                  padding: const EdgeInsets.only(right: 18),
+                  padding: const EdgeInsets.only(right: 14),
                   child: Text(
                     'MỚI: ${_viewModel.summary.unread}',
                     style: const TextStyle(
@@ -184,21 +196,120 @@ class _NotificationViewState extends State<NotificationView> {
               ),
             ],
           ),
+          floatingActionButton: session.isEmployee
+              ? FloatingActionButton.extended(
+                  onPressed: () async {
+                    final res = await Navigator.of(context).pushNamed(RouteNames.createNotification);
+                    if (res == true && mounted) {
+                      _viewModel.loadCommand.execute();
+                    }
+                  },
+                  backgroundColor: const Color(0xFF2F7DE1),
+                  icon: const Icon(Icons.post_add_rounded, color: Colors.white),
+                  label: const Text(
+                    'Đăng thông báo mới',
+                    style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                  ),
+                )
+              : null,
           body: ListenableBuilder(
             listenable: _viewModel.loadCommand,
-            builder: (context, __) {
+            builder: (context, _) {
               final listToDisplay = _viewModel.filteredItems;
               if (_viewModel.loadCommand.running && listToDisplay.isEmpty) {
                 return const Center(child: CircularProgressIndicator());
               }
 
+              Widget headerCreateCard = const SizedBox.shrink();
+              if (session.isEmployee) {
+                headerCreateCard = Container(
+                  margin: const EdgeInsets.fromLTRB(14, 14, 14, 6),
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    gradient: const LinearGradient(
+                      colors: [Color(0xFF2F7DE1), Color(0xFF1D4ED8)],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                    ),
+                    borderRadius: BorderRadius.circular(16),
+                    boxShadow: [
+                      BoxShadow(
+                        color: const Color(0xFF2F7DE1).withValues(alpha: 0.3),
+                        blurRadius: 10,
+                        offset: const Offset(0, 4),
+                      ),
+                    ],
+                  ),
+                  child: Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withValues(alpha: 0.2),
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(Icons.post_add_rounded, color: Colors.white, size: 28),
+                      ),
+                      const SizedBox(width: 14),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: const [
+                            Text(
+                              'Đăng thông báo nội bộ',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 16,
+                              ),
+                            ),
+                            SizedBox(height: 4),
+                            Text(
+                              'Gửi tới các khoa phòng & nhân viên',
+                              style: TextStyle(
+                                color: Colors.white70,
+                                fontSize: 12,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      ElevatedButton(
+                        onPressed: () async {
+                          final res = await Navigator.of(context).pushNamed(RouteNames.createNotification);
+                          if (res == true && mounted) {
+                            _viewModel.loadCommand.execute();
+                          }
+                        },
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.white,
+                          foregroundColor: const Color(0xFF1D4ED8),
+                          elevation: 0,
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                        ),
+                        child: const Text('Tạo ngay', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                      ),
+                    ],
+                  ),
+                );
+              }
+
               if (listToDisplay.isEmpty) {
-                return PortalEmptyState(
-                  title: 'Chưa có thông báo',
-                  message: _viewModel.selectedFilter == NotificationFilter.all
-                      ? 'Hiện tại danh sách đang trống. Khi bạn bấm làm mới hoặc đổi vai trò, đây sẽ là nơi test dữ liệu thông báo.'
-                      : 'Không có thông báo nào phù hợp với bộ lọc này.',
-                  icon: Icons.notifications_none_rounded,
+                return SingleChildScrollView(
+                  physics: const AlwaysScrollableScrollPhysics(),
+                  child: Column(
+                    children: [
+                      headerCreateCard,
+                      PortalEmptyState(
+                        title: 'Chưa có thông báo',
+                        message: _viewModel.selectedFilter == NotificationFilter.all
+                            ? 'Hiện tại danh sách đang trống. Khi bạn bấm làm mới hoặc đổi vai trò, đây sẽ là nơi test dữ liệu thông báo.'
+                            : 'Không có thông báo nào phù hợp với bộ lọc này.',
+                        icon: Icons.notifications_none_rounded,
+                      ),
+                    ],
+                  ),
                 );
               }
 
@@ -213,9 +324,14 @@ class _NotificationViewState extends State<NotificationView> {
                 onRefresh: _refresh,
                 child: ListView.builder(
                   physics: const AlwaysScrollableScrollPhysics(),
-                  itemCount: grouped.length,
+                  itemCount: grouped.length + (session.isEmployee ? 1 : 0),
                   itemBuilder: (context, index) {
-                    final dateStr = grouped.keys.elementAt(index);
+                    if (session.isEmployee && index == 0) {
+                      return headerCreateCard;
+                    }
+
+                    final groupIndex = session.isEmployee ? index - 1 : index;
+                    final dateStr = grouped.keys.elementAt(groupIndex);
                     final dayItems = grouped[dateStr]!;
                     final unreadCount = dayItems.where((e) => !e.isRead).length;
 

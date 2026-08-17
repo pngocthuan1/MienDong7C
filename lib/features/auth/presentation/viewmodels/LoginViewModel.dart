@@ -220,7 +220,7 @@ class LoginViewModel extends ChangeNotifier {
       }
       userRole = UserRole.employee;
     } else {
-      if (savedName == null || savedName.trim().isEmpty || savedName.trim() == phoneVal.trim()) {
+      if (savedName == null || savedName.trim().isEmpty || savedName.trim() == phoneVal.trim() || savedName.trim() == 'Khách hàng') {
         try {
           final res = await AppLocator.portalRepository.loadPatientProfiles();
           if (res is Ok<List<PatientProfileDraftEntity>> && res.data.isNotEmpty) {
@@ -228,14 +228,15 @@ class LoginViewModel extends ChangeNotifier {
             if (firstHoTen.isNotEmpty) {
               savedName = firstHoTen;
               prefs.setString('full_name_$cleanPhone', savedName);
+              prefs.setString('saved_full_name', savedName);
             }
           }
         } catch (_) {}
       }
 
-      userFullName = (savedName != null && savedName.trim().isNotEmpty && savedName.trim() != phoneVal.trim())
+      userFullName = (savedName != null && savedName.trim().isNotEmpty && savedName.trim() != phoneVal.trim() && savedName.trim() != 'Khách hàng')
           ? savedName.trim()
-          : 'Khách hàng';
+          : (phoneVal.trim().isNotEmpty ? 'Tài khoản ${phoneVal.trim()}' : 'Khách hàng');
       userRole = UserRole.customer;
     }
 

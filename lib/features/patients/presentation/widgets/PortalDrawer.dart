@@ -102,6 +102,17 @@ class PortalDrawer extends StatelessWidget {
                   onTap: onHomeTap,
                 ),
                 const Divider(height: 1),
+                if (session.isEmployee) ...[
+                  _DrawerTile(
+                    icon: Icons.post_add_rounded,
+                    label: 'Đăng thông báo mới',
+                    onTap: () {
+                      AppNavigator.safePop(context);
+                      AppNavigator.pushNamed(context, RouteNames.createNotification);
+                    },
+                  ),
+                  const Divider(height: 1),
+                ],
                 _DrawerGroup(
                   title: 'Thông báo',
                   icon: Icons.notifications_active_rounded,
