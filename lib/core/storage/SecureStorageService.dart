@@ -16,6 +16,9 @@ class SecureStorageService {
   static const String _refreshTokenKey = 'refresh_token';
   static const String _expiresRefreshTokenKey = 'expires_refresh_token';
   static const String _deviceIdKey = 'device_id';
+  static const String _biometricPhoneKey = 'biometric_phone';
+  static const String _biometricPasswordKey = 'biometric_password';
+  static const String _biometricEnabledKey = 'biometric_enabled';
 
   // ---------------------------------------------------------------------
   // Access Token
@@ -149,5 +152,36 @@ class SecureStorageService {
 
     await _storage.write(key: _deviceIdKey, value: deviceId);
     return deviceId;
+  }
+
+  // ==================== Biometric Credentials ====================
+
+  Future<void> saveBiometricCredentials(String phone, String password) async {
+    await Future.wait([
+      _storage.write(key: _biometricPhoneKey, value: phone),
+      _storage.write(key: _biometricPasswordKey, value: password),
+    ]);
+  }
+
+  Future<(String?, String?)> getBiometricCredentials() async {
+    final phone = await _storage.read(key: _biometricPhoneKey);
+    final password = await _storage.read(key: _biometricPasswordKey);
+    return (phone, password);
+  }
+
+  Future<void> clearBiometricCredentials() async {
+    await Future.wait([
+      _storage.delete(key: _biometricPhoneKey),
+      _storage.delete(key: _biometricPasswordKey),
+    ]);
+  }
+
+  Future<void> setBiometricEnabled(bool enabled) async {
+    await _storage.write(key: _biometricEnabledKey, value: enabled.toString());
+  }
+
+  Future<bool> isBiometricEnabled() async {
+    final val = await _storage.read(key: _biometricEnabledKey);
+    return val == 'true';
   }
 }

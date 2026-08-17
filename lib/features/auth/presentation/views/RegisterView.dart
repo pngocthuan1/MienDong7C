@@ -30,6 +30,7 @@ class _RegisterViewState extends State<RegisterView> {
   late final FocusNode _passwordFocusNode;
   String? _captchaToken;
   bool _isBotSimulation = false;
+  bool _agreeToTerms = false;
 
   @override
   void initState() {
@@ -255,6 +256,56 @@ class _RegisterViewState extends State<RegisterView> {
                       ],
                     ),
                   ),
+                  const SizedBox(height: 12),
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      SizedBox(
+                        height: 24,
+                        width: 24,
+                        child: Checkbox(
+                          value: _agreeToTerms,
+                          onChanged: (val) {
+                            setState(() {
+                              _agreeToTerms = val ?? false;
+                            });
+                          },
+                          activeColor: const Color(0xFF1976D2),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: RichText(
+                          text: TextSpan(
+                            style: const TextStyle(
+                              color: Color(0xFF64748B),
+                              fontSize: 13,
+                              height: 1.4,
+                            ),
+                            children: [
+                              const TextSpan(text: 'Tôi đồng ý với '),
+                              TextSpan(
+                                text: 'Điều khoản sử dụng',
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  color: Color(0xFF1976D2),
+                                ),
+                              ),
+                              const TextSpan(text: ' và '),
+                              TextSpan(
+                                text: 'Chính sách bảo vệ dữ liệu cá nhân',
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  color: Color(0xFF1976D2),
+                                ),
+                              ),
+                              const TextSpan(text: ' của Bệnh viện 7C.'),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
                   const SizedBox(height: AppSizes.sectionSpacing),
                   ListenableBuilder(
                     listenable: _viewModel.registerCommand,
@@ -264,7 +315,7 @@ class _RegisterViewState extends State<RegisterView> {
                         label: 'Đăng ký bằng số điện thoại',
                         icon: Icons.verified_user_outlined,
                         isLoading: _viewModel.registerCommand.running,
-                        onPressed: isCaptchaVerified ? _submit : null,
+                        onPressed: (isCaptchaVerified && _agreeToTerms) ? _submit : null,
                       );
                     },
                   ),

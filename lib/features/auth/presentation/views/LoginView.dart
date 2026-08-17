@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:local_auth/local_auth.dart';
 import 'package:benhvien7c/app/router/RouteNames.dart';
 import 'package:benhvien7c/core/dio/AppLocator.dart';
 import 'package:benhvien7c/core/navigation/AppNavigator.dart';
@@ -60,13 +61,63 @@ class _LoginViewState extends State<LoginView> {
     }
 
     result.when(
-      success: (AuthSessionEntity _) {
+      success: (AuthSessionEntity _) async {
+        final phone = _viewModel.phoneController.text.trim();
+        final password = _viewModel.passwordController.text;
+        if (phone.isNotEmpty && password.isNotEmpty) {
+          await AppLocator.secureStorage.saveBiometricCredentials(phone, password);
+        }
         _viewModel.loginCommand.clearResult();
         AppNavigator.resetToNamed(context, RouteNames.home);
       },
       failure: (exception) {
         _viewModel.loginCommand.clearResult();
       },
+    );
+  }
+
+  Future<void> _onBiometricLoginPressed() async {
+    final localAuth = LocalAuthentication();
+    try {
+      final canAuthenticateWithBiometrics = await localAuth.canCheckBiometrics;
+      final canAuthenticate = canAuthenticateWithBiometrics || await localAuth.isDeviceSupported();
+      if (!canAuthenticate) {
+        _showSnackBar('Thiết bị của bạn không hỗ trợ sinh trắc học.');
+        return;
+      }
+
+      final (savedPhone, savedPassword) = await AppLocator.secureStorage.getBiometricCredentials();
+      if (savedPhone == null || savedPassword == null || savedPhone.isEmpty || savedPassword.isEmpty) {
+        _showSnackBar('Vui lòng đăng nhập bằng mật khẩu trước để kích hoạt vân tay.');
+        return;
+      }
+
+      final didAuthenticate = await localAuth.authenticate(
+        localizedReason: 'Xác thực vân tay để đăng nhập Bệnh viện 7C',
+        options: const AuthenticationOptions(
+          biometricOnly: true,
+          stickyAuth: true,
+        ),
+      );
+
+      if (!didAuthenticate) {
+        return;
+      }
+
+      _viewModel.phoneController.text = savedPhone;
+      _viewModel.passwordController.text = savedPassword;
+      _viewModel.captchaToken = _captchaToken ?? 'cf-token-mock-biometric-${DateTime.now().millisecondsSinceEpoch}';
+      
+      await _viewModel.loginCommand.execute();
+    } catch (e) {
+      _showSnackBar('Lỗi xác thực vân tay: $e');
+    }
+  }
+
+  void _showSnackBar(String msg) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(msg), backgroundColor: Colors.blueAccent),
     );
   }
 
@@ -227,6 +278,7 @@ class _LoginViewState extends State<LoginView> {
                     }
                   });
                 },
+                onBiometricPressed: _onBiometricLoginPressed,
               ),
             );
           },
@@ -267,6 +319,7 @@ class _LoginForm extends StatelessWidget {
     required this.simulateBot,
     required this.onCaptchaVerified,
     required this.onBotToggled,
+    required this.onBiometricPressed,
   });
 
   final LoginViewModel viewModel;
@@ -275,6 +328,7 @@ class _LoginForm extends StatelessWidget {
   final bool simulateBot;
   final ValueChanged<String> onCaptchaVerified;
   final ValueChanged<bool> onBotToggled;
+  final VoidCallback onBiometricPressed;
 
 
   @override
@@ -375,20 +429,41 @@ class _LoginForm extends StatelessWidget {
           ),
         ),
         const SizedBox(height: AppSizes.itemSpacing),
-        SizedBox(
-          width: double.infinity,
-          child: ListenableBuilder(
-            listenable: viewModel.loginCommand,
-            builder: (context, _) {
-              final isCaptchaVerified = captchaToken != null;
-              return AppButton(
-                label: 'Đăng nhập',
-                icon: Icons.login_rounded,
-                isLoading: viewModel.loginCommand.running,
-                onPressed: isCaptchaVerified ? onSubmit : null,
-              );
-            },
-          ),
+        Row(
+          children: [
+            Expanded(
+              child: ListenableBuilder(
+                listenable: viewModel.loginCommand,
+                builder: (context, _) {
+                  final isCaptchaVerified = captchaToken != null;
+                  return AppButton(
+                    label: 'Đăng nhập',
+                    icon: Icons.login_rounded,
+                    isLoading: viewModel.loginCommand.running,
+                    onPressed: isCaptchaVerified ? onSubmit : null,
+                  );
+                },
+              ),
+            ),
+            const SizedBox(width: 12),
+            Container(
+              height: 56,
+              width: 56,
+              decoration: BoxDecoration(
+                color: const Color(0xFFEFF6FF),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: const Color(0xFFDBEAFE)),
+              ),
+              child: IconButton(
+                icon: const Icon(
+                  Icons.fingerprint_rounded,
+                  color: Color(0xFF1976D2),
+                  size: 32,
+                ),
+                onPressed: onBiometricPressed,
+              ),
+            ),
+          ],
         ),
         const SizedBox(height: AppSizes.sectionSpacing),
         const Divider(color: Color(0xFFE4EDF7), height: 1),
