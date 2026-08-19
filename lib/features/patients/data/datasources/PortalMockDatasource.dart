@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:benhvien7c/core/utils/JsHelper.dart';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:benhvien7c/core/session/AppSessionStore.dart';
 
 import 'package:benhvien7c/core/network/ApiException.dart';
 import 'package:benhvien7c/features/auth/domain/entities/UserRole.dart';
@@ -95,7 +96,7 @@ class PortalMockDatasource {
   ) async {
     await Future<void>.delayed(const Duration(milliseconds: 200));
 
-    final mockRecipients = [
+    final List<Map<String, String>> mockRecipients = [
       {'name': 'Nguyễn Văn Nam', 'role': 'Khách hàng', 'userId': 'USR001'},
       {'name': 'Trần Thị Mỹ Linh', 'role': 'Khách hàng', 'userId': 'USR002'},
       {'name': 'Lê Hoàng Long', 'role': 'Bác sĩ', 'userId': 'USR003'},
@@ -109,6 +110,33 @@ class PortalMockDatasource {
       {'name': 'Hoàng Minh Châu', 'role': 'Bác sĩ', 'userId': 'USR011'},
       {'name': 'Lý Tiểu Long', 'role': 'Khách hàng', 'userId': 'USR012'},
     ];
+
+    // Tự động thêm tài khoản đang đăng nhập vào danh sách để luôn có thể test tính năng "Tôi" màu hồng
+    final currentUser = AppSessionStore.instance.currentUser;
+    if (currentUser != null) {
+      final currentPhone = currentUser.phoneNumber;
+      final currentCleanPhone = currentPhone.replaceAll(RegExp(r'\D'), '');
+      
+      String currentUserId = 'USR001';
+      if (currentCleanPhone == '0822380103' || currentCleanPhone == '822380103') {
+        currentUserId = 'USR006';
+      } else if (currentCleanPhone == '0902377251' || currentCleanPhone == '902377251') {
+        currentUserId = 'USR001';
+      } else {
+        currentUserId = currentCleanPhone.length >= 6
+            ? 'USR_${currentCleanPhone.substring(currentCleanPhone.length - 6)}'
+            : 'USR_$currentCleanPhone';
+      }
+
+      final hasMe = mockRecipients.any((e) => e['userId'] == currentUserId);
+      if (!hasMe) {
+        mockRecipients.insert(0, {
+          'name': currentUser.fullName,
+          'role': currentUser.role == UserRole.employee ? 'Bác sĩ' : 'Khách hàng',
+          'userId': currentUserId,
+        });
+      }
+    }
 
     final rand = Random(notificationId.hashCode);
     final List<NotificationReadStatusEntity> result = [];

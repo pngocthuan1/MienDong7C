@@ -733,6 +733,20 @@ class _NotificationDetailViewState extends State<NotificationDetailView> {
     );
   }
 
+  String _resolveUserId(String? phoneNumber) {
+    if (phoneNumber == null) return '';
+    final cleanPhone = phoneNumber.replaceAll(RegExp(r'\D'), '');
+    if (cleanPhone == '0822380103' || cleanPhone == '822380103') {
+      return 'USR006'; // Lê Nguyễn Gia Hưng (Bác sĩ)
+    }
+    if (cleanPhone == '0902377251' || cleanPhone == '902377251') {
+      return 'USR001'; // Nguyễn Văn Nam (Khách hàng)
+    }
+    return cleanPhone.length >= 6
+        ? 'USR_${cleanPhone.substring(cleanPhone.length - 6)}'
+        : 'USR_$cleanPhone';
+  }
+
   Widget _buildViewerTrackingSection() {
     return ListenableBuilder(
       listenable: _viewModel.loadReadStatusCommand,
@@ -761,7 +775,7 @@ class _NotificationDetailViewState extends State<NotificationDetailView> {
         final readCount = statuses.where((e) => e.isRead).length;
         final unreadCount = total - readCount;
 
-        final currentUserName = AppSessionStore.instance.currentUser?.fullName;
+        final currentUserId = _resolveUserId(AppSessionStore.instance.currentUser?.phoneNumber);
 
         final listToShow = statuses.where((e) => e.isRead == _showReadListOnly).toList();
 
@@ -883,7 +897,7 @@ class _NotificationDetailViewState extends State<NotificationDetailView> {
                 separatorBuilder: (context, index) => const Divider(color: Color(0xFFF1F5F9), height: 1),
                 itemBuilder: (context, index) {
                   final status = listToShow[index];
-                  final isMe = status.userName == currentUserName;
+                  final isMe = status.userId == currentUserId;
                   
                   Color textColor;
                   if (isMe) {
