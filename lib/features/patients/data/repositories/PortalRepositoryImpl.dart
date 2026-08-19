@@ -13,6 +13,7 @@ import 'package:benhvien7c/features/patients/domain/entities/UserManagementUserE
 import 'package:benhvien7c/features/patients/domain/entities/NotificationItemEntity.dart';
 import 'package:benhvien7c/features/patients/domain/entities/NotificationSummaryEntity.dart';
 import 'package:benhvien7c/features/patients/domain/entities/PatientProfileDraftEntity.dart';
+import 'package:benhvien7c/features/patients/domain/entities/NotificationReadStatusEntity.dart';
 import 'package:benhvien7c/features/patients/domain/repositories/PortalRepository.dart';
 
 class PortalRepositoryImpl implements PortalRepository {
@@ -737,5 +738,19 @@ class PortalRepositoryImpl implements PortalRepository {
       return serverNgayUd;
     }
     return DateFormat('dd/MM/yyyy HH:mm:ss').format(DateTime.now());
+  }
+
+  @override
+  Future<Result<List<NotificationReadStatusEntity>>> loadNotificationReadStatus(
+    String notificationId,
+  ) async {
+    try {
+      final statuses = await _datasource.loadNotificationReadStatus(notificationId);
+      return Ok(statuses);
+    } on Exception catch (exception) {
+      return Error(exception, exception.toString());
+    } catch (error) {
+      return Error(Exception(error.toString()), error.toString());
+    }
   }
 }

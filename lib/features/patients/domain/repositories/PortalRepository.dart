@@ -6,6 +6,7 @@ import 'package:benhvien7c/features/patients/domain/entities/UserManagementUserE
 import 'package:benhvien7c/features/patients/domain/entities/NotificationItemEntity.dart';
 import 'package:benhvien7c/features/patients/domain/entities/NotificationSummaryEntity.dart';
 import 'package:benhvien7c/features/patients/domain/entities/PatientProfileDraftEntity.dart';
+import 'package:benhvien7c/features/patients/domain/entities/NotificationReadStatusEntity.dart';
 import 'package:benhvien7c/features/patients/data/models/DatLichKhamDtos.dart';
 
 abstract class PortalRepository {
@@ -98,4 +99,8 @@ abstract class PortalRepository {
   Future<Result<DkkThongTinKhamListMasterDto>> fetchNgayGioKham();
   Future<Result<List<DkkHoSoBenhNhanDto>>> fetchHoSoByMaHS(String maHS);
   Future<Result<DkkSoKhamDto>> fetchPhieuSoKham(int id);
+
+  Future<Result<List<NotificationReadStatusEntity>>> loadNotificationReadStatus(
+    String notificationId,
+  );
 }

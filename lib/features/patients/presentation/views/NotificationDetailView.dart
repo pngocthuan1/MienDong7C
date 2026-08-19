@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:benhvien7c/core/dio/AppLocator.dart';
 import 'package:benhvien7c/features/patients/domain/entities/NotificationItemEntity.dart';
+import 'package:benhvien7c/features/patients/domain/entities/NotificationReadStatusEntity.dart';
 import 'package:benhvien7c/features/patients/presentation/viewmodels/NotificationViewModel.dart';
+import 'package:benhvien7c/core/session/AppSessionStore.dart';
 
 class NotificationDetailView extends StatefulWidget {
   const NotificationDetailView({
@@ -20,6 +22,9 @@ class _NotificationDetailViewState extends State<NotificationDetailView> {
   late final NotificationViewModel _viewModel;
   late NotificationItemEntity _item;
 
+  bool get _isSender => AppSessionStore.instance.currentUser?.fullName == _item.senderName;
+  bool _showReadListOnly = true; // Tab filter: true = show read, false = show unread
+
   @override
   void initState() {
     super.initState();
@@ -30,6 +35,9 @@ class _NotificationDetailViewState extends State<NotificationDetailView> {
     );
     // Tải lại danh sách để đồng bộ trạng thái mới nhất từ server giả lập
     _viewModel.loadCommand.execute();
+    if (_isSender) {
+      _viewModel.loadReadStatusCommand.execute(_item.id);
+    }
   }
 
   @override
@@ -640,6 +648,12 @@ class _NotificationDetailViewState extends State<NotificationDetailView> {
                         const SizedBox(height: 20),
                         _buildAttachmentCard(currentItem),
                       ],
+                      if (_isSender) ...[
+                        const SizedBox(height: 24),
+                        const Divider(color: Color(0xFFE0E0E0), height: 1),
+                        const SizedBox(height: 20),
+                        _buildViewerTrackingSection(),
+                      ],
                     ],
                   ),
                 ),
@@ -717,6 +731,301 @@ class _NotificationDetailViewState extends State<NotificationDetailView> {
         );
       },
     );
+  }
+
+  Widget _buildViewerTrackingSection() {
+    return ListenableBuilder(
+      listenable: _viewModel.loadReadStatusCommand,
+      builder: (context, _) {
+        if (_viewModel.loadReadStatusCommand.running) {
+          return const Center(
+            child: Padding(
+              padding: EdgeInsets.symmetric(vertical: 20),
+              child: CircularProgressIndicator(strokeWidth: 2.0),
+            ),
+          );
+        }
+
+        final error = _viewModel.loadReadStatusCommand.error;
+        if (error != null) {
+          return Center(
+            child: Text(
+              'Không thể tải trạng thái người xem: $error',
+              style: const TextStyle(color: Colors.redAccent, fontSize: 13),
+            ),
+          );
+        }
+
+        final List<NotificationReadStatusEntity> statuses = _viewModel.readStatuses;
+        final total = statuses.length;
+        final readCount = statuses.where((e) => e.isRead).length;
+        final unreadCount = total - readCount;
+
+        final currentUserName = AppSessionStore.instance.currentUser?.fullName;
+
+        final listToShow = statuses.where((e) => e.isRead == _showReadListOnly).toList();
+
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Row(
+              children: [
+                Icon(Icons.analytics_outlined, color: Color(0xFF1976D2), size: 20),
+                SizedBox(width: 8),
+                Text(
+                  'Theo dõi trạng thái người xem',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                    color: Color(0xFF0F172A),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: const Color(0xFFF8FAFC),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: const Color(0xFFE2E8F0)),
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceAround,
+                children: [
+                  _buildCounterColumn('Người nhận', total.toString(), Colors.blueGrey),
+                  _buildCounterColumn('Đã xem', readCount.toString(), const Color(0xFF10B981)),
+                  _buildCounterColumn('Chưa xem', unreadCount.toString(), const Color(0xFF3B82F6)),
+                ],
+              ),
+            ),
+            const SizedBox(height: 16),
+            Row(
+              children: [
+                Expanded(
+                  child: InkWell(
+                    onTap: () {
+                      setState(() {
+                        _showReadListOnly = true;
+                      });
+                    },
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(vertical: 10),
+                      decoration: BoxDecoration(
+                        border: Border(
+                          bottom: BorderSide(
+                            color: _showReadListOnly ? const Color(0xFF1976D2) : Colors.transparent,
+                            width: 2,
+                          ),
+                        ),
+                      ),
+                      child: Center(
+                        child: Text(
+                          'Đã xem ($readCount)',
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 14,
+                            color: _showReadListOnly ? const Color(0xFF1976D2) : const Color(0xFF64748B),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+                Expanded(
+                  child: InkWell(
+                    onTap: () {
+                      setState(() {
+                        _showReadListOnly = false;
+                      });
+                    },
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(vertical: 10),
+                      decoration: BoxDecoration(
+                        border: Border(
+                          bottom: BorderSide(
+                            color: !_showReadListOnly ? const Color(0xFF1976D2) : Colors.transparent,
+                            width: 2,
+                          ),
+                        ),
+                      ),
+                      child: Center(
+                        child: Text(
+                          'Chưa xem ($unreadCount)',
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 14,
+                            color: !_showReadListOnly ? const Color(0xFF1976D2) : const Color(0xFF64748B),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            if (listToShow.isEmpty)
+              const Padding(
+                padding: EdgeInsets.symmetric(vertical: 24),
+                child: Center(
+                  child: Text(
+                    'Không tìm thấy người dùng nào trong mục này.',
+                    style: TextStyle(color: Color(0xFF94A3B8), fontSize: 13),
+                  ),
+                ),
+              )
+            else
+              ListView.separated(
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                itemCount: listToShow.length,
+                separatorBuilder: (context, index) => const Divider(color: Color(0xFFF1F5F9), height: 1),
+                itemBuilder: (context, index) {
+                  final status = listToShow[index];
+                  final isMe = status.userName == currentUserName;
+                  
+                  Color textColor;
+                  if (isMe) {
+                    textColor = const Color(0xFFDB2777); // Màu hồng sẫm/hồng nhạt nổi bật dễ đọc
+                  } else if (status.isRead) {
+                    textColor = const Color(0xFF0F172A); // Màu đen cho đã xem
+                  } else {
+                    textColor = const Color(0xFF2563EB); // Màu xanh dương cho chưa xem
+                  }
+
+                  return Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 4),
+                    child: Row(
+                      children: [
+                        CircleAvatar(
+                          radius: 16,
+                          backgroundColor: isMe
+                              ? const Color(0xFFFCE7F3)
+                              : status.isRead
+                                  ? const Color(0xFFD1FAE5)
+                                  : const Color(0xFFDBEAFE),
+                          child: Icon(
+                            isMe
+                                ? Icons.face_rounded
+                                : status.isRead
+                                    ? Icons.done_rounded
+                                    : Icons.mail_outline_rounded,
+                            size: 16,
+                            color: isMe
+                                ? const Color(0xFFDB2777)
+                                : status.isRead
+                                    ? const Color(0xFF059669)
+                                    : const Color(0xFF2563EB),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                children: [
+                                  Text(
+                                    status.userName,
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 14,
+                                      color: textColor,
+                                    ),
+                                  ),
+                                  if (isMe) ...[
+                                    const SizedBox(width: 6),
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                                      decoration: BoxDecoration(
+                                        color: const Color(0xFFFCE7F3),
+                                        borderRadius: BorderRadius.circular(4),
+                                      ),
+                                      child: const Text(
+                                        'Tôi',
+                                        style: TextStyle(
+                                          fontSize: 10,
+                                          fontWeight: FontWeight.bold,
+                                          color: Color(0xFFDB2777),
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ],
+                              ),
+                              const SizedBox(height: 2),
+                              Text(
+                                status.userRole,
+                                style: const TextStyle(
+                                  fontSize: 12,
+                                  color: Color(0xFF64748B),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        if (status.isRead && status.readAt != null)
+                          Text(
+                            _formatReadTime(status.readAt!),
+                            style: const TextStyle(
+                              fontSize: 12,
+                              color: Color(0xFF64748B),
+                            ),
+                          )
+                        else if (!status.isRead)
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFEFF6FF),
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: Text(
+                              'Chưa đọc',
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.bold,
+                                color: textColor,
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
+                  );
+                },
+              ),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _buildCounterColumn(String label, String count, Color color) {
+    return Column(
+      children: [
+        Text(
+          count,
+          style: TextStyle(
+            fontSize: 20,
+            fontWeight: FontWeight.w900,
+            color: color,
+          ),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          label,
+          style: const TextStyle(
+            fontSize: 12,
+            color: Color(0xFF64748B),
+            fontWeight: FontWeight.w500,
+          ),
+        ),
+      ],
+    );
+  }
+
+  String _formatReadTime(DateTime time) {
+    return '${time.hour.toString().padLeft(2, '0')}:${time.minute.toString().padLeft(2, '0')} - ${time.day.toString().padLeft(2, '0')}/${time.month.toString().padLeft(2, '0')}';
   }
 }
 

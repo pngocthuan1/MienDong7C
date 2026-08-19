@@ -3,6 +3,7 @@ import 'package:benhvien7c/core/commands/result.dart';
 import 'package:benhvien7c/core/session/AppSessionStore.dart';
 import 'package:benhvien7c/features/patients/domain/entities/NotificationItemEntity.dart';
 import 'package:benhvien7c/features/patients/domain/entities/NotificationSummaryEntity.dart';
+import 'package:benhvien7c/features/patients/domain/entities/NotificationReadStatusEntity.dart';
 import 'package:benhvien7c/features/patients/domain/repositories/PortalRepository.dart';
 import 'package:benhvien7c/features/patients/presentation/viewmodels/BasePortalViewModel.dart';
 
@@ -14,10 +15,13 @@ class NotificationViewModel extends BasePortalViewModel {
     AppSessionStore sessionStore,
   ) : super(repository, sessionStore) {
     loadCommand = Command0<List<NotificationItemEntity>>(_loadNotifications);
+    loadReadStatusCommand = Command1<List<NotificationReadStatusEntity>, String>(_loadReadStatus);
   }
 
   late final Command0<List<NotificationItemEntity>> loadCommand;
+  late final Command1<List<NotificationReadStatusEntity>, String> loadReadStatusCommand;
   List<NotificationItemEntity> items = const [];
+  List<NotificationReadStatusEntity> readStatuses = const [];
   NotificationSummaryEntity summary = const NotificationSummaryEntity(
     total: 0,
     unread: 0,
@@ -214,9 +218,24 @@ class NotificationViewModel extends BasePortalViewModel {
     return null;
   }
 
+  Future<Result<List<NotificationReadStatusEntity>>> _loadReadStatus(String notificationId) async {
+    return runSafely(() async {
+      final res = await portalRepository.loadNotificationReadStatus(notificationId);
+      return res.when(
+        ok: (data) {
+          readStatuses = data;
+          notifyListeners();
+          return Ok(data);
+        },
+        error: (ex, msg) => Error(ex, msg),
+      );
+    });
+  }
+
   @override
   void dispose() {
     loadCommand.dispose();
+    loadReadStatusCommand.dispose();
     super.dispose();
   }
 }

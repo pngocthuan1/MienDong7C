@@ -14,6 +14,7 @@ import 'package:benhvien7c/features/patients/domain/entities/UserManagementDetai
 import 'package:benhvien7c/features/patients/domain/entities/UserManagementHistoryEntity.dart';
 import 'package:benhvien7c/features/patients/domain/entities/UserManagementUserEntity.dart';
 import 'package:benhvien7c/features/patients/domain/entities/UserManagementVisitStatus.dart';
+import 'package:benhvien7c/features/patients/domain/entities/NotificationReadStatusEntity.dart';
 
 class PortalMockDatasource {
   PortalMockDatasource();
@@ -87,6 +88,59 @@ class PortalMockDatasource {
     final list = _notificationsFor(role);
     await _saveToCache(role);
     return List<NotificationItemEntity>.unmodifiable(list);
+  }
+
+  Future<List<NotificationReadStatusEntity>> loadNotificationReadStatus(
+    String notificationId,
+  ) async {
+    await Future<void>.delayed(const Duration(milliseconds: 200));
+
+    final mockRecipients = [
+      {'name': 'Nguyễn Văn Nam', 'role': 'Khách hàng', 'userId': 'USR001'},
+      {'name': 'Trần Thị Mỹ Linh', 'role': 'Khách hàng', 'userId': 'USR002'},
+      {'name': 'Lê Hoàng Long', 'role': 'Bác sĩ', 'userId': 'USR003'},
+      {'name': 'Phạm Ngọc Thuận', 'role': 'Khách hàng', 'userId': 'USR004'},
+      {'name': 'Nguyễn Hoàng Giang', 'role': 'Khách hàng', 'userId': 'USR005'},
+      {'name': 'Lê Nguyễn Gia Hưng', 'role': 'Bác sĩ', 'userId': 'USR006'},
+      {'name': 'Trần Văn Cường', 'role': 'Khách hàng', 'userId': 'USR007'},
+      {'name': 'Vương Gia Vĩ', 'role': 'Y tá', 'userId': 'USR008'},
+      {'name': 'Đặng Ngọc Hoàng', 'role': 'Khách hàng', 'userId': 'USR009'},
+      {'name': 'Bùi Thị Xuân', 'role': 'Khách hàng', 'userId': 'USR010'},
+      {'name': 'Hoàng Minh Châu', 'role': 'Bác sĩ', 'userId': 'USR011'},
+      {'name': 'Lý Tiểu Long', 'role': 'Khách hàng', 'userId': 'USR012'},
+    ];
+
+    final rand = Random(notificationId.hashCode);
+    final List<NotificationReadStatusEntity> result = [];
+
+    for (final recipient in mockRecipients) {
+      final isRead = rand.nextDouble() < 0.65;
+      DateTime? readTime;
+      if (isRead) {
+        readTime = DateTime.now().subtract(Duration(
+          hours: rand.nextInt(36),
+          minutes: rand.nextInt(60),
+        ));
+      }
+      result.add(NotificationReadStatusEntity(
+        userId: recipient['userId']!,
+        userName: recipient['name']!,
+        userRole: recipient['role']!,
+        isRead: isRead,
+        readAt: readTime,
+      ));
+    }
+
+    result.sort((a, b) {
+      if (a.isRead && !b.isRead) return -1;
+      if (!a.isRead && b.isRead) return 1;
+      if (a.isRead && b.isRead && a.readAt != null && b.readAt != null) {
+        return b.readAt!.compareTo(a.readAt!);
+      }
+      return a.userName.compareTo(b.userName);
+    });
+
+    return result;
   }
 
   Future<String> markNotificationAsRead(
