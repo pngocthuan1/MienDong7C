@@ -27,6 +27,13 @@ class MainActivity : FlutterFragmentActivity() {
                 }
                 pendingResult = result
                 launchNativeGalleryApp(mediaType)
+            } else if (call.method == "openFileWithExternalApp") {
+                val filePath = call.argument<String>("filePath")
+                if (filePath != null) {
+                    openFileWithExternalApp(filePath, result)
+                } else {
+                    result.error("INVALID_PATH", "FilePath is null", null)
+                }
             } else {
                 result.notImplemented()
             }
@@ -126,6 +133,48 @@ class MainActivity : FlutterFragmentActivity() {
             )
         } catch (e: Exception) {
             null
+        }
+    }
+
+    private fun openFileWithExternalApp(filePath: String, result: MethodChannel.Result) {
+        try {
+            val file = File(filePath)
+            if (!file.exists()) {
+                result.error("NOT_FOUND", "File not found on device", null)
+                return
+            }
+            val uri: Uri = androidx.core.content.FileProvider.getUriForFile(
+                this,
+                "$packageName.fileprovider",
+                file
+            )
+            val extension = file.extension.lowercase()
+            val mimeType = when (extension) {
+                "pdf" -> "application/pdf"
+                "docx" -> "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                "doc" -> "application/msword"
+                "xlsx" -> "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                "xls" -> "application/vnd.ms-excel"
+                "pptx" -> "application/vnd.openxmlformats-officedocument.presentationml.presentation"
+                "ppt" -> "application/vnd.ms-powerpoint"
+                "txt", "csv", "log" -> "text/plain"
+                "zip" -> "application/zip"
+                "rar" -> "application/x-rar-compressed"
+                "jpg", "jpeg", "png", "webp" -> "image/*"
+                "mp4", "mkv", "avi" -> "video/*"
+                "mp3", "wav", "m4a" -> "audio/*"
+                else -> "*/*"
+            }
+
+            val intent = Intent(Intent.ACTION_VIEW).apply {
+                setDataAndType(uri, mimeType)
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            startActivity(Intent.createChooser(intent, "Mở tệp bằng ứng dụng:"))
+            result.success(true)
+        } catch (e: Exception) {
+            result.error("CANNOT_OPEN", e.localizedMessage, null)
         }
     }
 }
