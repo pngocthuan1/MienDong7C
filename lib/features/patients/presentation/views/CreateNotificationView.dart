@@ -2,6 +2,7 @@ import 'dart:io';
 import 'dart:convert';
 import 'package:archive/archive.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:image_picker/image_picker.dart';
@@ -2626,6 +2627,8 @@ class _InAppPdfPreviewModalState extends State<_InAppPdfPreviewModal> {
 
   @override
   Widget build(BuildContext context) {
+    final bool isMobile = !kIsWeb && (defaultTargetPlatform == TargetPlatform.iOS || defaultTargetPlatform == TargetPlatform.android);
+
     return Dialog(
       insetPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 24),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
@@ -2649,10 +2652,11 @@ class _InAppPdfPreviewModalState extends State<_InAppPdfPreviewModal> {
                         overflow: TextOverflow.ellipsis,
                       ),
                     ),
-                    Text(
-                      '${_currentPage + 1}/$_totalPages',
-                      style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold),
-                    ),
+                    if (isMobile)
+                      Text(
+                        '${_currentPage + 1}/$_totalPages',
+                        style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold),
+                      ),
                     IconButton(
                       icon: const Icon(Icons.close_rounded, color: Colors.white),
                       onPressed: () => Navigator.of(context).pop(),
@@ -2661,23 +2665,96 @@ class _InAppPdfPreviewModalState extends State<_InAppPdfPreviewModal> {
                 ),
               ),
               Expanded(
-                child: PDFView(
-                  filePath: widget.filePath,
-                  enableSwipe: true,
-                  swipeHorizontal: false,
-                  autoSpacing: false,
-                  pageFling: false,
-                  onRender: (pages) {
-                    setState(() {
-                      _totalPages = pages ?? 0;
-                    });
-                  },
-                  onPageChanged: (page, total) {
-                    setState(() {
-                      _currentPage = page ?? 0;
-                    });
-                  },
-                ),
+                child: isMobile
+                    ? PDFView(
+                        filePath: widget.filePath,
+                        enableSwipe: true,
+                        swipeHorizontal: false,
+                        autoSpacing: false,
+                        pageFling: false,
+                        onRender: (pages) {
+                          setState(() {
+                            _totalPages = pages ?? 0;
+                          });
+                        },
+                        onPageChanged: (page, total) {
+                          setState(() {
+                            _currentPage = page ?? 0;
+                          });
+                        },
+                      )
+                    : Container(
+                        color: const Color(0xFFF1F5F9),
+                        padding: const EdgeInsets.all(24),
+                        child: Center(
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              const Icon(
+                                Icons.picture_as_pdf_rounded,
+                                color: Color(0xFFDC2626),
+                                size: 72,
+                              ),
+                              const SizedBox(height: 16),
+                              Text(
+                                widget.fileName,
+                                style: const TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.bold,
+                                  color: Color(0xFF0F172A),
+                                ),
+                                textAlign: TextAlign.center,
+                              ),
+                              const SizedBox(height: 12),
+                              const Text(
+                                'Tính năng xem trước PDF trực tiếp trong ứng dụng hiện chỉ hỗ trợ trên điện thoại di động (Android & iOS).',
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  color: Color(0xFF475569),
+                                ),
+                                textAlign: TextAlign.center,
+                              ),
+                              const SizedBox(height: 24),
+                              ElevatedButton.icon(
+                                onPressed: () async {
+                                  try {
+                                    if (kIsWeb) {
+                                      // Trên Web, mở blob URL hoặc link
+                                      final uri = Uri.parse(widget.filePath);
+                                      await launchUrl(uri);
+                                    } else {
+                                      // Trên Desktop, mở tệp tin cục bộ
+                                      final uri = Uri.file(widget.filePath);
+                                      await launchUrl(uri);
+                                    }
+                                  } catch (e) {
+                                    if (!context.mounted) return;
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      SnackBar(
+                                        content: Text('Không thể mở tệp: $e'),
+                                        backgroundColor: Colors.redAccent,
+                                      ),
+                                    );
+                                  }
+                                },
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: const Color(0xFFDC2626),
+                                  foregroundColor: Colors.white,
+                                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(10),
+                                  ),
+                                ),
+                                icon: const Icon(Icons.open_in_new_rounded, size: 18),
+                                label: const Text(
+                                  'Mở xem bằng Trình xem PDF hệ thống',
+                                  style: TextStyle(fontWeight: FontWeight.bold),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
               ),
             ],
           ),

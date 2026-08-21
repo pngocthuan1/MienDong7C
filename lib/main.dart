@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -137,6 +138,8 @@ void main() async {
     debugPrint('Lỗi phục hồi session: $e');
   }
 
+  final String initialRoute = appSessionStore.currentUser != null ? RouteNames.home : RouteNames.login;
+
   runApp(
     ProviderScope(
       overrides: [
@@ -144,13 +147,14 @@ void main() async {
         sharedPreferencesProvider.overrideWithValue(sharedPreferences),
         authRepositoryProvider.overrideWithValue(authRepository),
       ],
-      child: const MyApp(),
+      child: MyApp(initialRoute: initialRoute),
     ),
   );
 }
 
 class MyApp extends StatelessWidget {
-  const MyApp({super.key});
+  final String initialRoute;
+  const MyApp({super.key, required this.initialRoute});
 
   @override
   Widget build(BuildContext context) {
@@ -159,7 +163,17 @@ class MyApp extends StatelessWidget {
       title: 'Bệnh viện 7C',
       theme: AppTheme.light(), // Sử dụng cấu hình theme sáng có sẵn trong dự án
       navigatorKey: AppNavigator.navigatorKey, // Đăng ký navigatorKey toàn cục
-      initialRoute: RouteNames.login,
+      localizationsDelegates: const [
+        GlobalMaterialLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+      ],
+      supportedLocales: const [
+        Locale('vi', 'VN'),
+        Locale('en', 'US'),
+      ],
+      locale: const Locale('vi', 'VN'), // Đặt mặc định tiếng Việt cho toàn hệ thống
+      initialRoute: initialRoute,
       routes: {
         RouteNames.login: (context) => const LoginView(),
         RouteNames.home: (context) => const HomeView(),

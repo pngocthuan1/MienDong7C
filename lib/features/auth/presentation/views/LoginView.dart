@@ -32,6 +32,7 @@ class _LoginViewState extends State<LoginView> {
   late final LoginViewModel _viewModel;
   String? _captchaToken;
   bool _isBotSimulation = false;
+  bool _isFaceIdAvailable = false;
 
   @override
   void initState() {
@@ -41,6 +42,19 @@ class _LoginViewState extends State<LoginView> {
       AppLocator.secureStorage,
     );
     _viewModel.loginCommand.addListener(_onLoginChanged);
+    _checkFaceIdAvailable();
+  }
+
+  Future<void> _checkFaceIdAvailable() async {
+    try {
+      final localAuth = LocalAuthentication();
+      final available = await localAuth.getAvailableBiometrics();
+      if (available.contains(BiometricType.face)) {
+        setState(() {
+          _isFaceIdAvailable = true;
+        });
+      }
+    } catch (_) {}
   }
 
   @override
@@ -201,6 +215,31 @@ class _LoginViewState extends State<LoginView> {
                 ),
               ],
             ),
+            const SizedBox(height: 16),
+            const Divider(),
+            const SizedBox(height: 8),
+            StatefulBuilder(
+              builder: (context, setDialogState) {
+                return SwitchListTile(
+                  title: const Text(
+                    'Chế độ giả lập (Offline Demo)',
+                    style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold),
+                  ),
+                  subtitle: const Text(
+                    'Không cần kết nối Server Backend',
+                    style: TextStyle(fontSize: 11, color: Colors.grey),
+                  ),
+                  value: _viewModel.isOfflineDemo,
+                  onChanged: (val) {
+                    setDialogState(() {
+                      _viewModel.setOfflineDemo(val);
+                    });
+                  },
+                  activeColor: const Color(0xFF0D6EFD),
+                  contentPadding: EdgeInsets.zero,
+                );
+              },
+            ),
           ],
         ),
         actions: [
@@ -279,6 +318,7 @@ class _LoginViewState extends State<LoginView> {
                   });
                 },
                 onBiometricPressed: _onBiometricLoginPressed,
+                isFaceIdAvailable: _isFaceIdAvailable,
               ),
             );
           },
@@ -320,6 +360,7 @@ class _LoginForm extends StatelessWidget {
     required this.onCaptchaVerified,
     required this.onBotToggled,
     required this.onBiometricPressed,
+    required this.isFaceIdAvailable,
   });
 
   final LoginViewModel viewModel;
@@ -329,6 +370,7 @@ class _LoginForm extends StatelessWidget {
   final ValueChanged<String> onCaptchaVerified;
   final ValueChanged<bool> onBotToggled;
   final VoidCallback onBiometricPressed;
+  final bool isFaceIdAvailable;
 
 
   @override
@@ -455,9 +497,9 @@ class _LoginForm extends StatelessWidget {
                 border: Border.all(color: const Color(0xFFDBEAFE)),
               ),
               child: IconButton(
-                icon: const Icon(
-                  Icons.fingerprint_rounded,
-                  color: Color(0xFF1976D2),
+                icon: Icon(
+                  isFaceIdAvailable ? Icons.face_unlock_rounded : Icons.fingerprint_rounded,
+                  color: const Color(0xFF1976D2),
                   size: 32,
                 ),
                 onPressed: onBiometricPressed,

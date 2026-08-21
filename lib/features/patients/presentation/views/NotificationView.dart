@@ -4,6 +4,7 @@ import 'package:benhvien7c/core/dio/AppLocator.dart';
 import 'package:benhvien7c/core/navigation/AppNavigator.dart';
 import 'package:benhvien7c/features/patients/domain/entities/NotificationItemEntity.dart';
 import 'package:benhvien7c/features/patients/presentation/viewmodels/NotificationViewModel.dart';
+import 'package:benhvien7c/core/session/AppSessionStore.dart';
 import 'package:benhvien7c/features/patients/presentation/widgets/PortalDrawer.dart';
 import 'package:benhvien7c/features/patients/presentation/widgets/PortalEmptyState.dart';
 
@@ -39,6 +40,42 @@ class _NotificationViewState extends State<NotificationView> {
       }
       _initializedFilter = true;
     }
+  }
+
+  DateTime? _selectedDateFilter;
+
+  Future<void> _selectDateFilter() async {
+    final DateTime? picked = await showDatePicker(
+      context: context,
+      initialDate: _selectedDateFilter ?? DateTime.now(),
+      firstDate: DateTime(2020),
+      lastDate: DateTime(2030),
+      locale: const Locale('vi', 'VN'),
+      builder: (context, child) {
+        return Theme(
+          data: Theme.of(context).copyWith(
+            colorScheme: const ColorScheme.light(
+              primary: Color(0xFF2F7DE1),
+              onPrimary: Colors.white,
+              onSurface: Color(0xFF0F172A),
+            ),
+          ),
+          child: child!,
+        );
+      },
+    );
+    if (picked != null && picked != _selectedDateFilter) {
+      setState(() {
+        _selectedDateFilter = picked;
+      });
+    }
+  }
+
+  String _formatFilterDate(DateTime date) {
+    final d = date.day.toString().padLeft(2, '0');
+    final m = date.month.toString().padLeft(2, '0');
+    final y = date.year;
+    return '$d/$m/$y';
   }
 
   @override
@@ -169,6 +206,27 @@ class _NotificationViewState extends State<NotificationView> {
               style: const TextStyle(fontWeight: FontWeight.w700),
             ),
             actions: [
+              IconButton(
+                icon: Icon(
+                  _selectedDateFilter == null
+                      ? Icons.calendar_month_rounded
+                      : Icons.event_available_rounded,
+                  color: _selectedDateFilter == null ? Colors.white : Colors.amberAccent,
+                ),
+                tooltip: 'Lọc theo ngày',
+                onPressed: _selectDateFilter,
+              ),
+              if (_selectedDateFilter != null) ...[
+                IconButton(
+                  icon: const Icon(Icons.filter_alt_off_rounded, color: Colors.white),
+                  tooltip: 'Xóa bộ lọc ngày',
+                  onPressed: () {
+                    setState(() {
+                      _selectedDateFilter = null;
+                    });
+                  },
+                ),
+              ],
               if (session.isEmployee) ...[
                 IconButton(
                   icon: const Icon(Icons.post_add_rounded, color: Colors.white),
@@ -183,7 +241,7 @@ class _NotificationViewState extends State<NotificationView> {
               ],
               Center(
                 child: Padding(
-                  padding: const EdgeInsets.only(right: 14),
+                  padding: const EdgeInsets.only(right: 14, left: 8),
                   child: Text(
                     'MỚI: ${_viewModel.summary.unread}',
                     style: const TextStyle(
@@ -220,102 +278,88 @@ class _NotificationViewState extends State<NotificationView> {
                 return const Center(child: CircularProgressIndicator());
               }
 
-              Widget headerCreateCard = const SizedBox.shrink();
-              if (session.isEmployee) {
-                headerCreateCard = Container(
-                  margin: const EdgeInsets.fromLTRB(14, 14, 14, 6),
-                  padding: const EdgeInsets.all(16),
+              // Lọc danh sách theo ngày được chọn
+              final filteredList = _selectedDateFilter == null
+                  ? listToDisplay
+                  : listToDisplay.where((item) {
+                      final itemDate = item.createdAt;
+                      return itemDate.year == _selectedDateFilter!.year &&
+                          itemDate.month == _selectedDateFilter!.month &&
+                          itemDate.day == _selectedDateFilter!.day;
+                    }).toList();
+
+              // Widget Banner hiển thị trạng thái lọc ngày ở đầu body
+              Widget activeFilterBanner = const SizedBox.shrink();
+              if (_selectedDateFilter != null) {
+                activeFilterBanner = Container(
+                  margin: const EdgeInsets.fromLTRB(14, 12, 14, 4),
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                   decoration: BoxDecoration(
-                    gradient: const LinearGradient(
-                      colors: [Color(0xFF2F7DE1), Color(0xFF1D4ED8)],
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                    ),
-                    borderRadius: BorderRadius.circular(16),
-                    boxShadow: [
-                      BoxShadow(
-                        color: const Color(0xFF2F7DE1).withValues(alpha: 0.3),
-                        blurRadius: 10,
-                        offset: const Offset(0, 4),
-                      ),
-                    ],
+                    color: const Color(0xFFFEF3C7), // Màu vàng cam nhạt
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: const Color(0xFFFDE68A)),
                   ),
                   child: Row(
                     children: [
-                      Container(
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          color: Colors.white.withValues(alpha: 0.2),
-                          shape: BoxShape.circle,
-                        ),
-                        child: const Icon(Icons.post_add_rounded, color: Colors.white, size: 28),
-                      ),
-                      const SizedBox(width: 14),
+                      const Icon(Icons.info_outline_rounded, color: Color(0xFFD97706), size: 18),
+                      const SizedBox(width: 8),
                       Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: const [
-                            Text(
-                              'Đăng thông báo nội bộ',
-                              style: TextStyle(
-                                color: Colors.white,
-                                fontWeight: FontWeight.bold,
-                                fontSize: 16,
-                              ),
-                            ),
-                            SizedBox(height: 4),
-                            Text(
-                              'Gửi tới các khoa phòng & nhân viên',
-                              style: TextStyle(
-                                color: Colors.white70,
-                                fontSize: 12,
-                              ),
-                            ),
-                          ],
+                        child: Text(
+                          'Đang lọc theo ngày: ${_formatFilterDate(_selectedDateFilter!)}',
+                          style: const TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                            color: Color(0xFFB45309),
+                          ),
                         ),
                       ),
-                      ElevatedButton(
-                        onPressed: () async {
-                          final res = await Navigator.of(context).pushNamed(RouteNames.createNotification);
-                          if (res == true && mounted) {
-                            _viewModel.loadCommand.execute();
-                          }
+                      GestureDetector(
+                        onTap: () {
+                          setState(() {
+                            _selectedDateFilter = null;
+                          });
                         },
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.white,
-                          foregroundColor: const Color(0xFF1D4ED8),
-                          elevation: 0,
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                        child: const Text(
+                          'Xóa bộ lọc',
+                          style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.bold,
+                            color: Color(0xFFD97706),
+                            decoration: TextDecoration.underline,
+                          ),
                         ),
-                        child: const Text('Tạo ngay', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
                       ),
                     ],
                   ),
                 );
               }
 
-              if (listToDisplay.isEmpty) {
-                return SingleChildScrollView(
-                  physics: const AlwaysScrollableScrollPhysics(),
-                  child: Column(
-                    children: [
-                      headerCreateCard,
-                      PortalEmptyState(
-                        title: 'Chưa có thông báo',
-                        message: _viewModel.selectedFilter == NotificationFilter.all
-                            ? 'Hiện tại danh sách đang trống. Khi bạn bấm làm mới hoặc đổi vai trò, đây sẽ là nơi test dữ liệu thông báo.'
-                            : 'Không có thông báo nào phù hợp với bộ lọc này.',
-                        icon: Icons.notifications_none_rounded,
-                      ),
-                    ],
+              if (filteredList.isEmpty) {
+                return RefreshIndicator(
+                  onRefresh: _refresh,
+                  child: SingleChildScrollView(
+                    physics: const AlwaysScrollableScrollPhysics(),
+                    child: Column(
+                      children: [
+                        activeFilterBanner,
+                        PortalEmptyState(
+                          title: _selectedDateFilter == null ? 'Chưa có thông báo' : 'Không tìm thấy thông báo',
+                          message: _selectedDateFilter == null
+                              ? (_viewModel.selectedFilter == NotificationFilter.all
+                                  ? 'Hiện tại danh sách đang trống. Khi bạn bấm làm mới hoặc đổi vai trò, đây sẽ là nơi test dữ liệu thông báo.'
+                                  : 'Không có thông báo nào phù hợp với bộ lọc này.')
+                              : 'Không tìm thấy thông báo nào được đăng vào ngày ${_formatFilterDate(_selectedDateFilter!)}.',
+                          icon: Icons.notifications_none_rounded,
+                        ),
+                      ],
+                    ),
                   ),
                 );
               }
 
               // Group items by date string
               final Map<String, List<NotificationItemEntity>> grouped = {};
-              for (final item in listToDisplay) {
+              for (final item in filteredList) {
                 final dateStr = _formatDate(item.createdAt);
                 grouped.putIfAbsent(dateStr, () => []).add(item);
               }
@@ -324,13 +368,13 @@ class _NotificationViewState extends State<NotificationView> {
                 onRefresh: _refresh,
                 child: ListView.builder(
                   physics: const AlwaysScrollableScrollPhysics(),
-                  itemCount: grouped.length + (session.isEmployee ? 1 : 0),
+                  itemCount: grouped.length + (_selectedDateFilter != null ? 1 : 0),
                   itemBuilder: (context, index) {
-                    if (session.isEmployee && index == 0) {
-                      return headerCreateCard;
+                    if (_selectedDateFilter != null && index == 0) {
+                      return activeFilterBanner;
                     }
 
-                    final groupIndex = session.isEmployee ? index - 1 : index;
+                    final groupIndex = _selectedDateFilter != null ? index - 1 : index;
                     final dateStr = grouped.keys.elementAt(groupIndex);
                     final dayItems = grouped[dateStr]!;
                     final unreadCount = dayItems.where((e) => !e.isRead).length;
@@ -469,6 +513,29 @@ class _DateHeaderBar extends StatelessWidget {
   }
 }
 
+bool _isSameUser(String? nameA, String? nameB) {
+  if (nameA == null || nameB == null) return false;
+  String clean(String name) {
+    return name
+        .toLowerCase()
+        .replaceAll('bs.', '')
+        .replaceAll('bs', '')
+        .replaceAll('bác sĩ', '')
+        .replaceAll('bác si', '')
+        .replaceAll('y tá', '')
+        .replaceAll('yt', '')
+        .replaceAll('khách hàng', '')
+        .replaceAll('kh', '')
+        .replaceAll('(demo)', '')
+        .replaceAll('(khách)', '')
+        .replaceAll(RegExp(r'\s+'), '')
+        .trim();
+  }
+  final a = clean(nameA);
+  final b = clean(nameB);
+  return a == b || a.contains(b) || b.contains(a);
+}
+
 class _NotificationItemRow extends StatelessWidget {
   const _NotificationItemRow({
     required this.item,
@@ -480,7 +547,11 @@ class _NotificationItemRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final titleColor = item.isRead ? Colors.black : const Color(0xFF4CAF50); // Green for unread, black for read
+    final currentUserName = AppSessionStore.instance.currentUser?.fullName;
+    final isCreatedByMe = _isSameUser(item.senderName, currentUserName);
+    final titleColor = isCreatedByMe
+        ? const Color(0xFFEC4899) // Hồng nhạt cho thông báo chính mình đăng
+        : (item.isRead ? Colors.black : const Color(0xFF4CAF50)); // Mặc định: xanh lá cho chưa đọc, đen cho đã đọc
     final timeStr = _formatDateTime(item.createdAt);
 
     return InkWell(

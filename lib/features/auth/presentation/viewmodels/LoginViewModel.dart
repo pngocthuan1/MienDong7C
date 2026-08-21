@@ -73,14 +73,29 @@ class LoginViewModel extends ChangeNotifier {
   UserRole get selectedRole => _selectedRole;
 
   LoginViewModel(this._authRepository, this._secureStorage) {
-    _isOfflineDemo = false;
-    _authRepository.setOfflineDemo(false);
+    _isOfflineDemo = true;
+    _authRepository.setOfflineDemo(true);
+    // Tự động điền tài khoản Khách hàng khi mới vào app
+    phoneController.text = '0902377251';
+    passwordController.text = '12345678';
   }
 
   void updateRole(UserRole role) {
     if (_selectedRole == role) return;
     _selectedRole = role;
     _message = null;
+    
+    // Tự động điền tài khoản tương ứng với vai trò trong chế độ Demo
+    if (_isOfflineDemo) {
+      if (role == UserRole.employee) {
+        phoneController.text = '0987654321';
+        passwordController.text = '12345678';
+      } else {
+        phoneController.text = '0902377251';
+        passwordController.text = '12345678';
+      }
+    }
+    
     notifyListeners();
   }
 
