@@ -39,6 +39,8 @@ class _CreateNotificationViewState extends State<CreateNotificationView> with Si
       }
     });
     _viewModel.sendNotificationCommand.addListener(_onSendResult);
+    _viewModel.initNotificationNumber();
+    _viewModel.loadListMasterFromApi();
   }
 
   @override
@@ -91,7 +93,7 @@ class _CreateNotificationViewState extends State<CreateNotificationView> with Si
         _tabController.animateTo(0);
         return;
       }
-      if (_viewModel.targetMode == 'custom' && _viewModel.selectedMemberIds.isEmpty) {
+      if (_viewModel.targetMode == 'custom' && _viewModel.selectedGroupIds.isEmpty) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('Vui lòng chọn ít nhất 1 nơi nhận thông báo ở Tab "Nơi nhận"'),
@@ -2085,26 +2087,36 @@ class _CreateNotificationViewState extends State<CreateNotificationView> with Si
               // 2. Selection Counter & Quick Links
               Row(
                 children: [
-                  RichText(
-                    text: TextSpan(
-                      text: '${_viewModel.totalSelectedCount}',
+                  if (_viewModel.targetMode == 'all')
+                    Text(
+                      'Đã chọn: Tất cả (${_viewModel.totalRecipientCount} nhân viên)',
                       style: const TextStyle(
-                        color: Color(0xFF0F172A),
+                        color: Color(0xFF10B981),
                         fontWeight: FontWeight.bold,
-                        fontSize: 18,
+                        fontSize: 15,
                       ),
-                      children: [
-                        TextSpan(
-                          text: ' / ${_viewModel.totalRecipientCount} đã chọn',
-                          style: const TextStyle(
-                            color: Color(0xFF64748B),
-                            fontWeight: FontWeight.normal,
-                            fontSize: 14,
-                          ),
+                    )
+                  else
+                    RichText(
+                      text: TextSpan(
+                        text: '${_viewModel.totalSelectedCount}',
+                        style: const TextStyle(
+                          color: Color(0xFF0F172A),
+                          fontWeight: FontWeight.bold,
+                          fontSize: 18,
                         ),
-                      ],
+                        children: [
+                          TextSpan(
+                            text: ' / ${_viewModel.totalRecipientCount} đã chọn',
+                            style: const TextStyle(
+                              color: Color(0xFF64748B),
+                              fontWeight: FontWeight.normal,
+                              fontSize: 14,
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
-                  ),
                   const Spacer(),
                   GestureDetector(
                     onTap: _viewModel.selectAll,
@@ -2168,10 +2180,30 @@ class _CreateNotificationViewState extends State<CreateNotificationView> with Si
 
         // 5. Recipient Groups List
         Expanded(
-          child: ListView.builder(
-            padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 14),
-            itemCount: _viewModel.filteredRecipientGroups.length,
-            itemBuilder: (context, idx) {
+          child: _viewModel.filteredRecipientGroups.isEmpty
+              ? Center(
+                  child: Padding(
+                    padding: const EdgeInsets.all(24),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const Icon(Icons.playlist_remove_rounded, size: 48, color: Color(0xFF94A3B8)),
+                        const SizedBox(height: 12),
+                        Text(
+                          _viewModel.subFilter == RecipientSubFilter.selected
+                              ? 'Chưa chọn nhóm nào. Hãy chọn tab "Tất cả" để xem danh sách nhóm.'
+                              : 'Không tìm thấy nhóm phù hợp.',
+                          style: const TextStyle(color: Color(0xFF64748B), fontSize: 14),
+                          textAlign: TextAlign.center,
+                        ),
+                      ],
+                    ),
+                  ),
+                )
+              : ListView.builder(
+                  padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 14),
+                  itemCount: _viewModel.filteredRecipientGroups.length,
+                  itemBuilder: (context, idx) {
               final group = _viewModel.filteredRecipientGroups[idx];
               final isExpanded = _viewModel.isGroupExpanded(group.id);
               final isSelected = _viewModel.isGroupSelected(group);
@@ -2188,40 +2220,26 @@ class _CreateNotificationViewState extends State<CreateNotificationView> with Si
                   children: [
                     // Group Header Row
                     InkWell(
-                      onTap: () => _viewModel.toggleGroupExpand(group.id),
+                      onTap: () => _viewModel.toggleGroupSelect(group),
                       borderRadius: BorderRadius.circular(12),
                       child: Padding(
                         padding: const EdgeInsets.all(12),
                         child: Row(
                           children: [
-                            GestureDetector(
-                              onTap: () => _viewModel.toggleGroupSelect(group),
-                              child: Container(
-                                width: 24,
-                                height: 24,
-                                decoration: BoxDecoration(
-                                  shape: BoxShape.circle,
-                                  color: isSelected ? const Color(0xFF10B981) : Colors.transparent,
-                                  border: Border.all(
-                                    color: isSelected ? const Color(0xFF10B981) : const Color(0xFFCBD5E1),
-                                    width: 2,
-                                  ),
+                            Container(
+                              width: 24,
+                              height: 24,
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                color: isSelected ? const Color(0xFF10B981) : Colors.transparent,
+                                border: Border.all(
+                                  color: isSelected ? const Color(0xFF10B981) : const Color(0xFFCBD5E1),
+                                  width: 2,
                                 ),
-                                child: isSelected
-                                    ? const Icon(Icons.check_rounded, color: Colors.white, size: 16)
-                                    : (isPartial
-                                        ? Center(
-                                            child: Container(
-                                              width: 10,
-                                              height: 10,
-                                              decoration: const BoxDecoration(
-                                                color: Color(0xFF10B981),
-                                                shape: BoxShape.circle,
-                                              ),
-                                            ),
-                                          )
-                                        : null),
                               ),
+                              child: isSelected
+                                  ? const Icon(Icons.check_rounded, color: Colors.white, size: 16)
+                                  : null,
                             ),
                             const SizedBox(width: 12),
                             Container(
@@ -2265,16 +2283,19 @@ class _CreateNotificationViewState extends State<CreateNotificationView> with Si
                                 ],
                               ),
                             ),
-                            Icon(
-                              isExpanded ? Icons.keyboard_arrow_up_rounded : Icons.keyboard_arrow_down_rounded,
-                              color: const Color(0xFF94A3B8),
+                            IconButton(
+                              icon: Icon(
+                                isExpanded ? Icons.keyboard_arrow_up_rounded : Icons.keyboard_arrow_down_rounded,
+                                color: const Color(0xFF94A3B8),
+                              ),
+                              onPressed: () => _viewModel.toggleGroupExpand(group.id),
                             ),
                           ],
                         ),
                       ),
                     ),
 
-                    // Expanded Group Members
+                    // Expanded Group Members (Read-only list inside group)
                     if (isExpanded && group.members.isNotEmpty) ...[
                       const Divider(height: 1, color: Color(0xFFF1F5F9)),
                       Container(
@@ -2283,59 +2304,52 @@ class _CreateNotificationViewState extends State<CreateNotificationView> with Si
                         child: Column(
                           children: List.generate(group.members.length, (mIdx) {
                             final member = group.members[mIdx];
-                            final isMemberSelected = _viewModel.isMemberSelected(member.id);
 
-                            return InkWell(
-                              onTap: () => _viewModel.toggleMember(member.id),
-                              borderRadius: BorderRadius.circular(8),
-                              child: Padding(
-                                padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 6),
-                                child: Row(
-                                  children: [
-                                    SizedBox(
-                                      width: 24,
-                                      child: Text(
-                                        '${mIdx + 1}',
-                                        style: const TextStyle(
-                                          color: Color(0xFF94A3B8),
-                                          fontSize: 13,
-                                          fontWeight: FontWeight.w500,
-                                        ),
+                            return Padding(
+                              padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 6),
+                              child: Row(
+                                children: [
+                                  SizedBox(
+                                    width: 24,
+                                    child: Text(
+                                      '${mIdx + 1}',
+                                      style: const TextStyle(
+                                        color: Color(0xFF94A3B8),
+                                        fontSize: 13,
+                                        fontWeight: FontWeight.w500,
                                       ),
                                     ),
-                                    const SizedBox(width: 8),
-                                    Container(
-                                      width: 32,
-                                      height: 32,
-                                      decoration: BoxDecoration(
-                                        color: isMemberSelected ? const Color(0xFFDBEAFE) : const Color(0xFFF1F5F9),
-                                        shape: BoxShape.circle,
-                                      ),
-                                      alignment: Alignment.center,
-                                      child: Text(
-                                        member.initials,
-                                        style: TextStyle(
-                                          color: isMemberSelected ? const Color(0xFF1D4ED8) : const Color(0xFF64748B),
-                                          fontWeight: FontWeight.bold,
-                                          fontSize: 11,
-                                        ),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Container(
+                                    width: 32,
+                                    height: 32,
+                                    decoration: const BoxDecoration(
+                                      color: Color(0xFFF1F5F9),
+                                      shape: BoxShape.circle,
+                                    ),
+                                    alignment: Alignment.center,
+                                    child: Text(
+                                      member.initials,
+                                      style: const TextStyle(
+                                        color: Color(0xFF64748B),
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 11,
                                       ),
                                     ),
-                                    const SizedBox(width: 12),
-                                    Expanded(
-                                      child: Text(
-                                        member.name,
-                                        style: TextStyle(
-                                          color: isMemberSelected ? const Color(0xFF1E40AF) : const Color(0xFF334155),
-                                          fontWeight: isMemberSelected ? FontWeight.bold : FontWeight.w500,
-                                          fontSize: 14,
-                                        ),
+                                  ),
+                                  const SizedBox(width: 12),
+                                  Expanded(
+                                    child: Text(
+                                      member.name,
+                                      style: const TextStyle(
+                                        color: Color(0xFF334155),
+                                        fontWeight: FontWeight.w500,
+                                        fontSize: 14,
                                       ),
                                     ),
-                                    if (isMemberSelected)
-                                      const Icon(Icons.check_circle_rounded, color: Color(0xFF10B981), size: 18),
-                                  ],
-                                ),
+                                  ),
+                                ],
                               ),
                             );
                           }),

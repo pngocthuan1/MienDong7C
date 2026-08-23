@@ -23,4 +23,5 @@ class RouteNames {
   static const String typeFourResult = '/type-four-result';
   static const String medicalTicket = '/medical-ticket';
   static const String createNotification = '/create-notification';
+  static const String notificationRecipientStatus = '/notification-recipient-status';
 }

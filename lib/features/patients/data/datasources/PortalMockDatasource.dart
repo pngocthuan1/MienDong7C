@@ -29,6 +29,9 @@ class PortalMockDatasource {
     UserRole.employee: _buildEmployeeNotifications(),
   };
 
+  static final Map<String, Set<String>> _deletedKeysPerUser = {};
+  static final Map<String, Set<String>> _downloadedKeysPerUser = {};
+
   static bool _cacheInitialized = false;
 
   Future<void> _initCacheIfNeeded() async {
@@ -48,6 +51,20 @@ class PortalMockDatasource {
           await _saveToCache(role);
         }
       }
+
+      final user = AppSessionStore.instance.currentUser;
+      final phone = user?.phoneNumber.replaceAll(RegExp(r'\D'), '') ?? 'default';
+      
+      final savedDeleted = prefs.getStringList('list_delete_$phone');
+      if (savedDeleted != null) {
+        _deletedKeysPerUser[phone] = savedDeleted.toSet();
+      }
+
+      final savedDownloaded = prefs.getStringList('list_downloaded_$phone');
+      if (savedDownloaded != null) {
+        _downloadedKeysPerUser[phone] = savedDownloaded.toSet();
+      }
+
       _cacheInitialized = true;
     } catch (_) {}
   }
@@ -113,27 +130,27 @@ class PortalMockDatasource {
 
     // Tự động thêm tài khoản đang đăng nhập vào danh sách để luôn có thể test tính năng "Tôi" màu hồng
     final currentUser = AppSessionStore.instance.currentUser;
+    String activeUserId = 'USR001';
     if (currentUser != null) {
       final currentPhone = currentUser.phoneNumber;
       final currentCleanPhone = currentPhone.replaceAll(RegExp(r'\D'), '');
       
-      String currentUserId = 'USR001';
       if (currentCleanPhone == '0822380103' || currentCleanPhone == '822380103') {
-        currentUserId = 'USR006';
+        activeUserId = 'USR006';
       } else if (currentCleanPhone == '0902377251' || currentCleanPhone == '902377251') {
-        currentUserId = 'USR001';
+        activeUserId = 'USR001';
       } else {
-        currentUserId = currentCleanPhone.length >= 6
+        activeUserId = currentCleanPhone.length >= 6
             ? 'USR_${currentCleanPhone.substring(currentCleanPhone.length - 6)}'
             : 'USR_$currentCleanPhone';
       }
 
-      final hasMe = mockRecipients.any((e) => e['userId'] == currentUserId);
+      final hasMe = mockRecipients.any((e) => e['userId'] == activeUserId);
       if (!hasMe) {
         mockRecipients.insert(0, {
           'name': currentUser.fullName,
           'role': currentUser.role == UserRole.employee ? 'Bác sĩ' : 'Khách hàng',
-          'userId': currentUserId,
+          'userId': activeUserId,
         });
       }
     }
@@ -142,7 +159,8 @@ class PortalMockDatasource {
     final List<NotificationReadStatusEntity> result = [];
 
     for (final recipient in mockRecipients) {
-      final isRead = rand.nextDouble() < 0.65;
+      final isCurrent = recipient['userId'] == activeUserId;
+      final isRead = isCurrent ? false : (rand.nextDouble() < 0.65);
       DateTime? readTime;
       if (isRead) {
         readTime = DateTime.now().subtract(Duration(
@@ -358,6 +376,17 @@ class PortalMockDatasource {
       } catch (_) {}
     }
 
+    final user = AppSessionStore.instance.currentUser;
+    final phone = user?.phoneNumber.replaceAll(RegExp(r'\D'), '') ?? 'default';
+    _downloadedKeysPerUser.putIfAbsent(phone, () => {}).add(item.compositeKey);
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setStringList(
+        'list_downloaded_$phone',
+        _downloadedKeysPerUser[phone]!.toList(),
+      );
+    } catch (_) {}
+
     _replaceNotification(
       role,
       notificationId,
@@ -413,6 +442,20 @@ class PortalMockDatasource {
 
   Future<void> deleteNotification(UserRole role, String notificationId) async {
     await _initCacheIfNeeded();
+    final item = _findNotification(role, notificationId);
+    if (item != null) {
+      final user = AppSessionStore.instance.currentUser;
+      final phone = user?.phoneNumber.replaceAll(RegExp(r'\D'), '') ?? 'default';
+      _deletedKeysPerUser.putIfAbsent(phone, () => {}).add(item.compositeKey);
+      try {
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setStringList(
+          'list_delete_$phone',
+          _deletedKeysPerUser[phone]!.toList(),
+        );
+      } catch (_) {}
+    }
+
     final notifications = _notificationStore[role];
     if (notifications != null) {
       notifications.removeWhere((item) => item.id == notificationId);
@@ -1167,7 +1210,16 @@ class PortalMockDatasource {
       list.removeWhere((item) => item.id == sysTodayId);
     }
 
-    return list;
+    final user = AppSessionStore.instance.currentUser;
+    final phone = user?.phoneNumber.replaceAll(RegExp(r'\D'), '') ?? 'default';
+    final deletedKeys = _deletedKeysPerUser[phone] ?? {};
+    final downloadedKeys = _downloadedKeysPerUser[phone] ?? {};
+
+    return list.where((item) => !deletedKeys.contains(item.compositeKey)).map((item) {
+      return item.copyWith(
+        isDownloaded: downloadedKeys.contains(item.compositeKey),
+      );
+    }).toList();
   }
 
   NotificationItemEntity? _findNotification(

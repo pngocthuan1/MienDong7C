@@ -1,5 +1,5 @@
 class NotificationItemEntity {
-  const NotificationItemEntity({
+  NotificationItemEntity({
     required this.id,
     required this.title,
     required this.message,
@@ -13,12 +13,15 @@ class NotificationItemEntity {
     this.isRead = false,
     this.isImportant = false,
     this.attachmentName,
+    this.attachmentPath,
     this.isDownloaded = false,
     this.primaryActionLabel,
     this.secondaryActionLabel,
     this.responseLabel,
     this.downloadedAt,
     this.detailRoute,
+    this.imagePaths,
+    this.recipientNames,
   });
 
   final String id;
@@ -31,15 +34,18 @@ class NotificationItemEntity {
   final String senderDepartment;
   final int number;
   final DateTime createdAt;
-  final bool isRead;
+  bool isRead;
   final bool isImportant;
   final String? attachmentName;
-  final bool isDownloaded;
+  final String? attachmentPath;
+  bool isDownloaded;
   final String? primaryActionLabel;
   final String? secondaryActionLabel;
   final String? responseLabel;
   final DateTime? downloadedAt;
   final String? detailRoute;
+  final List<String>? imagePaths;
+  final List<String>? recipientNames;
 
   NotificationItemEntity copyWith({
     String? id,
@@ -55,12 +61,15 @@ class NotificationItemEntity {
     bool? isRead,
     bool? isImportant,
     String? attachmentName,
+    String? attachmentPath,
     bool? isDownloaded,
     String? primaryActionLabel,
     String? secondaryActionLabel,
     String? responseLabel,
     DateTime? downloadedAt,
     String? detailRoute,
+    List<String>? imagePaths,
+    List<String>? recipientNames,
   }) {
     return NotificationItemEntity(
       id: id ?? this.id,
@@ -76,12 +85,15 @@ class NotificationItemEntity {
       isRead: isRead ?? this.isRead,
       isImportant: isImportant ?? this.isImportant,
       attachmentName: attachmentName ?? this.attachmentName,
+      attachmentPath: attachmentPath ?? this.attachmentPath,
       isDownloaded: isDownloaded ?? this.isDownloaded,
       primaryActionLabel: primaryActionLabel ?? this.primaryActionLabel,
       secondaryActionLabel: secondaryActionLabel ?? this.secondaryActionLabel,
       responseLabel: responseLabel ?? this.responseLabel,
       downloadedAt: downloadedAt ?? this.downloadedAt,
       detailRoute: detailRoute ?? this.detailRoute,
+      imagePaths: imagePaths ?? this.imagePaths,
+      recipientNames: recipientNames ?? this.recipientNames,
     );
   }
 
@@ -100,12 +112,15 @@ class NotificationItemEntity {
       'isRead': isRead,
       'isImportant': isImportant,
       'attachmentName': attachmentName,
+      'attachmentPath': attachmentPath,
       'isDownloaded': isDownloaded,
       'primaryActionLabel': primaryActionLabel,
       'secondaryActionLabel': secondaryActionLabel,
       'responseLabel': responseLabel,
       'downloadedAt': downloadedAt?.toIso8601String(),
       'detailRoute': detailRoute,
+      'imagePaths': imagePaths,
+      'recipientNames': recipientNames,
     };
   }
 
@@ -124,6 +139,7 @@ class NotificationItemEntity {
       isRead: json['isRead'] as bool? ?? false,
       isImportant: json['isImportant'] as bool? ?? false,
       attachmentName: json['attachmentName'] as String?,
+      attachmentPath: json['attachmentPath'] as String?,
       isDownloaded: json['isDownloaded'] as bool? ?? false,
       primaryActionLabel: json['primaryActionLabel'] as String?,
       secondaryActionLabel: json['secondaryActionLabel'] as String?,
@@ -132,6 +148,65 @@ class NotificationItemEntity {
           ? DateTime.parse(json['downloadedAt'] as String)
           : null,
       detailRoute: json['detailRoute'] as String?,
+      imagePaths: (json['imagePaths'] as List<dynamic>?)?.map((e) => e.toString()).toList(),
+      recipientNames: (json['recipientNames'] as List<dynamic>?)?.map((e) => e.toString()).toList(),
+    );
+  }
+
+  String get compositeKey {
+    final yy = (createdAt.year % 100).toString().padLeft(2, '0');
+    final mm = createdAt.month.toString().padLeft(2, '0');
+    return '${yy}${mm}_$id';
+  }
+
+  factory NotificationItemEntity.fromApiJson(Map<String, dynamic> json) {
+    final rawId = json['id']?.toString() ?? '0';
+    final rawNoiDung = json['NoiDung'] as String? ?? '';
+    final rawNgayGui = json['NgayGui'] as String? ?? DateTime.now().toIso8601String();
+    final parsedDate = DateTime.tryParse(rawNgayGui) ?? DateTime.now();
+
+    final rawFile = json['File'] as String?;
+    final rawFileUrl = json['FileDinhKem'] as String?;
+
+    String? attachName;
+    if (rawFile != null && rawFile.trim().isNotEmpty) {
+      attachName = rawFile.trim();
+    } else if (rawFileUrl != null && rawFileUrl.trim().isNotEmpty) {
+      if (rawFileUrl.contains('fileName=')) {
+        attachName = rawFileUrl.split('fileName=').last.split('&').first;
+      }
+      if (attachName == null || attachName.trim().isEmpty || attachName.startsWith('http')) {
+        attachName = rawFileUrl.split('/').last.split('?').first;
+      }
+    }
+
+    String? attachPath;
+    if (rawFileUrl != null && rawFileUrl.trim().isNotEmpty) {
+      attachPath = rawFileUrl.trim();
+    } else if (attachName != null && attachName.isNotEmpty) {
+      final mm = parsedDate.month.toString().padLeft(2, '0');
+      final yy = parsedDate.year.toString().substring(2);
+      attachPath = 'https://api.miendong7c.vn/api/File/Download?fileId=$rawId&fileName=$attachName&groupId=hospi$mm$yy';
+    }
+
+    return NotificationItemEntity(
+      id: rawId,
+      title: (json['TieuDe'] as String?)?.isNotEmpty == true
+          ? json['TieuDe'] as String
+          : (json['Ma'] != null ? 'Thông báo số ${json['Ma']}' : 'Thông báo mới'),
+      message: rawNoiDung,
+      details: rawNoiDung,
+      category: 'Thông báo nội bộ',
+      timeLabel: '${parsedDate.day.toString().padLeft(2, '0')}/${parsedDate.month.toString().padLeft(2, '0')}/${parsedDate.year}',
+      senderName: json['NguoiGui'] as String? ?? 'Hệ thống',
+      senderDepartment: json['NoiGui'] as String? ?? 'Hệ thống thông báo nội bộ',
+      number: int.tryParse(json['Ma']?.toString() ?? rawId) ?? 0,
+      createdAt: parsedDate,
+      isRead: (json['TrangThai'] as int? ?? 0) == 1,
+      isImportant: false,
+      attachmentName: attachName,
+      attachmentPath: attachPath,
+      isDownloaded: false,
     );
   }
 }

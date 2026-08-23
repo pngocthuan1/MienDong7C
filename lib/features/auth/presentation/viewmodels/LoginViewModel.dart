@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:benhvien7c/core/config/environment.dart';
+import 'package:benhvien7c/core/network/ApiException.dart';
 import 'package:benhvien7c/core/network/ApiResult.dart';
 import 'package:benhvien7c/core/storage/SecureStorageService.dart';
 import 'package:benhvien7c/features/auth/domain/entities/AuthSessionEntity.dart';
@@ -221,44 +222,108 @@ class LoginViewModel extends ChangeNotifier {
     final cleanPhone = phoneVal.replaceAll(RegExp(r'\D'), '');
     var savedName = prefs.getString('full_name_$cleanPhone') ?? prefs.getString('saved_full_name');
 
+    final boundRoleKey = cleanPhone.isNotEmpty ? cleanPhone : phoneVal.trim().toLowerCase();
+    final registeredPhones = (prefs.getStringList('registered_phone_numbers') ?? ['0822380103', '0902377251', '0987654321'])
+        .map((e) => e.replaceAll(RegExp(r'\D'), '')).toSet();
+
+    final isRegisteredMobileCustomer = (cleanPhone.isNotEmpty && registeredPhones.contains(cleanPhone)) ||
+        prefs.getString('account_role_$boundRoleKey') == 'customer';
+
     if (_selectedRole == UserRole.employee) {
+      if (isRegisteredMobileCustomer) {
+        _message = 'Tài khoản "$phoneVal" là tài khoản Bệnh nhân / Khách hàng đăng ký trên app. Không thể đăng nhập vai trò Bác sĩ / Nhân viên!';
+        notifyListeners();
+        return ApiFailure(
+          ForbiddenException(
+            'Tài khoản Khách hàng không có quyền đăng nhập vai trò Bác sĩ / Nhân viên.',
+            statusCode: 403,
+          ),
+        );
+      }
+
       final hisResult = await _authRepository.loginHis(phoneVal, passwordVal);
       if (hisResult is ApiSuccess<UserProfileEntity>) {
         final profile = hisResult.data;
-        userFullName = profile.hoTenHis.isNotEmpty
-            ? profile.hoTenHis
-            : (profile.tenDangNhapHis.isNotEmpty
-                ? profile.tenDangNhapHis
-                : 'Bác sĩ / Nhân viên');
+        if (profile.tenDangNhapHis.isNotEmpty || profile.hoTenHis.isNotEmpty) {
+          userFullName = profile.hoTenHis.isNotEmpty
+              ? profile.hoTenHis
+              : profile.tenDangNhapHis;
+          userRole = UserRole.employee;
+          await prefs.setString('account_role_$boundRoleKey', 'employee');
+        } else {
+          _message = 'Tài khoản không có quyền đăng nhập với vai trò Bác sĩ / Nhân viên. Vui lòng chọn vai trò Bệnh nhân / Khách hàng!';
+          notifyListeners();
+          return ApiFailure(
+            ForbiddenException(
+              'Tài khoản không có quyền đăng nhập với vai trò Bác sĩ / Nhân viên.',
+              statusCode: 403,
+            ),
+          );
+        }
       } else {
-        userFullName = phoneVal.isNotEmpty ? phoneVal : 'Bác sĩ / Nhân viên';
+        _message = 'Tài khoản hoặc mật khẩu Bác sĩ / Nhân viên không chính xác!';
+        notifyListeners();
+        return ApiFailure(
+          ForbiddenException(
+            'Đăng nhập Bác sĩ / Nhân viên thất bại.',
+            statusCode: 403,
+          ),
+        );
       }
-      userRole = UserRole.employee;
     } else {
-      if (savedName == null || savedName.trim().isEmpty || savedName.trim() == phoneVal.trim() || savedName.trim() == 'Khách hàng') {
-        try {
-          final res = await AppLocator.portalRepository.loadPatientProfiles();
-          if (res is Ok<List<PatientProfileDraftEntity>> && res.data.isNotEmpty) {
-            final firstHoTen = res.data.first.fullName.trim();
-            if (firstHoTen.isNotEmpty) {
-              savedName = firstHoTen;
-              prefs.setString('full_name_$cleanPhone', savedName);
-              prefs.setString('saved_full_name', savedName);
-            }
-          }
-        } catch (_) {}
+      // Đăng nhập vai trò Bệnh nhân / Khách hàng (UserRole.customer)
+      final isEmployeeUsername = RegExp(r'[a-zA-Z]').hasMatch(phoneVal.trim()) ||
+          prefs.getString('account_role_$boundRoleKey') == 'employee';
+
+      if (isEmployeeUsername) {
+        final hisCheck = await _authRepository.loginHis(phoneVal, passwordVal);
+        if (hisCheck is ApiSuccess<UserProfileEntity>) {
+          await prefs.setString('account_role_$boundRoleKey', 'employee');
+          _message = 'Tài khoản "$phoneVal" là tài khoản Bác sĩ / Nhân viên cấp sẵn. Vui lòng chuyển sang vai trò Bác sĩ / Nhân viên để đăng nhập!';
+          notifyListeners();
+          return ApiFailure(
+            ForbiddenException(
+              'Tài khoản Bác sĩ / Nhân viên phải chọn vai trò Bác sĩ / Nhân viên.',
+              statusCode: 403,
+            ),
+          );
+        }
       }
 
-      userFullName = (savedName != null && savedName.trim().isNotEmpty && savedName.trim() != phoneVal.trim() && savedName.trim() != 'Khách hàng')
-          ? savedName.trim()
-          : (phoneVal.trim().isNotEmpty ? 'Tài khoản ${phoneVal.trim()}' : 'Khách hàng');
+      // 1. Ưu tiên lấy Họ và tên chính thức từ Server HIS (ví dụ: Phạm Ngọc Thuân cho 0707587641)
+      try {
+        final hisCheck = await _authRepository.loginHis(phoneVal, passwordVal);
+        if (hisCheck is ApiSuccess<UserProfileEntity> && hisCheck.data.hoTenHis.trim().isNotEmpty) {
+          userFullName = hisCheck.data.hoTenHis.trim();
+        }
+      } catch (_) {}
+
+      // 2. Nếu server không trả về HoTenHis, lấy tên đã đăng ký riêng của SĐT này (không dùng chung saved_full_name toàn cục)
+      if (userFullName == 'Khách Hàng' || userFullName.isEmpty) {
+        final perAccountName = cleanPhone.isNotEmpty ? prefs.getString('full_name_$cleanPhone') : null;
+        if (perAccountName != null && perAccountName.trim().isNotEmpty && perAccountName.trim() != phoneVal.trim()) {
+          userFullName = perAccountName.trim();
+        } else {
+          userFullName = phoneVal.trim().isNotEmpty ? 'Tài khoản ${phoneVal.trim()}' : 'Khách hàng';
+        }
+      }
+
       userRole = UserRole.customer;
+      await prefs.setString('account_role_$boundRoleKey', 'customer');
     }
 
     _message = null;
-    SharedPreferences.getInstance().then((prefs) {
-      prefs.setString('saved_phone', phoneVal);
-    });
+    await _secureStorage.saveTokensRecord(session.accessToken, session.refreshToken);
+    await _secureStorage.saveExpiresRefreshToken(session.refreshTokenExpiry.millisecondsSinceEpoch.toString());
+
+    final prefsObj = await SharedPreferences.getInstance();
+    prefsObj.setString('saved_phone', phoneVal);
+    prefsObj.setString('saved_role', userRole == UserRole.employee ? 'employee' : 'customer');
+    prefsObj.setString('saved_full_name', userFullName);
+    if (cleanPhone.isNotEmpty) {
+      prefsObj.setString('full_name_$cleanPhone', userFullName);
+    }
+
     AppSessionStore.instance.setSession(
       session,
       UserProfileSession(

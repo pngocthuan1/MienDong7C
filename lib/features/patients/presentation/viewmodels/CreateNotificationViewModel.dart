@@ -1,8 +1,12 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:benhvien7c/core/commands/command.dart';
 import 'package:benhvien7c/core/commands/result.dart';
+import 'package:benhvien7c/core/dio/AppLocator.dart';
+import 'package:benhvien7c/features/patients/data/datasources/ThongBaoRemoteDataSource.dart';
 import 'package:benhvien7c/features/patients/domain/entities/NotificationItemEntity.dart';
 import 'package:benhvien7c/features/patients/domain/entities/RecipientEntity.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:benhvien7c/features/patients/presentation/viewmodels/BasePortalViewModel.dart';
 
 enum RecipientSubFilter { all, selected, unselected }
@@ -111,7 +115,6 @@ class CreateNotificationViewModel extends BasePortalViewModel {
     senderName = session.user.fullName.isNotEmpty ? session.user.fullName : 'Lê Nguyễn Gia Hưng';
     senderDepartment = 'Hệ thống thông báo nội bộ';
 
-    selectedMemberIds.addAll(['cntt_1', 'cntt_2']);
     expandedGroupIds.add('group_cntt');
 
     sendNotificationCommand = Command0<NotificationItemEntity>(_sendNotification);
@@ -146,13 +149,37 @@ class CreateNotificationViewModel extends BasePortalViewModel {
     notifyListeners();
   }
 
-  /// Thêm tệp chọn thực tế (Chỉ chọn 1 TỆP HOẶC NHIỀU ẢNH, không trộn lẫn)
+  // --- THÔNG SỐ SỐ THÔNG BÁO THEO THÁNG & TỰ ĐỘNG ĐỔI TÊN FILE ---
+  int _notificationNumber = 19;
+  int get notificationNumber => _notificationNumber;
+
+  String get formattedNotificationNumber {
+    if (_notificationNumber < 10) {
+      return '0$_notificationNumber';
+    }
+    return '$_notificationNumber';
+  }
+
+  Future<void> initNotificationNumber() async {
+    try {
+      final now = DateTime.now();
+      final monthKey = 'notif_seq_${now.year}_${now.month.toString().padLeft(2, '0')}';
+      final prefs = await SharedPreferences.getInstance();
+
+      int currentSeq = prefs.getInt(monthKey) ?? 19;
+      _notificationNumber = currentSeq;
+      notifyListeners();
+    } catch (_) {}
+  }
+
+  /// Thêm tệp chọn thực tế (Tự động đổi tên theo số thông báo 01.pdf, 01.doc...)
   AddAttachmentResult addRealPickedAttachment({
     required String fileName,
     required String filePath,
     required int sizeBytes,
   }) {
-    final ext = fileName.contains('.') ? fileName.split('.').last.toLowerCase() : '';
+    final rawExt = fileName.contains('.') ? fileName.split('.').last : '';
+    final ext = rawExt.toLowerCase();
     final isImg = ['jpg', 'jpeg', 'png', 'bmp', 'webp', 'heic'].contains(ext);
 
     // Quy tắc 1 TRONG 2: Không cho trộn tệp tài liệu và ảnh
@@ -176,10 +203,14 @@ class CreateNotificationViewModel extends BasePortalViewModel {
       }
     }
 
+    // TỰ ĐỘNG ĐỔI TÊN FILE THEO SỐ THÔNG BÁO (ví dụ: 19.PDF hoặc 19.DOCX)
+    final formattedExt = rawExt.isNotEmpty ? rawExt.toUpperCase() : 'PDF';
+    final autoRenamedFileName = '$formattedNotificationNumber.$formattedExt';
+
     final id = 'REAL_${DateTime.now().millisecondsSinceEpoch}_${attachments.length}';
     attachments.add(NotificationAttachmentModel(
       id: id,
-      fileName: fileName,
+      fileName: autoRenamedFileName,
       path: filePath,
       sizeBytes: sizeBytes,
       isImage: isImg,
@@ -312,11 +343,12 @@ class CreateNotificationViewModel extends BasePortalViewModel {
   }
 
   // --- TAB 2: NƠI NHẬN ---
-  String _targetMode = 'custom'; // 'custom' (Tùy chọn) hoặc 'all' (Tất cả)
+  String _targetMode = 'all'; // Mặc định là 'all' (Tất cả)
   String get targetMode => _targetMode;
   void setTargetMode(String mode) {
     if (_targetMode == mode) return;
     _targetMode = mode;
+    _subFilter = RecipientSubFilter.all; // Mặc định chuyển sang tab 'Tất cả' để hiển thị đầy đủ danh sách nhóm!
     notifyListeners();
   }
 
@@ -337,7 +369,7 @@ class CreateNotificationViewModel extends BasePortalViewModel {
     notifyListeners();
   }
 
-  final Set<String> selectedMemberIds = {};
+  final Set<String> selectedGroupIds = {};
   final Set<String> expandedGroupIds = {};
 
   bool isGroupExpanded(String groupId) => expandedGroupIds.contains(groupId);
@@ -351,136 +383,224 @@ class CreateNotificationViewModel extends BasePortalViewModel {
     notifyListeners();
   }
 
-  bool isMemberSelected(String memberId) => selectedMemberIds.contains(memberId);
+  bool isGroupSelected(RecipientGroup group) => selectedGroupIds.contains(group.id);
 
-  void toggleMember(String memberId) {
-    if (selectedMemberIds.contains(memberId)) {
-      selectedMemberIds.remove(memberId);
-    } else {
-      selectedMemberIds.add(memberId);
-    }
-    notifyListeners();
-  }
-
-  bool isGroupSelected(RecipientGroup group) {
-    if (group.members.isEmpty) return false;
-    return group.members.every((m) => selectedMemberIds.contains(m.id));
-  }
-
-  bool isGroupPartiallySelected(RecipientGroup group) {
-    if (group.members.isEmpty) return false;
-    final selectedCount = group.members.where((m) => selectedMemberIds.contains(m.id)).length;
-    return selectedCount > 0 && selectedCount < group.members.length;
-  }
+  bool isGroupPartiallySelected(RecipientGroup group) => false;
 
   void toggleGroupSelect(RecipientGroup group) {
-    if (isGroupSelected(group)) {
-      for (final m in group.members) {
-        selectedMemberIds.remove(m.id);
-      }
+    if (selectedGroupIds.contains(group.id)) {
+      selectedGroupIds.remove(group.id);
     } else {
-      for (final m in group.members) {
-        selectedMemberIds.add(m.id);
-      }
+      selectedGroupIds.add(group.id);
     }
     notifyListeners();
   }
 
   void selectAll() {
     for (final group in recipientGroups) {
-      for (final m in group.members) {
-        selectedMemberIds.add(m.id);
-      }
+      selectedGroupIds.add(group.id);
     }
     notifyListeners();
   }
 
   void deselectAll() {
-    selectedMemberIds.clear();
+    selectedGroupIds.clear();
     notifyListeners();
   }
 
   int get totalSelectedCount {
     if (_targetMode == 'all') return totalRecipientCount;
-    return selectedMemberIds.length;
+
+    // Nếu người dùng tích chọn nhóm "Tất cả", hiển thị tổng số cá nhân chuẩn 626
+    for (final group in recipientGroups) {
+      if (selectedGroupIds.contains(group.id)) {
+        if (group.name.toLowerCase().trim() == 'tất cả' || group.id == 'nhom_1') {
+          return totalRecipientCount;
+        }
+      }
+    }
+
+    final Set<String> uniqueUserIds = {};
+    for (final group in recipientGroups) {
+      if (selectedGroupIds.contains(group.id)) {
+        for (final m in group.members) {
+          uniqueUserIds.add(m.id.trim().toLowerCase());
+        }
+      }
+    }
+    return uniqueUserIds.length;
   }
 
-  int get totalRecipientCount => 577;
+  List<String> get selectedNoiNhanIds {
+    if (_targetMode == 'all' || selectedGroupIds.isEmpty) {
+      return ['ALL'];
+    }
+    final Set<String> ids = {};
+    for (final group in recipientGroups) {
+      if (selectedGroupIds.contains(group.id)) {
+        for (final m in group.members) {
+          ids.add(m.id);
+        }
+      }
+    }
+    return ids.isNotEmpty ? ids.toList() : ['ALL'];
+  }
 
-  // Mock Groups matching Screenshot 2
-  final List<RecipientGroup> recipientGroups = const [
-    RecipientGroup(
-      id: 'group_cntt',
-      name: 'Ban CNTT',
-      initials: 'CN',
-      totalCount: 7,
-      members: [
-        RecipientMember(id: 'cntt_1', name: 'Đinh Thùy Nhị', initials: 'ĐTH', departmentName: 'Ban CNTT'),
-        RecipientMember(id: 'cntt_2', name: 'Đỗ Văn Lợi', initials: 'ĐVL', departmentName: 'Ban CNTT'),
-        RecipientMember(id: 'cntt_3', name: 'Nguyễn Trọng Hùng', initials: 'NTH', departmentName: 'Ban CNTT'),
-        RecipientMember(id: 'cntt_4', name: 'Trần Anh Tùng', initials: 'TAT', departmentName: 'Ban CNTT'),
-        RecipientMember(id: 'cntt_5', name: 'Vũ Đình Tuân', initials: 'VT', departmentName: 'Ban CNTT'),
-        RecipientMember(id: 'cntt_6', name: 'Phạm Ngọc Thuận', initials: 'PNT', departmentName: 'Ban CNTT'),
-        RecipientMember(id: 'cntt_7', name: 'Phạm Văn Nam', initials: 'PVN', departmentName: 'Ban CNTT'),
-      ],
-    ),
-    RecipientGroup(
-      id: 'group_cb1',
-      name: 'Chi bộ 1',
-      initials: 'CB',
-      totalCount: 0,
-      members: [
-        RecipientMember(id: 'cb1_1', name: 'Lê Nguyễn Gia Hưng', initials: 'LGH', departmentName: 'Chi bộ 1'),
-        RecipientMember(id: 'cb1_2', name: 'Nguyễn Thị Thu Lệ', initials: 'NTL', departmentName: 'Chi bộ 1'),
-        RecipientMember(id: 'cb1_3', name: 'Trịnh Văn Minh', initials: 'TVM', departmentName: 'Chi bộ 1'),
-        RecipientMember(id: 'cb1_4', name: 'Hoàng Thị Hoa', initials: 'HTH', departmentName: 'Chi bộ 1'),
-        RecipientMember(id: 'cb1_5', name: 'Bùi Hoàng Nam', initials: 'BHN', departmentName: 'Chi bộ 1'),
-      ],
-    ),
-    RecipientGroup(
-      id: 'group_tc',
-      name: 'Tất cả',
-      initials: 'TC',
-      totalCount: 0,
-      members: [],
-    ),
-  ];
+  List<String> get selectedRecipientNames {
+    if (_targetMode == 'all' || selectedGroupIds.isEmpty) {
+      return ['Tất cả nhân viên'];
+    }
+    final List<String> names = [];
+    for (final group in recipientGroups) {
+      if (selectedGroupIds.contains(group.id)) {
+        names.add(group.name);
+      }
+    }
+    return names.isNotEmpty ? names : ['Tất cả nhân viên'];
+  }
+
+  final List<RecipientGroup> recipientGroups = [];
+
+  int _totalUniqueUsersCount = 626;
+
+  int get totalRecipientCount => _totalUniqueUsersCount > 0 ? _totalUniqueUsersCount : 626;
+
+  dynamic _extractKey(Map<String, dynamic> map, List<String> candidates) {
+    for (final key in map.keys) {
+      for (final cand in candidates) {
+        if (key.toLowerCase() == cand.toLowerCase()) {
+          return map[key];
+        }
+      }
+    }
+    return null;
+  }
+
+  Future<void> loadListMasterFromApi() async {
+    try {
+      final dioClient = AppLocator.dioClient;
+      final ds = ThongBaoRemoteDataSource(dioClient);
+      final data = await ds.fetchListMaster();
+
+      final rawListNoiNhan = _extractKey(data, ['ListNoiNhan', 'listNoiNhan', 'noiNhan']);
+      final rawListNhom = _extractKey(data, ['ListNhom', 'listNhom', 'nhom']);
+
+      final listNoiNhan = (rawListNoiNhan is List) ? rawListNoiNhan : [];
+      final listNhom = (rawListNhom is List) ? rawListNhom : [];
+
+      // 1. Ánh xạ toàn bộ danh sách cá nhân chuẩn (626 người) từ ListNoiNhan theo UserId / Ma / Username
+      final Map<String, RecipientMember> memberMap = {};
+      final Map<String, RecipientMember> uniqueUserMap = {};
+
+      for (final item in listNoiNhan) {
+        if (item is! Map<String, dynamic>) continue;
+        final userId = _extractKey(item, ['UserId', 'userId', 'Id', 'id'])?.toString() ?? '';
+        final ma = _extractKey(item, ['Ma', 'ma', 'Code', 'code'])?.toString() ?? '';
+        final username = _extractKey(item, ['TenDangNhap', 'tenDangNhap', 'Username', 'username'])?.toString() ?? '';
+
+        final primaryKey = userId.isNotEmpty ? userId : (ma.isNotEmpty ? ma : username);
+        if (primaryKey.isEmpty) continue;
+
+        final name = _extractKey(item, ['Ten', 'ten', 'HoTen', 'hoTen', 'Name'])?.toString() ?? 'Thành viên';
+        final departmentName = _extractKey(item, ['Nhom', 'nhom', 'PhongBan', 'phongBan'])?.toString() ?? '';
+        final initials = name.split(' ').map((w) => w.isNotEmpty ? w[0] : '').take(3).join().toUpperCase();
+
+        final member = RecipientMember(
+          id: primaryKey,
+          name: name,
+          initials: initials.isNotEmpty ? initials : 'TV',
+          departmentName: departmentName,
+        );
+
+        uniqueUserMap[primaryKey.trim().toLowerCase()] = member;
+
+        if (userId.isNotEmpty) memberMap[userId.trim().toLowerCase()] = member;
+        if (ma.isNotEmpty) memberMap[ma.trim().toLowerCase()] = member;
+        if (username.isNotEmpty) memberMap[username.trim().toLowerCase()] = member;
+      }
+
+      _totalUniqueUsersCount = uniqueUserMap.isNotEmpty ? uniqueUserMap.length : 626;
+
+      final List<RecipientGroup> loadedGroups = [];
+
+      // 2. Dựng các Nhóm từ ListNhom chuẩn theo danh sách 626 nhân viên
+      for (final nhomItem in listNhom) {
+        if (nhomItem is! Map<String, dynamic>) continue;
+        final gId = _extractKey(nhomItem, ['id', 'Id', 'ID'])?.toString() ?? '';
+        final gName = _extractKey(nhomItem, ['ten', 'Ten', 'Name'])?.toString() ?? 'Nhóm';
+        final rawMemberIds = _extractKey(nhomItem, ['ListThanhVienId', 'listThanhVienId', 'ThanhVienId', 'Members']);
+        final memberIdList = (rawMemberIds is List) ? rawMemberIds.map((e) => e.toString()).toList() : <String>[];
+
+        final List<RecipientMember> groupMembers = [];
+
+        // Nếu là nhóm "Tất cả" (hoặc id = 1), gán toàn bộ 626 nhân viên chuẩn
+        if (gName.toLowerCase().trim() == 'tất cả' || gId == '1') {
+          groupMembers.addAll(uniqueUserMap.values);
+        } else {
+          for (final mId in memberIdList) {
+            final cleanId = mId.trim().toLowerCase();
+            if (memberMap.containsKey(cleanId)) {
+              groupMembers.add(memberMap[cleanId]!);
+            } else {
+              final initials = mId.split('_').map((w) => w.isNotEmpty ? w[0] : '').join().toUpperCase();
+              groupMembers.add(RecipientMember(
+                id: mId,
+                name: mId,
+                initials: initials.isNotEmpty ? initials : 'TV',
+                departmentName: gName,
+              ));
+            }
+          }
+        }
+
+        final gInitials = gName.split(' ').map((w) => w.isNotEmpty ? w[0] : '').take(2).join().toUpperCase();
+
+        loadedGroups.add(RecipientGroup(
+          id: 'nhom_$gId',
+          name: gName,
+          initials: gInitials.isNotEmpty ? gInitials : 'NH',
+          totalCount: groupMembers.length,
+          members: groupMembers,
+        ));
+      }
+
+      if (loadedGroups.isNotEmpty) {
+        recipientGroups.clear();
+        recipientGroups.addAll(loadedGroups);
+        notifyListeners();
+      }
+    } catch (e) {
+      if (kDebugMode) {
+        print('⚠️ Exception loading ListMaster: $e');
+      }
+    }
+  }
 
   List<RecipientGroup> get filteredRecipientGroups {
     if (_searchQuery.isEmpty && _subFilter == RecipientSubFilter.all) {
       return recipientGroups;
     }
 
-    return recipientGroups.map((group) {
+    return recipientGroups.where((group) {
       final matchesGroupName = group.name.toLowerCase().contains(_searchQuery);
-      final filteredMembers = group.members.where((member) {
-        final matchesName = member.name.toLowerCase().contains(_searchQuery);
-        final isSelected = selectedMemberIds.contains(member.id);
+      final isSelected = selectedGroupIds.contains(group.id);
 
-        if (_subFilter == RecipientSubFilter.selected && !isSelected) return false;
-        if (_subFilter == RecipientSubFilter.unselected && isSelected) return false;
-        if (_searchQuery.isNotEmpty && !matchesName && !matchesGroupName) return false;
+      if (_subFilter == RecipientSubFilter.selected && !isSelected) return false;
+      if (_subFilter == RecipientSubFilter.unselected && isSelected) return false;
+      if (_searchQuery.isNotEmpty && !matchesGroupName) {
+        final matchesMember = group.members.any((m) => m.name.toLowerCase().contains(_searchQuery));
+        if (!matchesMember) return false;
+      }
 
-        return true;
-      }).toList();
-
-      return RecipientGroup(
-        id: group.id,
-        name: group.name,
-        initials: group.initials,
-        totalCount: group.totalCount,
-        members: filteredMembers,
-      );
-    }).where((group) => group.members.isNotEmpty || _searchQuery.isEmpty).toList();
+      return true;
+    }).toList();
   }
 
   // SEND COMMAND
   late final Command0<NotificationItemEntity> sendNotificationCommand;
 
   bool get canSend {
-    final hasContent = contentController.text.trim().isNotEmpty;
-    final hasRecipients = _targetMode == 'all' || selectedMemberIds.isNotEmpty;
-    return hasContent && hasRecipients;
+    return contentController.text.trim().isNotEmpty;
   }
 
   Future<Result<NotificationItemEntity>> _sendNotification() async {
@@ -488,22 +608,34 @@ class CreateNotificationViewModel extends BasePortalViewModel {
     if (content.isEmpty) {
       return Error(Exception('EmptyContent'), 'Vui lòng nhập nội dung thông báo');
     }
-    if (_targetMode == 'custom' && selectedMemberIds.isEmpty) {
-      return Error(Exception('NoRecipients'), 'Vui lòng chọn ít nhất 1 nơi nhận thông báo');
-    }
 
     final attachmentNames = attachments.map((a) => a.fileName).toList();
+    final attachmentPaths = attachments.map((a) => a.path).toList();
 
     return runSafely(() async {
       final result = await portalRepository.createNotification(
         role: session.user.role,
         content: content,
         attachments: attachmentNames,
+        attachmentPaths: attachmentPaths,
         targetMode: _targetMode,
-        recipientIds: selectedMemberIds.toList(),
+        recipientIds: selectedNoiNhanIds,
+        recipientNames: selectedRecipientNames,
         senderName: senderName,
         senderDepartment: senderDepartment,
       );
+
+      if (result is Ok<NotificationItemEntity>) {
+        try {
+          final now = DateTime.now();
+          final monthKey = 'notif_seq_${now.year}_${now.month.toString().padLeft(2, '0')}';
+          final prefs = await SharedPreferences.getInstance();
+          await prefs.setInt(monthKey, _notificationNumber + 1);
+          _notificationNumber += 1;
+          notifyListeners();
+        } catch (_) {}
+      }
+
       return result;
     });
   }

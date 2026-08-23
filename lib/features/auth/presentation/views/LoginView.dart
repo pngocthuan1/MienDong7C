@@ -120,6 +120,18 @@ class _LoginViewState extends State<LoginView> {
 
       _viewModel.phoneController.text = savedPhone;
       _viewModel.passwordController.text = savedPassword;
+
+      final cleanPhone = savedPhone.replaceAll(RegExp(r'\D'), '');
+      final boundRoleKey = cleanPhone.isNotEmpty ? cleanPhone : savedPhone.trim().toLowerCase();
+      final prefs = await SharedPreferences.getInstance();
+      final boundRole = prefs.getString('account_role_$boundRoleKey');
+
+      if (boundRole == 'employee' && _viewModel.selectedRole != UserRole.employee) {
+        _viewModel.updateRole(UserRole.employee);
+      } else if (boundRole == 'customer' && _viewModel.selectedRole != UserRole.customer) {
+        _viewModel.updateRole(UserRole.customer);
+      }
+
       _viewModel.captchaToken = _captchaToken ?? 'cf-token-mock-biometric-${DateTime.now().millisecondsSinceEpoch}';
       
       await _viewModel.loginCommand.execute();

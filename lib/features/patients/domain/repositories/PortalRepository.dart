@@ -39,8 +39,10 @@ abstract class PortalRepository {
     required UserRole role,
     required String content,
     required List<String> attachments,
+    List<String>? attachmentPaths,
     required String targetMode,
     required List<String> recipientIds,
+    List<String>? recipientNames,
     required String senderName,
     required String senderDepartment,
   });

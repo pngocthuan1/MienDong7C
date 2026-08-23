@@ -100,6 +100,9 @@ class _RegisterViewState extends State<RegisterView> {
         return;
       }
       await _viewModel.registerCommand.execute();
+      if (_viewModel.phoneError != null) {
+        _formKey.currentState!.validate();
+      }
     } catch (_) {}
   }
 

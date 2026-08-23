@@ -1,0 +1,39 @@
+{
+  "project_info": {
+    "project_number": "605433889015",
+    "project_id": "hospisoftmobile",
+    "storage_bucket": "hospisoftmobile.appspot.com"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:605433889015:android:2fc942b77fcadeefac93f2",
+        "android_client_info": {
+          "package_name": "com.hospisoft.benhvien7c"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "605433889015-lfcu1jblqj6iuk2rhienv0doa2h5aa76.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCVDB7UiD9F3u2ZLwQnuab8LobonZW5V3A"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "605433889015-lfcu1jblqj6iuk2rhienv0doa2h5aa76.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

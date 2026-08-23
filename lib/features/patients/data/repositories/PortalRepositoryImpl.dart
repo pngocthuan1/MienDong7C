@@ -1,11 +1,16 @@
+import 'package:flutter/foundation.dart';
+import 'dart:io';
+import 'dart:convert';
 import 'package:intl/intl.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:benhvien7c/core/session/AppSessionStore.dart';
+import 'package:benhvien7c/core/dio/AppLocator.dart';
 import 'package:benhvien7c/core/commands/result.dart';
 import 'package:benhvien7c/core/network/ApiException.dart';
 import 'package:benhvien7c/features/auth/domain/entities/UserRole.dart';
 import 'package:benhvien7c/features/patients/data/datasources/PortalMockDatasource.dart';
 import 'package:benhvien7c/features/patients/data/datasources/DatLichKhamRemoteDataSource.dart';
+import 'package:benhvien7c/features/patients/data/datasources/ThongBaoRemoteDataSource.dart';
 import 'package:benhvien7c/features/patients/data/models/DatLichKhamDtos.dart';
 import 'package:benhvien7c/features/patients/domain/entities/MedicalTicketEntity.dart';
 import 'package:benhvien7c/features/patients/domain/entities/UserManagementDetailEntity.dart';
@@ -17,16 +22,47 @@ import 'package:benhvien7c/features/patients/domain/entities/NotificationReadSta
 import 'package:benhvien7c/features/patients/domain/repositories/PortalRepository.dart';
 
 class PortalRepositoryImpl implements PortalRepository {
-  PortalRepositoryImpl(this._datasource, [this._remoteDatasource]);
+  PortalRepositoryImpl(
+    this._datasource, [
+    this._remoteDatasource,
+    this._thongBaoRemoteDataSource,
+  ]);
 
   final PortalMockDatasource _datasource;
   final DatLichKhamRemoteDataSource? _remoteDatasource;
+  final ThongBaoRemoteDataSource? _thongBaoRemoteDataSource;
+
+  String _getHisUsername() {
+    final activeUser = AppSessionStore.instance.currentUser;
+    if (activeUser != null && activeUser.phoneNumber.trim().isNotEmpty) {
+      return activeUser.phoneNumber.trim();
+    }
+    return 'hunglng';
+  }
 
   @override
   Future<Result<NotificationSummaryEntity>> loadNotificationSummary(
     UserRole role,
   ) async {
     try {
+      if (_thongBaoRemoteDataSource != null) {
+        final hisUsername = _getHisUsername();
+        try {
+          final res = await _thongBaoRemoteDataSource!.fetchNotificationList(
+            hisUsername: hisUsername,
+          );
+          final badgeNumber = (res['BadgeNumer'] as num?)?.toInt() ?? 0;
+          final rawList = res['ListThongBao'] as List<dynamic>? ?? [];
+
+          return Ok(NotificationSummaryEntity(
+            total: rawList.length,
+            unread: badgeNumber,
+            important: 0,
+            lastUpdatedLabel: rawList.isNotEmpty ? (rawList.first['NgayGui'] as String? ?? '') : '',
+          ));
+        } catch (_) {}
+      }
+
       final summary = await _datasource.loadNotificationSummary(role);
       return Ok(summary);
     } on Exception catch (exception) {
@@ -41,6 +77,35 @@ class PortalRepositoryImpl implements PortalRepository {
     UserRole role,
   ) async {
     try {
+      if (_thongBaoRemoteDataSource != null) {
+        final hisUsername = _getHisUsername();
+
+        try {
+          final res = await _thongBaoRemoteDataSource!.fetchNotificationList(
+            hisUsername: hisUsername,
+          );
+          final rawList = res['ListThongBao'] as List<dynamic>?;
+          if (rawList != null) {
+            final prefs = await SharedPreferences.getInstance();
+            final downloadedSet = prefs.getStringList('downloaded_notif_ids_$hisUsername') ?? [];
+
+            final serverItems = rawList.map((e) {
+              final item = NotificationItemEntity.fromApiJson(e as Map<String, dynamic>);
+              if (downloadedSet.contains(item.id)) {
+                item.isDownloaded = true;
+              }
+              return item;
+            }).toList();
+
+            return Ok(serverItems);
+          }
+        } catch (e) {
+          if (kDebugMode) {
+            print('⚠️ Exception calling /api/ThongBao/List: $e');
+          }
+        }
+      }
+
       final notifications = await _datasource.loadNotifications(role);
       return Ok(notifications);
     } on Exception catch (exception) {
@@ -56,6 +121,31 @@ class PortalRepositoryImpl implements PortalRepository {
     String notificationId,
   ) async {
     try {
+      final thongBaoRemote = _thongBaoRemoteDataSource ?? ThongBaoRemoteDataSource(AppLocator.dioClient);
+      final username = _getHisUsername();
+      final now = DateTime.now();
+      final yy = (now.year % 100).toString().padLeft(2, '0');
+      final mm = now.month.toString().padLeft(2, '0');
+      final dynamicSchema = 'hospi${mm}${yy}';
+
+      try {
+        await thongBaoRemote.markNotificationStatus(
+          username: username,
+          notificationId: notificationId,
+          trangThai: 1,
+          schema: dynamicSchema,
+        );
+      } catch (_) {
+        try {
+          await thongBaoRemote.markNotificationStatus(
+            username: username,
+            notificationId: notificationId,
+            trangThai: 1,
+            schema: 'hospi_${yy}${mm}',
+          );
+        } catch (_) {}
+      }
+
       final message = await _datasource.markNotificationAsRead(
         role,
         notificationId,
@@ -125,12 +215,54 @@ class PortalRepositoryImpl implements PortalRepository {
     required UserRole role,
     required String content,
     required List<String> attachments,
+    List<String>? attachmentPaths,
     required String targetMode,
     required List<String> recipientIds,
+    List<String>? recipientNames,
     required String senderName,
     required String senderDepartment,
   }) async {
     try {
+      final thongBaoRemote = _thongBaoRemoteDataSource ?? ThongBaoRemoteDataSource(AppLocator.dioClient);
+      final hisUsername = _getHisUsername();
+
+      final List<Map<String, dynamic>> listFile = [];
+      for (int i = 0; i < attachments.length; i++) {
+        final fName = attachments[i];
+        final fPath = (attachmentPaths != null && i < attachmentPaths.length) ? attachmentPaths[i] : '';
+        String base64Str = '';
+        if (fPath.isNotEmpty) {
+          try {
+            final file = File(fPath);
+            if (file.existsSync()) {
+              final bytes = await file.readAsBytes();
+              base64Str = base64Encode(bytes);
+            }
+          } catch (_) {}
+        }
+        listFile.add({
+          "Name": fName,
+          "Data": base64Str,
+          "Base64Data": base64Str,
+        });
+      }
+
+      try {
+        await thongBaoRemote.createNotification(
+          title: content.length > 50 ? '${content.substring(0, 50)}...' : content,
+          content: content,
+          noiGuiId: 1,
+          noiNhanList: recipientIds,
+          hisUserId: hisUsername,
+          listFile: listFile,
+        );
+      } catch (e) {
+        if (kDebugMode) {
+          print('⚠️ Exception calling /api/ThongBao/Post: $e');
+        }
+        rethrow;
+      }
+
       final now = DateTime.now();
       final timeStr = DateFormat('HH:mm - dd/MM/yyyy').format(now);
       final id = 'NOTIF_${now.millisecondsSinceEpoch}';
@@ -149,6 +281,9 @@ class PortalRepositoryImpl implements PortalRepository {
         isRead: false,
         isImportant: true,
         attachmentName: attachments.isNotEmpty ? attachments.join(', ') : null,
+        attachmentPath: (attachmentPaths != null && attachmentPaths.isNotEmpty) ? attachmentPaths.first : null,
+        imagePaths: (attachmentPaths != null && attachmentPaths.isNotEmpty) ? attachmentPaths : null,
+        recipientNames: recipientNames,
       );
 
       await _datasource.addTestNotification(role, newItem);
@@ -397,21 +532,6 @@ class PortalRepositoryImpl implements PortalRepository {
               phoneNumber: dto.soDienThoai ?? '',
             );
           }).toList();
-
-          if (remoteProfiles.isNotEmpty) {
-            final firstProfileName = remoteProfiles.first.fullName.trim();
-            if (firstProfileName.isNotEmpty) {
-              AppSessionStore.instance.updateFullName(firstProfileName);
-              SharedPreferences.getInstance().then((prefs) {
-                final currentPhone = AppSessionStore.instance.currentUser?.phoneNumber ?? '';
-                final cleanPhone = currentPhone.replaceAll(RegExp(r'\D'), '');
-                if (cleanPhone.isNotEmpty) {
-                  prefs.setString('full_name_$cleanPhone', firstProfileName);
-                  prefs.setString('saved_full_name', firstProfileName);
-                }
-              });
-            }
-          }
 
           return Ok(remoteProfiles);
         } catch (_) {}
@@ -745,8 +865,25 @@ class PortalRepositoryImpl implements PortalRepository {
     String notificationId,
   ) async {
     try {
-      final statuses = await _datasource.loadNotificationReadStatus(notificationId);
-      return Ok(statuses);
+      final thongBaoRemote = _thongBaoRemoteDataSource ?? ThongBaoRemoteDataSource(AppLocator.dioClient);
+      
+      final now = DateTime.now();
+      final yy = (now.year % 100).toString().padLeft(2, '0');
+      final mm = now.month.toString().padLeft(2, '0');
+      final dynamicSchema = 'hospi${mm}${yy}';
+
+      try {
+        final realStatuses = await thongBaoRemote.checkReadUser(notificationId, schema: dynamicSchema);
+        return Ok(realStatuses);
+      } catch (e) {
+        try {
+          final altSchema = 'hospi_${yy}${mm}';
+          final realStatuses = await thongBaoRemote.checkReadUser(notificationId, schema: altSchema);
+          return Ok(realStatuses);
+        } catch (_) {
+          return const Ok([]);
+        }
+      }
     } on Exception catch (exception) {
       return Error(exception, exception.toString());
     } catch (error) {

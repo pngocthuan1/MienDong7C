@@ -26,6 +26,7 @@ import 'package:benhvien7c/features/auth/presentation/views/AuthFlowArguments.da
 // Patients & Core Session
 import 'package:benhvien7c/features/patients/data/datasources/PortalMockDatasource.dart';
 import 'package:benhvien7c/features/patients/data/datasources/DatLichKhamRemoteDataSource.dart';
+import 'package:benhvien7c/features/patients/data/datasources/ThongBaoRemoteDataSource.dart';
 import 'package:benhvien7c/features/patients/data/repositories/PortalRepositoryImpl.dart';
 import 'package:benhvien7c/core/session/AppSessionStore.dart';
 import 'package:benhvien7c/features/auth/domain/entities/UserRole.dart';
@@ -36,6 +37,7 @@ import 'package:benhvien7c/core/constants/AppStrings.dart';
 import 'package:benhvien7c/features/patients/presentation/views/HomeView.dart';
 import 'package:benhvien7c/features/patients/presentation/views/NotificationView.dart';
 import 'package:benhvien7c/features/patients/presentation/views/NotificationDetailView.dart';
+import 'package:benhvien7c/features/patients/presentation/views/NotificationRecipientStatusView.dart';
 import 'package:benhvien7c/features/patients/presentation/views/NotificationPlaygroundView.dart';
 import 'package:benhvien7c/features/patients/presentation/views/AppointmentBookingView.dart';
 import 'package:benhvien7c/features/patients/presentation/views/PatientProfileCreateView.dart';
@@ -49,11 +51,15 @@ import 'package:benhvien7c/features/patients/presentation/views/TypeFourResultVi
 import 'package:benhvien7c/features/patients/presentation/views/MedicalTicketView.dart';
 import 'package:benhvien7c/features/patients/presentation/views/CreateNotificationView.dart';
 import 'package:benhvien7c/features/patients/domain/entities/NotificationItemEntity.dart';
+import 'package:benhvien7c/core/services/FirebaseTokenService.dart';
 
 import 'package:device_info_plus/device_info_plus.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // Khởi tạo kết nối Firebase (google-services.json / GoogleService-Info.plist) & lấy Token
+  await FirebaseTokenService.instance.initialize();
 
   // 1. Khởi tạo dịch vụ lưu trữ an toàn & Lấy Device ID định danh thiết bị
   final secureStorage = SecureStorageService();
@@ -93,8 +99,13 @@ void main() async {
   final authRepository = AuthRepositoryImpl(remoteDataSource, secureStorage);
 
   final datLichKhamRemoteDataSource = DatLichKhamRemoteDataSource(dioClient);
+  final thongBaoRemoteDataSource = ThongBaoRemoteDataSource(dioClient);
   final portalDatasource = PortalMockDatasource();
-  final portalRepository = PortalRepositoryImpl(portalDatasource, datLichKhamRemoteDataSource);
+  final portalRepository = PortalRepositoryImpl(
+    portalDatasource,
+    datLichKhamRemoteDataSource,
+    thongBaoRemoteDataSource,
+  );
   final appSessionStore = AppSessionStore.instance;
 
   AppLocator.init(
@@ -105,31 +116,36 @@ void main() async {
     dio: dioClient,
   );
 
-  // Phục hồi session nếu có
+  // Phục hồi session nếu có (giữ đăng nhập ngay cả khi lướt xóa app khỏi danh sách gần đây)
   try {
-    final tokens = await secureStorage.getTokensRecord();
-    final isExpired = await secureStorage.isRefreshTokenExpired();
-    if (tokens.$1 != null && tokens.$2 != null && !isExpired) {
-      final expires = await secureStorage.getExpiresRefreshToken();
-      final expiry = _parseExpiry(expires);
+    final savedPhone = sharedPreferences.getString('saved_phone') ?? '';
+    final cleanPhone = savedPhone.replaceAll(RegExp(r'\D'), '');
+    final savedName = cleanPhone.isNotEmpty ? sharedPreferences.getString('full_name_$cleanPhone') : sharedPreferences.getString('saved_full_name');
+    final savedRoleStr = sharedPreferences.getString('saved_role');
 
-      final savedPhone = sharedPreferences.getString('saved_phone') ?? '';
-      final cleanPhone = savedPhone.replaceAll(RegExp(r'\D'), '');
-      final savedName = sharedPreferences.getString('full_name_$cleanPhone') ?? sharedPreferences.getString('saved_full_name');
-      final role = savedPhone == AppStrings.demoEmployeePhone ? UserRole.employee : UserRole.customer;
+    if (savedPhone.isNotEmpty || (savedName != null && savedName.isNotEmpty)) {
+      final tokens = await secureStorage.getTokensRecord();
+      final accessToken = tokens.$1 ?? 'persisted_access_token_${DateTime.now().millisecondsSinceEpoch}';
+      final refreshToken = tokens.$2 ?? 'persisted_refresh_token_${DateTime.now().millisecondsSinceEpoch}';
+      final expiry = DateTime.now().add(const Duration(days: 90));
+
+      final role = (savedRoleStr == 'employee') || (savedPhone == AppStrings.demoEmployeePhone)
+          ? UserRole.employee
+          : UserRole.customer;
+
       final displayName = (savedName != null && savedName.trim().isNotEmpty)
           ? savedName.trim()
-          : (role == UserRole.employee ? 'BS. Nguyễn Văn Nam' : (savedPhone.isNotEmpty ? savedPhone : 'Khách hàng'));
+          : (role == UserRole.employee ? 'Phạm Ngọc Thuận' : (savedPhone.isNotEmpty ? savedPhone : 'Khách hàng'));
 
       appSessionStore.setSession(
         AuthSessionEntity(
-          accessToken: tokens.$1!,
-          refreshToken: tokens.$2!,
+          accessToken: accessToken,
+          refreshToken: refreshToken,
           refreshTokenExpiry: expiry,
         ),
         UserProfileSession(
           fullName: displayName,
-          phoneNumber: savedPhone.isNotEmpty ? savedPhone : '0902377251',
+          phoneNumber: savedPhone.isNotEmpty ? savedPhone : '0707587641',
           role: role,
         ),
       );
@@ -211,6 +227,13 @@ class MyApp extends StatelessWidget {
           final item = settings.arguments as NotificationItemEntity;
           return MaterialPageRoute(
             builder: (context) => NotificationDetailView(item: item),
+            settings: settings,
+          );
+        }
+        if (settings.name == RouteNames.notificationRecipientStatus) {
+          final item = settings.arguments as NotificationItemEntity;
+          return MaterialPageRoute(
+            builder: (context) => NotificationRecipientStatusView(item: item),
             settings: settings,
           );
         }

@@ -89,7 +89,12 @@ class _NotificationViewState extends State<NotificationView> {
   }
 
   Future<void> _openNotification(NotificationItemEntity item) async {
-    // 1. Đánh dấu đã đọc
+    // 1. Cập nhật ngay màu thẻ đã đọc trên giao diện
+    setState(() {
+      item.isRead = true;
+    });
+
+    // 2. Gửi API báo Server C# đã đọc (MarkStatus trangThai = 1)
     await _viewModel.openNotification(item.id);
     if (!mounted) return;
 
