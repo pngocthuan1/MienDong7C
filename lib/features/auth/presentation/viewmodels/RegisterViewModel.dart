@@ -147,21 +147,7 @@ class RegisterViewModel extends ChangeNotifier {
     final phone = phoneController.text.trim();
     final cleanPhone = phone.replaceAll(RegExp(r'\D'), '');
 
-    // 0. Kiểm tra số điện thoại đã tồn tại
     final prefs = await SharedPreferences.getInstance();
-    final registeredPhones = (prefs.getStringList('registered_phone_numbers') ??
-        ['0822380103', '0902377251', '0987654321', '0822380104']).map((e) => e.replaceAll(RegExp(r'\D'), '')).toSet();
-
-    final isAlreadyRegistered = registeredPhones.contains(cleanPhone) ||
-        prefs.containsKey('full_name_$cleanPhone') ||
-        prefs.containsKey('account_role_$cleanPhone');
-
-    if (isAlreadyRegistered) {
-      phoneError = 'Số điện thoại này đã được đăng ký tài khoản. Vui lòng đăng nhập hoặc dùng tính năng Quên mật khẩu.';
-      _message = phoneError;
-      notifyListeners();
-      return ApiFailure(ApiException.validation(phoneError!));
-    }
 
     final name = fullNameController.text.trim();
     if (cleanPhone.isNotEmpty && name.isNotEmpty) {
