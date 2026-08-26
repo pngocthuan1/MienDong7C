@@ -227,31 +227,6 @@ class _LoginViewState extends State<LoginView> {
                 ),
               ],
             ),
-            const SizedBox(height: 16),
-            const Divider(),
-            const SizedBox(height: 8),
-            StatefulBuilder(
-              builder: (context, setDialogState) {
-                return SwitchListTile(
-                  title: const Text(
-                    'Chế độ giả lập (Offline Demo)',
-                    style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold),
-                  ),
-                  subtitle: const Text(
-                    'Không cần kết nối Server Backend',
-                    style: TextStyle(fontSize: 11, color: Colors.grey),
-                  ),
-                  value: _viewModel.isOfflineDemo,
-                  onChanged: (val) {
-                    setDialogState(() {
-                      _viewModel.setOfflineDemo(val);
-                    });
-                  },
-                  activeColor: const Color(0xFF0D6EFD),
-                  contentPadding: EdgeInsets.zero,
-                );
-              },
-            ),
           ],
         ),
         actions: [

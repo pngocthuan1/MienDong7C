@@ -17,9 +17,7 @@ abstract class AuthRepository {
   // Hàm đăng xuất dọn dẹp phiên làm việc
   Future<void> logout();
 
-  // --- Offline Demo Mode ---
-  bool get isOfflineDemo;
-  void setOfflineDemo(bool val);
+
 
   // --- OTP & Account APIs ---
   Future<ApiResult<String>> generateRandomKey();

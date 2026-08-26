@@ -187,14 +187,14 @@ class _NotificationViewState extends State<NotificationView> {
               AppNavigator.safePop(context);
               _showInfoDialog(
                 'Xóa tài khoản',
-                'Đây là nút giao diện để test. Khi có API thật, mình có thể nối thêm confirm và gọi backend xóa tài khoản.',
+                'Để yêu cầu xóa tài khoản, vui lòng liên hệ Ban quản trị hoặc Bộ phận hỗ trợ của Bệnh viện để được hướng dẫn chi tiết theo quy trình bảo mật.',
               );
             },
             onAboutTap: () {
               AppNavigator.safePop(context);
               _showInfoDialog(
                 'Thông tin phần mềm',
-                'HPS Hospital Care - demo Tuan 4\nMVVM + Command + Role-aware auth + internal UI flow.',
+                'Bệnh viện Quân Dân Y Miền Đông\nỨng dụng chăm sóc sức khỏe và đăng ký khám bệnh trực tuyến.',
               );
             },
             onLogoutTap: () {
@@ -351,7 +351,7 @@ class _NotificationViewState extends State<NotificationView> {
                           title: _selectedDateFilter == null ? 'Chưa có thông báo' : 'Không tìm thấy thông báo',
                           message: _selectedDateFilter == null
                               ? (_viewModel.selectedFilter == NotificationFilter.all
-                                  ? 'Hiện tại danh sách đang trống. Khi bạn bấm làm mới hoặc đổi vai trò, đây sẽ là nơi test dữ liệu thông báo.'
+                                  ? 'Hiện tại bạn không có thông báo nào mới.'
                                   : 'Không có thông báo nào phù hợp với bộ lọc này.')
                               : 'Không tìm thấy thông báo nào được đăng vào ngày ${_formatFilterDate(_selectedDateFilter!)}.',
                           icon: Icons.notifications_none_rounded,

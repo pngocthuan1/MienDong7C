@@ -149,14 +149,14 @@ class _HomeViewState extends State<HomeView> {
                 AppNavigator.safePop(context);
                 _showInfoDialog(
                   'Xóa tài khoản',
-                  'Đây là nút giao diện để test. Khi có API thật, mình có thể nối thêm confirm và gọi backend xóa tài khoản.',
+                  'Để yêu cầu xóa tài khoản, vui lòng liên hệ Ban quản trị hoặc Bộ phận hỗ trợ của Bệnh viện để được hướng dẫn chi tiết theo quy trình bảo mật.',
                 );
               },
               onAboutTap: () {
                 AppNavigator.safePop(context);
                 _showInfoDialog(
                   'Thông tin phần mềm',
-                  'HPS Hospital Care - demo Tuan 4\nMVVM + Command + Role-aware auth + internal UI flow.',
+                  'Bệnh viện Quân Dân Y Miền Đông\nỨng dụng chăm sóc sức khỏe và đăng ký khám bệnh trực tuyến.',
                 );
               },
               onLogoutTap: () {

@@ -1,6 +1,9 @@
+import 'package:benhvien7c/app/router/RouteNames.dart';
 import 'package:benhvien7c/core/config/environment.dart';
+import 'package:benhvien7c/core/navigation/AppNavigator.dart';
 import 'package:benhvien7c/core/network/ApiException.dart';
 import 'package:benhvien7c/core/network/ErrorCode.dart';
+import 'package:benhvien7c/core/session/AppSessionStore.dart';
 import 'package:benhvien7c/core/storage/SecureStorageService.dart';
 import 'package:dio/dio.dart';
 
@@ -9,6 +12,15 @@ class AuthInterceptor extends Interceptor {
   final Dio _dio;
 
   AuthInterceptor(this._secureStorage, this._dio);
+
+  Future<void> _handleSessionExpiration() async {
+    await _secureStorage.clearSession();
+    AppSessionStore.instance.clear();
+    AppNavigator.navigatorKey.currentState?.pushNamedAndRemoveUntil(
+      RouteNames.login,
+      (route) => false,
+    );
+  }
 
   static const _loginPath = '/api/token/login';
   static const _refreshTokenPath = '/api/token/refreshtoken';
@@ -64,7 +76,7 @@ class AuthInterceptor extends Interceptor {
 
     final isExpired = await _secureStorage.isRefreshTokenExpired();
     if (isExpired) {
-      await _secureStorage.clearSession();
+      await _handleSessionExpiration();
       return handler.reject(
         DioException(
           requestOptions: err.requestOptions,
@@ -77,7 +89,7 @@ class AuthInterceptor extends Interceptor {
     }
 
     try {
-      // Client riêng để gọi RefreshToken, tránh vòng lặp vô tận interceptor.
+      // Client riêng để gọi RefreshToken, tránh vòng lặp vô chậm interceptor.
       final refreshDio = Dio(
         BaseOptions(
           baseUrl: _dio.options.baseUrl,
@@ -126,7 +138,7 @@ class AuthInterceptor extends Interceptor {
       }
 
       // Response 200 nhưng thiếu token mới -> coi như refresh thất bại
-      await _secureStorage.clearSession();
+      await _handleSessionExpiration();
       return handler.reject(
         DioException(
           requestOptions: err.requestOptions,
@@ -137,7 +149,7 @@ class AuthInterceptor extends Interceptor {
         ),
       );
     } catch (e) {
-      await _secureStorage.clearSession();
+      await _handleSessionExpiration();
 
       String expiredMessage =
           'Phiên làm việc đã hết hạn. Vui lòng đăng nhập lại.';

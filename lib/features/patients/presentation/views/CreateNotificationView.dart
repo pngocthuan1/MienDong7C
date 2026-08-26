@@ -1439,6 +1439,9 @@ class _CreateNotificationViewState extends State<CreateNotificationView> with Si
 
   @override
   Widget build(BuildContext context) {
+    final session = AppLocator.sessionStore.session;
+    final isEmployee = session?.isEmployee ?? false;
+
     return AnimatedBuilder(
       animation: _viewModel,
       builder: (context, _) {
@@ -1456,58 +1459,122 @@ class _CreateNotificationViewState extends State<CreateNotificationView> with Si
               'Đăng thông báo',
               style: TextStyle(fontWeight: FontWeight.bold, fontSize: 20),
             ),
-            actions: [
-              Padding(
-                padding: const EdgeInsets.only(right: 14, top: 10, bottom: 10),
-                child: ElevatedButton(
-                  onPressed: _viewModel.canSend && !_viewModel.sendNotificationCommand.running
-                      ? _submit
-                      : null,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.white,
-                    foregroundColor: const Color(0xFF2F7DE1),
-                    disabledBackgroundColor: Colors.white.withOpacity(0.5),
-                    disabledForegroundColor: const Color(0xFF2F7DE1).withOpacity(0.6),
-                    elevation: 0,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(20),
-                    ),
-                    padding: const EdgeInsets.symmetric(horizontal: 22),
-                  ),
-                  child: _viewModel.sendNotificationCommand.running
-                      ? const SizedBox(
-                          width: 16,
-                          height: 16,
-                          child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFF2F7DE1)),
-                        )
-                      : const Text(
-                          'Gửi',
-                          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+            actions: isEmployee
+                ? [
+                    Padding(
+                      padding: const EdgeInsets.only(right: 14, top: 10, bottom: 10),
+                      child: ElevatedButton(
+                        onPressed: _viewModel.canSend && !_viewModel.sendNotificationCommand.running
+                            ? _submit
+                            : null,
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.white,
+                          foregroundColor: const Color(0xFF2F7DE1),
+                          disabledBackgroundColor: Colors.white.withOpacity(0.5),
+                          disabledForegroundColor: const Color(0xFF2F7DE1).withOpacity(0.6),
+                          elevation: 0,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(20),
+                          ),
+                          padding: const EdgeInsets.symmetric(horizontal: 22),
                         ),
+                        child: _viewModel.sendNotificationCommand.running
+                            ? const SizedBox(
+                                width: 16,
+                                height: 16,
+                                child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFF2F7DE1)),
+                              )
+                            : const Text(
+                                'Gửi',
+                                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+                              ),
+                      ),
+                    ),
+                  ]
+                : null,
+            bottom: isEmployee
+                ? TabBar(
+                    controller: _tabController,
+                    indicatorColor: Colors.white,
+                    indicatorWeight: 3,
+                    labelColor: Colors.white,
+                    unselectedLabelColor: Colors.white70,
+                    labelStyle: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                    unselectedLabelStyle: const TextStyle(fontWeight: FontWeight.normal, fontSize: 16),
+                    tabs: const [
+                      Tab(text: 'Nội dung'),
+                      Tab(text: 'Nơi nhận'),
+                    ],
+                  )
+                : null,
+          ),
+          body: !isEmployee
+              ? Center(
+                  child: Container(
+                    margin: const EdgeInsets.all(24),
+                    padding: const EdgeInsets.all(24),
+                    constraints: const BoxConstraints(maxWidth: 420),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(color: const Color(0xFFD9EAFE)),
+                    ),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(
+                          Icons.lock_person_rounded,
+                          size: 44,
+                          color: Color(0xFF2F7DE1),
+                        ),
+                        const SizedBox(height: 14),
+                        const Text(
+                          'Chức năng này chỉ dành cho nhân viên.',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            color: Color(0xFF1E3A8A),
+                            fontSize: 18,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                        const SizedBox(height: 10),
+                        const Text(
+                          'Bạn hãy quay về trang chủ hoặc đăng nhập bằng tài khoản nhân viên để tiếp tục.',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(color: Color(0xFF475569), height: 1.45),
+                        ),
+                        const SizedBox(height: 18),
+                        SizedBox(
+                          width: double.infinity,
+                          height: 48,
+                          child: ElevatedButton(
+                            onPressed: () {
+                              Navigator.of(context).pushNamedAndRemoveUntil(
+                                '/home',
+                                (route) => false,
+                              );
+                            },
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: const Color(0xFF2F7DE1),
+                              foregroundColor: Colors.white,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                            ),
+                            child: const Text('Về trang chủ', style: TextStyle(fontWeight: FontWeight.bold)),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                )
+              : TabBarView(
+                  controller: _tabController,
+                  children: [
+                    _buildContentTab(),
+                    _buildRecipientsTab(),
+                  ],
                 ),
-              ),
-            ],
-            bottom: TabBar(
-              controller: _tabController,
-              indicatorColor: Colors.white,
-              indicatorWeight: 3,
-              labelColor: Colors.white,
-              unselectedLabelColor: Colors.white70,
-              labelStyle: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-              unselectedLabelStyle: const TextStyle(fontWeight: FontWeight.normal, fontSize: 16),
-              tabs: const [
-                Tab(text: 'Nội dung'),
-                Tab(text: 'Nơi nhận'),
-              ],
-            ),
-          ),
-          body: TabBarView(
-            controller: _tabController,
-            children: [
-              _buildContentTab(),
-              _buildRecipientsTab(),
-            ],
-          ),
         );
       },
     );

@@ -45,26 +45,20 @@ class PortalRepositoryImpl implements PortalRepository {
     UserRole role,
   ) async {
     try {
-      if (_thongBaoRemoteDataSource != null) {
-        final hisUsername = _getHisUsername();
-        try {
-          final res = await _thongBaoRemoteDataSource!.fetchNotificationList(
-            hisUsername: hisUsername,
-          );
-          final badgeNumber = (res['BadgeNumer'] as num?)?.toInt() ?? 0;
-          final rawList = res['ListThongBao'] as List<dynamic>? ?? [];
+      final thongBaoRemote = _thongBaoRemoteDataSource ?? ThongBaoRemoteDataSource(AppLocator.dioClient);
+      final hisUsername = _getHisUsername();
+      final res = await thongBaoRemote.fetchNotificationList(
+        hisUsername: hisUsername,
+      );
+      final badgeNumber = (res['BadgeNumer'] as num?)?.toInt() ?? 0;
+      final rawList = res['ListThongBao'] as List<dynamic>? ?? [];
 
-          return Ok(NotificationSummaryEntity(
-            total: rawList.length,
-            unread: badgeNumber,
-            important: 0,
-            lastUpdatedLabel: rawList.isNotEmpty ? (rawList.first['NgayGui'] as String? ?? '') : '',
-          ));
-        } catch (_) {}
-      }
-
-      final summary = await _datasource.loadNotificationSummary(role);
-      return Ok(summary);
+      return Ok(NotificationSummaryEntity(
+        total: rawList.length,
+        unread: badgeNumber,
+        important: 0,
+        lastUpdatedLabel: rawList.isNotEmpty ? (rawList.first['NgayGui'] as String? ?? '') : '',
+      ));
     } on Exception catch (exception) {
       return Error(exception, exception.toString());
     } catch (error) {
@@ -77,37 +71,27 @@ class PortalRepositoryImpl implements PortalRepository {
     UserRole role,
   ) async {
     try {
-      if (_thongBaoRemoteDataSource != null) {
-        final hisUsername = _getHisUsername();
+      final thongBaoRemote = _thongBaoRemoteDataSource ?? ThongBaoRemoteDataSource(AppLocator.dioClient);
+      final hisUsername = _getHisUsername();
 
-        try {
-          final res = await _thongBaoRemoteDataSource!.fetchNotificationList(
-            hisUsername: hisUsername,
-          );
-          final rawList = res['ListThongBao'] as List<dynamic>?;
-          if (rawList != null) {
-            final prefs = await SharedPreferences.getInstance();
-            final downloadedSet = prefs.getStringList('downloaded_notif_ids_$hisUsername') ?? [];
+      final res = await thongBaoRemote.fetchNotificationList(
+        hisUsername: hisUsername,
+      );
+      final rawList = res['ListThongBao'] as List<dynamic>? ?? [];
+      final prefs = await SharedPreferences.getInstance();
+      final downloadedSet = prefs.getStringList('downloaded_notif_ids_$hisUsername') ?? [];
 
-            final serverItems = rawList.map((e) {
-              final item = NotificationItemEntity.fromApiJson(e as Map<String, dynamic>);
-              if (downloadedSet.contains(item.id)) {
-                item.isDownloaded = true;
-              }
-              return item;
-            }).toList();
-
-            return Ok(serverItems);
-          }
-        } catch (e) {
-          if (kDebugMode) {
-            print('⚠️ Exception calling /api/ThongBao/List: $e');
-          }
+      final serverItems = rawList.map((e) {
+        final item = NotificationItemEntity.fromApiJson(e as Map<String, dynamic>);
+        if (downloadedSet.contains(item.id)) {
+          item.isDownloaded = true;
         }
-      }
+        return item;
+      }).toList();
 
-      final notifications = await _datasource.loadNotifications(role);
-      return Ok(notifications);
+      _datasource.setNotifications(role, serverItems);
+
+      return Ok(serverItems);
     } on Exception catch (exception) {
       return Error(exception, exception.toString());
     } catch (error) {
@@ -222,6 +206,11 @@ class PortalRepositoryImpl implements PortalRepository {
     required String senderName,
     required String senderDepartment,
   }) async {
+    if (role != UserRole.employee) {
+      final error = Exception('Chỉ nhân viên/bác sĩ mới được phép đăng thông báo.');
+      return Error(error, 'Bạn không có quyền thực hiện hành động này.');
+    }
+
     try {
       final thongBaoRemote = _thongBaoRemoteDataSource ?? ThongBaoRemoteDataSource(AppLocator.dioClient);
       final hisUsername = _getHisUsername();
@@ -323,97 +312,92 @@ class PortalRepositoryImpl implements PortalRepository {
     String? symptom,
   }) async {
     try {
-      final remote = _remoteDatasource;
-      if (remote != null) {
-        final identifier = draft.identifier.trim();
-        String maHS = '';
-        String maBN = '';
-        String maBhytHoacMaBn = identifier;
+      final remote = _remoteDatasource ?? DatLichKhamRemoteDataSource(AppLocator.dioClient);
+      final identifier = draft.identifier.trim();
+      String maHS = '';
+      String maBN = '';
+      String maBhytHoacMaBn = identifier;
 
-        if (identifier.length == 8) {
-          maBN = identifier;
-          maHS = identifier;
-        } else if (identifier.length == 21 || identifier.startsWith('T')) {
-          maHS = identifier;
-        }
-
-        final formattedNgayKham = _formatNgayKhamForServer(selectedDate ?? '');
-        final formattedGioKham = _formatGioKhamForServer(selectedTime ?? '');
-
-        final req = DangKyKhamRequestDto(
-          maHS: maHS,
-          maBN: maBN,
-          maBhytHoacMaBn: maBhytHoacMaBn,
-          hoTen: draft.fullName,
-          gioiTinh: draft.gender,
-          namSinh: draft.birthYear,
-          soDienThoai: draft.phoneNumber,
-          ngayKham: formattedNgayKham,
-          gioKham: formattedGioKham,
-          trieuChung: symptom,
-          dangKyDum: (draft.dangKyGiup != null && draft.dangKyGiup!.trim().isNotEmpty)
-              ? draft.dangKyGiup!.trim()
-              : (role == UserRole.customer ? '' : draft.fullName),
-        );
-        final bookingId = await remote.dangKyKham(req);
-
-        DkkSoKhamDto? serverPhieu;
-        if (bookingId > 0) {
-          try {
-            serverPhieu = await remote.getPhieuSoKham(bookingId);
-          } catch (_) {}
-        }
-
-        final queueNum = serverPhieu?.soDangKy != null
-            ? serverPhieu!.soDangKy!.toString().padLeft(3, '0')
-            : (bookingId > 0 ? bookingId : 1).toString().padLeft(3, '0');
-
-        final patientCodeStr = (serverPhieu?.maBN != null && serverPhieu!.maBN!.trim().isNotEmpty)
-            ? serverPhieu.maBN!.trim()
-            : '';
-
-        final ticket = MedicalTicketEntity(
-          id: bookingId.toString(),
-          hospitalName: 'Bệnh viện Quân Dân Y Miền Đông',
-          hospitalAddress: '50 Lê Văn Việt, Phường Tăng Nhơn Phú, Thành Phố Hồ Chí Minh',
-          ticketTitle: 'PHIẾU ĐẶT LỊCH KHÁM',
-          roomName: '',
-          serviceName: '',
-          queueNumber: queueNum,
-          scheduleText: _formatScheduleText(serverPhieu?.ngayGioKham, selectedDate, selectedTime),
-          patientName: serverPhieu?.hoTen ?? draft.fullName,
-          gender: _mapServerGender(serverPhieu?.gioiTinh, draft.gender),
-          birthYear: serverPhieu?.namSinh?.toString() ?? draft.birthYear,
-          address: '50 Lê Văn Việt, Phường Tăng Nhơn Phú, Thành Phố Hồ Chí Minh',
-          insuranceText: draft.identifier.length >= 10 ? 'Có BHYT (${draft.identifier})' : 'Tự túc (Không BHYT)',
-          patientCode: patientCodeStr,
-          createdAtText: _formatCreatedAtText(serverPhieu?.ngayud),
-          note: 'Ghi chú: Phiếu đặt lịch khám chỉ có giá trị trong ngày đặt khám từ 6g30 - 16g30',
-          department: department,
-          selectedDate: selectedDate,
-          selectedTime: selectedTime,
-          phoneNumber: serverPhieu?.sdt ?? draft.phoneNumber,
-          symptom: serverPhieu?.trieuChung ?? symptom,
-          dangKyGiup: serverPhieu?.dangKyDum ?? draft.dangKyGiup,
-        );
-        return Ok(ticket);
+      if (identifier.length == 8) {
+        maBN = identifier;
+        maHS = identifier;
+      } else if (identifier.length == 21 || identifier.startsWith('T')) {
+        maHS = identifier;
       }
 
-      final ticket = await _datasource.createMedicalTicket(
-        role,
-        draft,
-        department: department,
-        selectedDate: selectedDate,
-        selectedTime: selectedTime,
-        symptom: symptom,
+      final formattedNgayKham = _formatNgayKhamForServer(selectedDate ?? '');
+      final formattedGioKham = _formatGioKhamForServer(selectedTime ?? '');
+
+      final req = DangKyKhamRequestDto(
+        maHS: maHS,
+        maBN: maBN,
+        maBhytHoacMaBn: maBhytHoacMaBn,
+        hoTen: draft.fullName,
+        gioiTinh: draft.gender,
+        namSinh: draft.birthYear,
+        soDienThoai: draft.phoneNumber,
+        ngayKham: formattedNgayKham,
+        gioKham: formattedGioKham,
+        trieuChung: symptom,
+        dangKyDum: (draft.dangKyGiup != null && draft.dangKyGiup!.trim().isNotEmpty)
+            ? draft.dangKyGiup!.trim()
+            : (role == UserRole.customer ? '' : draft.fullName),
       );
-      return Ok(ticket.copyWith(
+      final bookingId = await remote.dangKyKham(req);
+
+      DkkSoKhamDto? serverPhieu;
+      if (bookingId > 0) {
+        try {
+          serverPhieu = await remote.getPhieuSoKham(bookingId);
+        } catch (_) {}
+      }
+
+      final queueNum = serverPhieu?.soDangKy != null
+          ? serverPhieu!.soDangKy!.toString().padLeft(3, '0')
+          : (bookingId > 0 ? bookingId : 1).toString().padLeft(3, '0');
+
+      final patientCodeStr = (serverPhieu?.maBN != null && serverPhieu!.maBN!.trim().isNotEmpty)
+          ? serverPhieu.maBN!.trim()
+          : '';
+
+      final ticket = MedicalTicketEntity(
+        id: bookingId.toString(),
         hospitalName: 'Bệnh viện Quân Dân Y Miền Đông',
         hospitalAddress: '50 Lê Văn Việt, Phường Tăng Nhơn Phú, Thành Phố Hồ Chí Minh',
         ticketTitle: 'PHIẾU ĐẶT LỊCH KHÁM',
+        roomName: '',
+        serviceName: '',
+        queueNumber: queueNum,
+        scheduleText: _formatScheduleText(serverPhieu?.ngayGioKham, selectedDate, selectedTime),
+        patientName: serverPhieu?.hoTen ?? draft.fullName,
+        gender: _mapServerGender(serverPhieu?.gioiTinh, draft.gender),
+        birthYear: serverPhieu?.namSinh?.toString() ?? draft.birthYear,
+        address: '50 Lê Văn Việt, Phường Tăng Nhơn Phú, Thành Phố Hồ Chí Minh',
+        insuranceText: draft.identifier.length >= 10 ? 'Có BHYT (${draft.identifier})' : 'Tự túc (Không BHYT)',
+        patientCode: patientCodeStr,
+        createdAtText: _formatCreatedAtText(serverPhieu?.ngayud),
         note: 'Ghi chú: Phiếu đặt lịch khám chỉ có giá trị trong ngày đặt khám từ 6g30 - 16g30',
-        dangKyGiup: draft.dangKyGiup,
-      ));
+        department: department,
+        selectedDate: selectedDate,
+        selectedTime: selectedTime,
+        phoneNumber: serverPhieu?.sdt ?? draft.phoneNumber,
+        symptom: serverPhieu?.trieuChung ?? symptom,
+        dangKyGiup: serverPhieu?.dangKyDum ?? draft.dangKyGiup,
+      );
+
+      // Lưu lại vào cache địa phương để hiển thị lịch sử ngoại tuyến
+      try {
+        await _datasource.createMedicalTicket(
+          role,
+          draft,
+          department: department,
+          selectedDate: selectedDate,
+          selectedTime: selectedTime,
+          symptom: symptom,
+        );
+      } catch (_) {}
+
+      return Ok(ticket);
     } on ApiException catch (e) {
       return Error(e, e.message);
     } on Exception catch (exception) {
@@ -426,47 +410,38 @@ class PortalRepositoryImpl implements PortalRepository {
   @override
   Future<Result<List<MedicalTicketEntity>>> loadMedicalTickets(UserRole role) async {
     try {
-      final remote = _remoteDatasource;
-      if (remote != null) {
-        try {
-          final listSoKham = await remote.getListSoKham();
-          final entities = listSoKham.map((dto) {
-            final serviceNameText = (dto.trieuChung != null && dto.trieuChung!.trim().isNotEmpty)
-                ? dto.trieuChung!.trim()
-                : 'Khám bệnh';
-            return MedicalTicketEntity(
-              id: dto.id.toString(),
-              hospitalName: 'Bệnh viện Quân Dân Y Miền Đông',
-              hospitalAddress: '50 Lê Văn Việt, Phường Tăng Nhơn Phú, Thành Phố Hồ Chí Minh',
-              ticketTitle: 'PHIẾU ĐẶT LỊCH KHÁM',
-              roomName: '',
-              serviceName: serviceNameText,
-              queueNumber: (dto.soDangKy ?? dto.id).toString().padLeft(3, '0'),
-              scheduleText: _formatScheduleText(dto.ngayGioKham, dto.ngayGioKham, ''),
-              patientName: dto.hoTen ?? '',
-              gender: _mapServerGender(dto.gioiTinh, 'Nam'),
-              birthYear: dto.namSinh?.toString() ?? '',
-              address: '50 Lê Văn Việt, Phường Tăng Nhơn Phú, Thành Phố Hồ Chí Minh',
-              insuranceText: dto.maThe != null && dto.maThe!.isNotEmpty ? 'Có BHYT (${dto.maThe})' : 'Tự túc',
-              patientCode: (dto.maBN != null && dto.maBN!.trim().isNotEmpty) ? dto.maBN!.trim() : '',
-              createdAtText: _formatCreatedAtText(dto.ngayud ?? dto.ngayGioKham),
-              note: 'Ghi chú: Phiếu đặt lịch khám chỉ có giá trị trong ngày đặt khám từ 6g30 - 16g30',
-              department: '',
-              selectedDate: dto.ngayGioKham,
-              selectedTime: '',
-              phoneNumber: dto.sdt,
-              symptom: dto.trieuChung,
-              dangKyGiup: dto.dangKyDum,
-            );
-          }).toList();
-          return Ok(entities);
-        } catch (_) {
-          // Fallback to mock datasource if network fails
-        }
-      }
-
-      final list = await _datasource.loadMedicalTickets(role);
-      return Ok(list);
+      final remote = _remoteDatasource ?? DatLichKhamRemoteDataSource(AppLocator.dioClient);
+      final listSoKham = await remote.getListSoKham();
+      final entities = listSoKham.map((dto) {
+        final serviceNameText = (dto.trieuChung != null && dto.trieuChung!.trim().isNotEmpty)
+            ? dto.trieuChung!.trim()
+            : 'Khám bệnh';
+        return MedicalTicketEntity(
+          id: dto.id.toString(),
+          hospitalName: 'Bệnh viện Quân Dân Y Miền Đông',
+          hospitalAddress: '50 Lê Văn Việt, Phường Tăng Nhơn Phú, Thành Phố Hồ Chí Minh',
+          ticketTitle: 'PHIẾU ĐẶT LỊCH KHÁM',
+          roomName: '',
+          serviceName: serviceNameText,
+          queueNumber: (dto.soDangKy ?? dto.id).toString().padLeft(3, '0'),
+          scheduleText: _formatScheduleText(dto.ngayGioKham, dto.ngayGioKham, ''),
+          patientName: dto.hoTen ?? '',
+          gender: _mapServerGender(dto.gioiTinh, 'Nam'),
+          birthYear: dto.namSinh?.toString() ?? '',
+          address: '50 Lê Văn Việt, Phường Tăng Nhơn Phú, Thành Phố Hồ Chí Minh',
+          insuranceText: dto.maThe != null && dto.maThe!.isNotEmpty ? 'Có BHYT (${dto.maThe})' : 'Tự túc',
+          patientCode: (dto.maBN != null && dto.maBN!.trim().isNotEmpty) ? dto.maBN!.trim() : '',
+          createdAtText: _formatCreatedAtText(dto.ngayud ?? dto.ngayGioKham),
+          note: 'Ghi chú: Phiếu đặt lịch khám chỉ có giá trị trong ngày đặt khám từ 6g30 - 16g30',
+          department: '',
+          selectedDate: dto.ngayGioKham,
+          selectedTime: '',
+          phoneNumber: dto.sdt,
+          symptom: dto.trieuChung,
+          dangKyGiup: dto.dangKyDum,
+        );
+      }).toList();
+      return Ok(entities);
     } on Exception catch (exception) {
       return Error(exception, exception.toString());
     } catch (error) {
@@ -511,34 +486,35 @@ class PortalRepositoryImpl implements PortalRepository {
   @override
   Future<Result<List<PatientProfileDraftEntity>>> loadPatientProfiles() async {
     try {
-      final remote = _remoteDatasource;
-      if (remote != null) {
-        try {
-          final listHoSo = await remote.getListHoSo('');
-          final List<PatientProfileDraftEntity> remoteProfiles = listHoSo.map((dto) {
-            final identifier = (dto.maThe != null && dto.maThe!.trim().isNotEmpty)
-                ? dto.maThe!.trim()
-                : ((dto.maBhyt != null && dto.maBhyt!.trim().isNotEmpty)
-                    ? dto.maBhyt!.trim()
-                    : ((dto.maSo != null && dto.maSo!.trim().isNotEmpty)
-                        ? dto.maSo!.trim()
-                        : (dto.cccd ?? '')));
-            return PatientProfileDraftEntity(
-              identifier: identifier,
-              maSo: dto.maSo,
-              fullName: dto.hoTen ?? '',
-              birthYear: dto.namSinh ?? '',
-              gender: _mapServerGender(dto.gioiTinh, 'Nam'),
-              phoneNumber: dto.soDienThoai ?? '',
-            );
-          }).toList();
-
-          return Ok(remoteProfiles);
-        } catch (_) {}
-      }
+      final remote = _remoteDatasource ?? DatLichKhamRemoteDataSource(AppLocator.dioClient);
+      final listHoSo = await remote.getListHoSo('');
+      final List<PatientProfileDraftEntity> remoteProfiles = listHoSo.map((dto) {
+        final identifier = (dto.maThe != null && dto.maThe!.trim().isNotEmpty)
+            ? dto.maThe!.trim()
+            : ((dto.maBhyt != null && dto.maBhyt!.trim().isNotEmpty)
+                ? dto.maBhyt!.trim()
+                : ((dto.maSo != null && dto.maSo!.trim().isNotEmpty)
+                    ? dto.maSo!.trim()
+                    : (dto.cccd ?? '')));
+        return PatientProfileDraftEntity(
+          identifier: identifier,
+          maSo: dto.maSo,
+          fullName: dto.hoTen ?? '',
+          birthYear: dto.namSinh ?? '',
+          gender: _mapServerGender(dto.gioiTinh, 'Nam'),
+          phoneNumber: dto.soDienThoai ?? '',
+        );
+      }).toList();
 
       final localProfiles = await _datasource.loadPatientProfiles();
       final Map<String, PatientProfileDraftEntity> profileMap = {};
+
+      for (var p in remoteProfiles) {
+        final key = (p.maSo != null && p.maSo!.isNotEmpty)
+            ? p.maSo!.trim().toLowerCase()
+            : '${p.fullName.trim().toLowerCase()}_${p.birthYear.trim()}_${p.identifier.trim().toLowerCase()}';
+        profileMap[key] = p;
+      }
 
       for (var p in localProfiles) {
         if (p.isDeleted) continue;
@@ -671,21 +647,9 @@ class PortalRepositoryImpl implements PortalRepository {
   @override
   Future<Result<DkkThongTinKhamListMasterDto>> fetchNgayGioKham() async {
     try {
-      final remote = _remoteDatasource;
-      if (remote != null) {
-        final master = await remote.getListNgayGioKham();
-        return Ok(master);
-      }
-      return Ok(DkkThongTinKhamListMasterDto(
-        listGioKham: [
-          DkkGioKhamDto(id: '07:00-07:30', display: '7g - 7g30'),
-          DkkGioKhamDto(id: '07:30-08:00', display: '7g30 - 8g'),
-          DkkGioKhamDto(id: '08:00-08:30', display: '8g - 8g30'),
-          DkkGioKhamDto(id: '08:30-09:00', display: '8g30 - 9g'),
-        ],
-        listNgayKham: ['Hôm nay', 'Ngày mai', 'Ngày kia'],
-        maxNgayKham: 20,
-      ));
+      final remote = _remoteDatasource ?? DatLichKhamRemoteDataSource(AppLocator.dioClient);
+      final master = await remote.getListNgayGioKham();
+      return Ok(master);
     } on Exception catch (exception) {
       return Error(exception, exception.toString());
     } catch (error) {
@@ -696,12 +660,9 @@ class PortalRepositoryImpl implements PortalRepository {
   @override
   Future<Result<List<DkkHoSoBenhNhanDto>>> fetchHoSoByMaHS(String maHS) async {
     try {
-      final remote = _remoteDatasource;
-      if (remote != null) {
-        final list = await remote.getListHoSo(maHS);
-        return Ok(list);
-      }
-      return Ok([]);
+      final remote = _remoteDatasource ?? DatLichKhamRemoteDataSource(AppLocator.dioClient);
+      final list = await remote.getListHoSo(maHS);
+      return Ok(list);
     } on Exception catch (exception) {
       return Error(exception, exception.toString());
     } catch (error) {
@@ -712,12 +673,9 @@ class PortalRepositoryImpl implements PortalRepository {
   @override
   Future<Result<DkkSoKhamDto>> fetchPhieuSoKham(int id) async {
     try {
-      final remote = _remoteDatasource;
-      if (remote != null) {
-        final dto = await remote.getPhieuSoKham(id);
-        return Ok(dto);
-      }
-      return Ok(DkkSoKhamDto(id: id, hoTen: 'Bệnh Nhân', trangThai: 'Chờ khám'));
+      final remote = _remoteDatasource ?? DatLichKhamRemoteDataSource(AppLocator.dioClient);
+      final dto = await remote.getPhieuSoKham(id);
+      return Ok(dto);
     } on Exception catch (exception) {
       return Error(exception, exception.toString());
     } catch (error) {

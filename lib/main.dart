@@ -31,7 +31,7 @@ import 'package:benhvien7c/features/patients/data/repositories/PortalRepositoryI
 import 'package:benhvien7c/core/session/AppSessionStore.dart';
 import 'package:benhvien7c/features/auth/domain/entities/UserRole.dart';
 import 'package:benhvien7c/features/auth/domain/entities/AuthSessionEntity.dart';
-import 'package:benhvien7c/core/constants/AppStrings.dart';
+
 
 // Views
 import 'package:benhvien7c/features/patients/presentation/views/HomeView.dart';
@@ -116,36 +116,34 @@ void main() async {
     dio: dioClient,
   );
 
-  // Phục hồi session nếu có (giữ đăng nhập ngay cả khi lướt xóa app khỏi danh sách gần đây)
+  // Phục hồi session nếu có (giữ đăng nhập khi ứng dụng khởi động lại)
   try {
-    final savedPhone = sharedPreferences.getString('saved_phone') ?? '';
-    final cleanPhone = savedPhone.replaceAll(RegExp(r'\D'), '');
-    final savedName = cleanPhone.isNotEmpty ? sharedPreferences.getString('full_name_$cleanPhone') : sharedPreferences.getString('saved_full_name');
-    final savedRoleStr = sharedPreferences.getString('saved_role');
+    final tokens = await secureStorage.getTokensRecord();
+    final isExpired = await secureStorage.isRefreshTokenExpired();
+    if (tokens.$1 != null && tokens.$2 != null && !isExpired) {
+      final expires = await secureStorage.getExpiresRefreshToken();
+      final expiry = _parseExpiry(expires);
 
-    if (savedPhone.isNotEmpty || (savedName != null && savedName.isNotEmpty)) {
-      final tokens = await secureStorage.getTokensRecord();
-      final accessToken = tokens.$1 ?? 'persisted_access_token_${DateTime.now().millisecondsSinceEpoch}';
-      final refreshToken = tokens.$2 ?? 'persisted_refresh_token_${DateTime.now().millisecondsSinceEpoch}';
-      final expiry = DateTime.now().add(const Duration(days: 90));
+      final savedPhone = sharedPreferences.getString('saved_phone') ?? '';
+      final cleanPhone = savedPhone.replaceAll(RegExp(r'\D'), '');
+      final savedName = cleanPhone.isNotEmpty ? sharedPreferences.getString('full_name_$cleanPhone') : sharedPreferences.getString('saved_full_name');
+      final savedRoleStr = sharedPreferences.getString('saved_role');
 
-      final role = (savedRoleStr == 'employee') || (savedPhone == AppStrings.demoEmployeePhone)
-          ? UserRole.employee
-          : UserRole.customer;
+      final role = (savedRoleStr == 'employee') ? UserRole.employee : UserRole.customer;
 
       final displayName = (savedName != null && savedName.trim().isNotEmpty)
           ? savedName.trim()
-          : (role == UserRole.employee ? 'Phạm Ngọc Thuận' : (savedPhone.isNotEmpty ? savedPhone : 'Khách hàng'));
+          : (role == UserRole.employee ? 'Nhân viên y tế' : 'Khách hàng');
 
       appSessionStore.setSession(
         AuthSessionEntity(
-          accessToken: accessToken,
-          refreshToken: refreshToken,
+          accessToken: tokens.$1!,
+          refreshToken: tokens.$2!,
           refreshTokenExpiry: expiry,
         ),
         UserProfileSession(
           fullName: displayName,
-          phoneNumber: savedPhone.isNotEmpty ? savedPhone : '0707587641',
+          phoneNumber: savedPhone,
           role: role,
         ),
       );

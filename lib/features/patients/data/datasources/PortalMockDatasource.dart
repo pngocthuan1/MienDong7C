@@ -20,6 +20,15 @@ import 'package:benhvien7c/features/patients/domain/entities/NotificationReadSta
 class PortalMockDatasource {
   PortalMockDatasource();
 
+  String _getScopedKey(String baseKey) {
+    final phone = AppSessionStore.instance.currentUser?.phoneNumber ?? '';
+    final cleanPhone = phone.replaceAll(RegExp(r'\D'), '');
+    if (cleanPhone.isEmpty) {
+      return baseKey;
+    }
+    return '${baseKey}_$cleanPhone';
+  }
+
   static final List<UserManagementUserEntity> _managedUsers = List.unmodifiable(
     _buildManagedUsers(),
   );
@@ -39,7 +48,7 @@ class PortalMockDatasource {
     try {
       final prefs = await SharedPreferences.getInstance();
       for (final role in UserRole.values) {
-        final key = 'cached_notifications_${role.name}';
+        final key = _getScopedKey('cached_notifications_${role.name}');
         final cachedJson = prefs.getString(key);
         if (cachedJson != null) {
           final List<dynamic> decoded = jsonDecode(cachedJson);
@@ -72,11 +81,15 @@ class PortalMockDatasource {
   Future<void> _saveToCache(UserRole role) async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      final key = 'cached_notifications_${role.name}';
+      final key = _getScopedKey('cached_notifications_${role.name}');
       final list = _notificationStore[role] ?? [];
       final encoded = jsonEncode(list.map((e) => e.toJson()).toList());
       await prefs.setString(key, encoded);
     } catch (_) {}
+  }
+
+  void setNotifications(UserRole role, List<NotificationItemEntity> items) {
+    _notificationStore[role] = items;
   }
 
   static NotificationItemEntity? getNotificationById(String id) {
@@ -111,82 +124,7 @@ class PortalMockDatasource {
   Future<List<NotificationReadStatusEntity>> loadNotificationReadStatus(
     String notificationId,
   ) async {
-    await Future<void>.delayed(const Duration(milliseconds: 200));
-
-    final List<Map<String, String>> mockRecipients = [
-      {'name': 'Nguyễn Văn Nam', 'role': 'Khách hàng', 'userId': 'USR001'},
-      {'name': 'Trần Thị Mỹ Linh', 'role': 'Khách hàng', 'userId': 'USR002'},
-      {'name': 'Lê Hoàng Long', 'role': 'Bác sĩ', 'userId': 'USR003'},
-      {'name': 'Phạm Ngọc Thuận', 'role': 'Khách hàng', 'userId': 'USR004'},
-      {'name': 'Nguyễn Hoàng Giang', 'role': 'Khách hàng', 'userId': 'USR005'},
-      {'name': 'Lê Nguyễn Gia Hưng', 'role': 'Bác sĩ', 'userId': 'USR006'},
-      {'name': 'Trần Văn Cường', 'role': 'Khách hàng', 'userId': 'USR007'},
-      {'name': 'Vương Gia Vĩ', 'role': 'Y tá', 'userId': 'USR008'},
-      {'name': 'Đặng Ngọc Hoàng', 'role': 'Khách hàng', 'userId': 'USR009'},
-      {'name': 'Bùi Thị Xuân', 'role': 'Khách hàng', 'userId': 'USR010'},
-      {'name': 'Hoàng Minh Châu', 'role': 'Bác sĩ', 'userId': 'USR011'},
-      {'name': 'Lý Tiểu Long', 'role': 'Khách hàng', 'userId': 'USR012'},
-    ];
-
-    // Tự động thêm tài khoản đang đăng nhập vào danh sách để luôn có thể test tính năng "Tôi" màu hồng
-    final currentUser = AppSessionStore.instance.currentUser;
-    String activeUserId = 'USR001';
-    if (currentUser != null) {
-      final currentPhone = currentUser.phoneNumber;
-      final currentCleanPhone = currentPhone.replaceAll(RegExp(r'\D'), '');
-      
-      if (currentCleanPhone == '0822380103' || currentCleanPhone == '822380103') {
-        activeUserId = 'USR006';
-      } else if (currentCleanPhone == '0902377251' || currentCleanPhone == '902377251') {
-        activeUserId = 'USR001';
-      } else {
-        activeUserId = currentCleanPhone.length >= 6
-            ? 'USR_${currentCleanPhone.substring(currentCleanPhone.length - 6)}'
-            : 'USR_$currentCleanPhone';
-      }
-
-      final hasMe = mockRecipients.any((e) => e['userId'] == activeUserId);
-      if (!hasMe) {
-        mockRecipients.insert(0, {
-          'name': currentUser.fullName,
-          'role': currentUser.role == UserRole.employee ? 'Bác sĩ' : 'Khách hàng',
-          'userId': activeUserId,
-        });
-      }
-    }
-
-    final rand = Random(notificationId.hashCode);
-    final List<NotificationReadStatusEntity> result = [];
-
-    for (final recipient in mockRecipients) {
-      final isCurrent = recipient['userId'] == activeUserId;
-      final isRead = isCurrent ? false : (rand.nextDouble() < 0.65);
-      DateTime? readTime;
-      if (isRead) {
-        readTime = DateTime.now().subtract(Duration(
-          hours: rand.nextInt(36),
-          minutes: rand.nextInt(60),
-        ));
-      }
-      result.add(NotificationReadStatusEntity(
-        userId: recipient['userId']!,
-        userName: recipient['name']!,
-        userRole: recipient['role']!,
-        isRead: isRead,
-        readAt: readTime,
-      ));
-    }
-
-    result.sort((a, b) {
-      if (a.isRead && !b.isRead) return -1;
-      if (!a.isRead && b.isRead) return 1;
-      if (a.isRead && b.isRead && a.readAt != null && b.readAt != null) {
-        return b.readAt!.compareTo(a.readAt!);
-      }
-      return a.userName.compareTo(b.userName);
-    });
-
-    return result;
+    return [];
   }
 
   Future<String> markNotificationAsRead(
@@ -508,7 +446,7 @@ class PortalMockDatasource {
 
     // 1. Check if we already have a saved profile with the same Name, Birth Year and Gender
     try {
-      final profilesJson = prefs.getString('cached_patient_profiles');
+      final profilesJson = prefs.getString(_getScopedKey('cached_patient_profiles'));
       if (profilesJson != null) {
         final List<dynamic> decoded = jsonDecode(profilesJson);
         for (final item in decoded) {
@@ -558,7 +496,7 @@ class PortalMockDatasource {
 
     try {
       final prefs = await SharedPreferences.getInstance();
-      final key = 'cached_medical_tickets_${role.name}';
+      final key = _getScopedKey('cached_medical_tickets_${role.name}');
       final cachedJson = prefs.getString(key);
       List<MedicalTicketEntity> list = [];
       if (cachedJson != null) {
@@ -576,7 +514,7 @@ class PortalMockDatasource {
   Future<List<MedicalTicketEntity>> loadMedicalTickets(UserRole role) async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      final key = 'cached_medical_tickets_${role.name}';
+      final key = _getScopedKey('cached_medical_tickets_${role.name}');
       final cachedJson = prefs.getString(key);
       if (cachedJson != null) {
         final List<dynamic> decoded = jsonDecode(cachedJson);
@@ -632,68 +570,7 @@ class PortalMockDatasource {
         }
         return updatedList;
       } else {
-        // Cache is empty: pre-populate with default mock tickets covering upcoming, past, and deleted status
-        final now = DateTime.now();
-        final tomorrow = now.add(const Duration(days: 1));
-        final nextWeek = now.add(const Duration(days: 5));
-        final past1 = now.subtract(const Duration(days: 3));
-        final past2 = now.subtract(const Duration(days: 7));
-        final deletedDay = now.subtract(const Duration(days: 2));
-
-        String fmt(DateTime dt) => '${dt.day.toString().padLeft(2, '0')}/${dt.month.toString().padLeft(2, '0')}/${dt.year}';
-
-        final t1 = _buildTicket(
-          role: role,
-          patientName: 'PHẠM NGỌC THUẬN',
-          birthYear: '1997',
-          gender: 'Nam',
-          phoneNumber: '0902333444',
-          identifier: '12345678',
-          selectedDate: fmt(tomorrow),
-          selectedTime: '08g00 - 08g30',
-        );
-        final t2 = _buildTicket(
-          role: role,
-          patientName: 'NGUYỄN VÂN NAM',
-          birthYear: '1995',
-          gender: 'Nam',
-          phoneNumber: '0902333444',
-          identifier: '97192187',
-          selectedDate: fmt(nextWeek),
-          selectedTime: '10g30 - 11g00',
-        );
-        final t3 = _buildTicket(
-          role: role,
-          patientName: 'LÊ NGUYỄN GIA HƯNG',
-          birthYear: '1989',
-          gender: 'Nam',
-          phoneNumber: '0987654321',
-          identifier: '07641190',
-          selectedDate: fmt(past1),
-          selectedTime: '14g00 - 14g30',
-        );
-        final t4 = _buildTicket(
-          role: role,
-          patientName: 'TRẦN THỊ MAI',
-          birthYear: '1992',
-          gender: 'Nữ',
-          phoneNumber: '0912345678',
-          identifier: '88765432',
-          selectedDate: fmt(past2),
-          selectedTime: '09g00 - 09g30',
-        );
-        final t5 = _buildTicket(
-          role: role,
-          patientName: 'HOÀNG VĂN THÁI',
-          birthYear: '1985',
-          gender: 'Nam',
-          phoneNumber: '0933445566',
-          identifier: '55443322',
-          selectedDate: fmt(deletedDay),
-          selectedTime: '15g30 - 16g00',
-        ).copyWith(isDeleted: true);
-
-        final defaultList = [t1, t2, t3, t4, t5];
+        final defaultList = <MedicalTicketEntity>[];
         final encoded = jsonEncode(defaultList.map((e) => e.toJson()).toList());
         await prefs.setString(key, encoded);
         return defaultList;
@@ -706,7 +583,7 @@ class PortalMockDatasource {
     try {
       final prefs = await SharedPreferences.getInstance();
       for (final role in UserRole.values) {
-        final key = 'cached_medical_tickets_${role.name}';
+        final key = _getScopedKey('cached_medical_tickets_${role.name}');
         final cachedJson = prefs.getString(key);
         if (cachedJson != null) {
           final List<dynamic> decoded = jsonDecode(cachedJson);
@@ -727,7 +604,7 @@ class PortalMockDatasource {
     try {
       final prefs = await SharedPreferences.getInstance();
       for (final role in UserRole.values) {
-        final key = 'cached_medical_tickets_${role.name}';
+        final key = _getScopedKey('cached_medical_tickets_${role.name}');
         final cachedJson = prefs.getString(key);
         if (cachedJson != null) {
           final List<dynamic> decoded = jsonDecode(cachedJson);
@@ -747,7 +624,7 @@ class PortalMockDatasource {
   Future<List<PatientProfileDraftEntity>> loadPatientProfiles() async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      final key = 'cached_patient_profiles';
+      final key = _getScopedKey('cached_patient_profiles');
       final cachedJson = prefs.getString(key);
       if (cachedJson != null) {
         final List<dynamic> decoded = jsonDecode(cachedJson);
@@ -763,7 +640,7 @@ class PortalMockDatasource {
   Future<void> savePatientProfile(PatientProfileDraftEntity profile) async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      final key = 'cached_patient_profiles';
+      final key = _getScopedKey('cached_patient_profiles');
       final cachedJson = prefs.getString(key);
       List<PatientProfileDraftEntity> list = [];
       if (cachedJson != null) {
@@ -786,15 +663,15 @@ class PortalMockDatasource {
   Future<void> softDeletePatientProfile(PatientProfileDraftEntity profile) async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      final key = 'cached_patient_profiles';
+      final key = _getScopedKey('cached_patient_profiles');
 
-      final deletedKeySet = (prefs.getStringList('deleted_patient_profile_keys') ?? []).toSet();
+      final deletedKeySet = (prefs.getStringList(_getScopedKey('deleted_patient_profile_keys')) ?? []).toSet();
       final pKey = (profile.identifier.isNotEmpty && profile.identifier != 'N/A')
           ? profile.identifier.trim().toLowerCase()
           : '${profile.fullName.trim().toLowerCase()}_${profile.birthYear.trim()}_${profile.phoneNumber.trim()}';
 
       deletedKeySet.add(pKey);
-      await prefs.setStringList('deleted_patient_profile_keys', deletedKeySet.toList());
+      await prefs.setStringList(_getScopedKey('deleted_patient_profile_keys'), deletedKeySet.toList());
 
       final cachedJson = prefs.getString(key);
       if (cachedJson != null) {
@@ -938,65 +815,7 @@ class PortalMockDatasource {
   }
 
   static List<UserManagementUserEntity> _buildManagedUsers() {
-    const ho = ['Nguyễn', 'Trần', 'Lê', 'Phạm', 'Hoàng', 'Võ', 'Đặng', 'Bùi'];
-    const dem = [
-      'Minh',
-      'Anh',
-      'Quang',
-      'Thảo',
-      'Thanh',
-      'Ngọc',
-      'Gia',
-      'Phương',
-    ];
-    const ten = [
-      'Huy',
-      'Linh',
-      'Nam',
-      'Vy',
-      'Khánh',
-      'Trâm',
-      'Đức',
-      'An',
-      'Mai',
-      'Khoa',
-    ];
-    const departments = [
-      'Nội tổng quát',
-      'Tai Mũi Họng',
-      'Tim mạch',
-      'Chẩn đoán hình ảnh',
-      'Xét nghiệm',
-      'Ngoại chấn thương',
-    ];
-    final statuses = UserManagementVisitStatus.values;
-
-    return List<UserManagementUserEntity>.generate(1000, (index) {
-      final status = statuses[index % statuses.length];
-      final name =
-          '${ho[index % ho.length]} ${dem[(index ~/ 3) % dem.length]} ${ten[(index * 2) % ten.length]}';
-      final lastVisit = DateTime.now().subtract(
-        Duration(
-          days: (index % 64) + 1,
-          hours: index % 11,
-          minutes: index % 50,
-        ),
-      );
-
-      return UserManagementUserEntity(
-        id: 'USR-${(index + 1).toString().padLeft(4, '0')}',
-        patientCode: 'BN${(23000000 + index).toString()}',
-        fullName: name,
-        phoneNumber: '09${(20000000 + index).toString().padLeft(8, '0')}',
-        email: 'nguoidung${index + 1}@hpshospital.vn',
-        gender: index.isEven ? 'Nam' : 'Nữ',
-        birthYear: '${1980 + (index % 25)}',
-        currentStatus: status,
-        lastVisitText: _formatDateTime(lastVisit),
-        totalVisits: 2 + (index % 15),
-        currentDepartmentName: departments[index % departments.length],
-      );
-    });
+    return [];
   }
 
   List<UserManagementHistoryEntity> _buildHistories(
@@ -1074,92 +893,7 @@ class PortalMockDatasource {
   }
 
   static List<NotificationItemEntity> _buildEmployeeNotifications() {
-    return [
-      NotificationItemEntity(
-        id: 'NOTI-032',
-        title: 'GĐBV NGÀY 30/06/2026',
-        message: 'GĐBV NGÀY 30/06/2026',
-        details: 'GĐBV NGÀY 30/06/2026',
-        category: 'announcement',
-        timeLabel: '30/06/2026 15:02:02',
-        senderName: 'Ban giám đốc',
-        senderDepartment: 'Ban Giám đốc',
-        number: 32,
-        createdAt: DateTime(2026, 6, 30, 15, 2, 2),
-        isRead: true,
-        attachmentName: 'gdbv-30-06.docx',
-      ),
-      NotificationItemEntity(
-        id: 'NOTI-031',
-        title: 'THÔNG BÁO: LỊCH LÀM VIỆC - TUẦN 27',
-        message: 'THÔNG BÁO: LỊCH LÀM VIỆC - TUẦN 27',
-        details: 'THÔNG BÁO: LỊCH LÀM VIỆC - TUẦN 27',
-        category: 'document',
-        timeLabel: '29/06/2026 08:47:40',
-        senderName: 'Phan Quốc Danh',
-        senderDepartment: 'Ban Kế hoạch tổng hợp',
-        number: 31,
-        createdAt: DateTime(2026, 6, 29, 8, 47, 40),
-        isRead: true,
-        attachmentName: 'lich-lam-viec-tuan-27.docx',
-      ),
-      NotificationItemEntity(
-        id: 'NOTI-030',
-        title: 'THÔNG BÁO: Kế hoạch số 740 /KH-BV',
-        message: 'Kế hoạch số 740 /KH-BV ngày 25/6/2026 về việc tổ chức KSK CB, SQ, SQCN, CS Trường Quân Sự QK7 năm 2026',
-        details: 'THÔNG BÁO\nKế hoạch số 740 /KH-BV ngày 25/6/2026 về việc tổ chức KSK CB, SQ, SQCN, CS Trường Quân Sự QK7 năm 2026',
-        category: 'document',
-        timeLabel: '28/06/2026 08:46:09',
-        senderName: 'Huỳnh Ngọc Hân',
-        senderDepartment: 'Khám sức khỏe',
-        number: 30,
-        createdAt: DateTime(2026, 6, 28, 8, 46, 9),
-        isRead: false,
-        attachmentName: '30.docx',
-      ),
-      NotificationItemEntity(
-        id: 'NOTI-029',
-        title: 'THÔNG BÁO: Kế hoạch số 675 /KH-BV',
-        message: 'Kế hoạch số 675 /KH-BV ngày 10.6.2026 về việc tổ chức KSK cán bộ nhân viên Cảng ICD Tây Nam năm 2026',
-        details: 'THÔNG BÁO\nKế hoạch số 675 /KH-BV ngày 10.6.2026 về việc tổ chức KSK cán bộ nhân viên Cảng ICD Tây Nam năm 2026',
-        category: 'document',
-        timeLabel: '26/06/2026 10:57:14',
-        senderName: 'Huỳnh Ngọc Hân',
-        senderDepartment: 'Khám sức khỏe',
-        number: 29,
-        createdAt: DateTime(2026, 6, 26, 10, 57, 14),
-        isRead: false,
-        attachmentName: '29.docx',
-      ),
-      NotificationItemEntity(
-        id: 'NOTI-028',
-        title: 'THÔNG BÁO: V/v tiêm chủng bổ sung cho nhân viên y tế',
-        message: 'Chi tiết kế hoạch tiêm chủng bổ sung phòng ngừa dịch bệnh cho toàn thể nhân viên y tế trong quý 3.',
-        details: 'THÔNG BÁO\nV/v tiêm chủng bổ sung cho nhân viên y tế toàn bệnh viện nhằm đảm bảo an toàn phòng chống dịch.',
-        category: 'reminder',
-        timeLabel: '23/06/2026 14:15:22',
-        senderName: 'Phan Quốc Danh',
-        senderDepartment: 'Ban Kế hoạch tổng hợp',
-        number: 28,
-        createdAt: DateTime(2026, 6, 23, 14, 15, 22),
-        isRead: false,
-        attachmentName: 'tiem-chung-bo-sung.docx',
-      ),
-      NotificationItemEntity(
-        id: 'NOTI-027',
-        title: 'THÔNG BÁO: Lịch trực luân phiên tháng 7',
-        message: 'Phát hành lịch trực luân phiên trực cấp cứu và các khoa lâm sàng cho tháng 7 năm 2026.',
-        details: 'THÔNG BÁO\nLịch trực luân phiên các khoa phòng tháng 7/2026 đã sẵn sàng để đối chiếu.',
-        category: 'document',
-        timeLabel: '23/06/2026 09:30:00',
-        senderName: 'Lê Thu Hà',
-        senderDepartment: 'Khoa Nội',
-        number: 27,
-        createdAt: DateTime(2026, 6, 23, 9, 30, 0),
-        isRead: false,
-        attachmentName: 'lich-truc-thang-7.docx',
-      ),
-    ];
+    return [];
   }
 
   List<NotificationItemEntity> _notificationsFor(UserRole role) {

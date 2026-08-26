@@ -10,7 +10,7 @@ import 'package:benhvien7c/core/utils/Validators.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:benhvien7c/core/session/AppSessionStore.dart';
 import 'package:benhvien7c/features/auth/domain/entities/UserRole.dart';
-import 'package:benhvien7c/core/constants/AppStrings.dart';
+
 import 'package:benhvien7c/core/dio/AppLocator.dart';
 import 'package:benhvien7c/core/services/TurnstileVerifyService.dart';
 import 'package:benhvien7c/core/commands/result.dart';
@@ -73,30 +73,12 @@ class LoginViewModel extends ChangeNotifier {
   UserRole _selectedRole = UserRole.customer;
   UserRole get selectedRole => _selectedRole;
 
-  LoginViewModel(this._authRepository, this._secureStorage) {
-    _isOfflineDemo = true;
-    _authRepository.setOfflineDemo(true);
-    // Tự động điền tài khoản Khách hàng khi mới vào app
-    phoneController.text = '0902377251';
-    passwordController.text = '12345678';
-  }
+  LoginViewModel(this._authRepository, this._secureStorage);
 
   void updateRole(UserRole role) {
     if (_selectedRole == role) return;
     _selectedRole = role;
     _message = null;
-    
-    // Tự động điền tài khoản tương ứng với vai trò trong chế độ Demo
-    if (_isOfflineDemo) {
-      if (role == UserRole.employee) {
-        phoneController.text = '0987654321';
-        passwordController.text = '12345678';
-      } else {
-        phoneController.text = '0902377251';
-        passwordController.text = '12345678';
-      }
-    }
-    
     notifyListeners();
   }
 
@@ -124,16 +106,6 @@ class LoginViewModel extends ChangeNotifier {
     }
   }
 
-  bool _isOfflineDemo = false;
-  bool get isOfflineDemo => _isOfflineDemo;
-
-  void setOfflineDemo(bool val) {
-    if (_isOfflineDemo == val) return;
-    _isOfflineDemo = val;
-    _authRepository.setOfflineDemo(val);
-    notifyListeners();
-  }
-
   String? captchaToken;
 
   late final loginCommand = Command<AuthSessionEntity>(() async {
@@ -142,43 +114,6 @@ class LoginViewModel extends ChangeNotifier {
 
     final phoneVal = phoneController.text.trim();
     final passwordVal = passwordController.text;
-
-    // Nếu chuyển sang chế độ Demo Ngoại Tuyến (Offline Demo)
-    if (_isOfflineDemo) {
-      await Future.delayed(const Duration(milliseconds: 600));
-
-      final mockSession = AuthSessionEntity(
-        accessToken: 'mock_access_token_${DateTime.now().millisecondsSinceEpoch}',
-        refreshToken: 'mock_refresh_token_${DateTime.now().millisecondsSinceEpoch}',
-        refreshTokenExpiry: DateTime.now().add(const Duration(days: 30)),
-      );
-
-      final role = phoneVal == AppStrings.demoEmployeePhone ? UserRole.employee : UserRole.customer;
-      final fullName = role == UserRole.employee ? 'BS. Nguyễn Văn Nam (Demo)' : 'Nguyễn Văn Nam (Khách)';
-
-      await _secureStorage.saveTokensRecord(mockSession.accessToken, mockSession.refreshToken);
-      await _secureStorage.saveExpiresRefreshToken(mockSession.refreshTokenExpiry.millisecondsSinceEpoch.toString());
-
-      SharedPreferences.getInstance().then((prefs) {
-        prefs.setString('saved_phone', phoneVal);
-        final list = (prefs.getStringList('registered_phone_numbers') ?? ['0822380103', '0902377251', '0987654321']).toSet();
-        if (phoneVal.isNotEmpty) list.add(phoneVal.replaceAll(RegExp(r'\D'), ''));
-        prefs.setStringList('registered_phone_numbers', list.toList());
-      });
-
-      AppSessionStore.instance.setSession(
-        mockSession,
-        UserProfileSession(
-          fullName: fullName,
-          phoneNumber: phoneVal.isNotEmpty ? phoneVal : '0902377251',
-          role: role,
-        ),
-      );
-
-      _message = null;
-      notifyListeners();
-      return ApiSuccess(mockSession);
-    }
 
     // Chế độ Server Thật -> Kiểm tra CAPTCHA nếu có trước khi gọi Backend API
     if (captchaToken != null && captchaToken!.isNotEmpty) {

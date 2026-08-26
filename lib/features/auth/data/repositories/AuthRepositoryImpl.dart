@@ -15,17 +15,7 @@ import 'package:benhvien7c/features/auth/data/models/DkkAuthModels.dart';
 class AuthRepositoryImpl implements AuthRepository {
   final AuthRemoteDataSource _remoteDataSource;
   final SecureStorageService _secureStorage;
-  bool _isOfflineDemo = false;
-
   AuthRepositoryImpl(this._remoteDataSource, this._secureStorage);
-
-  @override
-  bool get isOfflineDemo => _isOfflineDemo;
-
-  @override
-  void setOfflineDemo(bool val) {
-    _isOfflineDemo = val;
-  }
 
   @override
   Future<ApiResult<AuthSessionEntity>> login(LoginParams params) async {
@@ -98,9 +88,6 @@ class AuthRepositoryImpl implements AuthRepository {
 
   @override
   Future<ApiResult<String>> generateRandomKey() async {
-    if (_isOfflineDemo) {
-      return const ApiSuccess('mock_device_key');
-    }
     try {
       final key = await _remoteDataSource.generateRandomKey();
       return ApiSuccess(key);
@@ -113,15 +100,6 @@ class AuthRepositoryImpl implements AuthRepository {
 
   @override
   Future<ApiResult<SendOtpResponseModel>> sendOtp(String phone, String key, String sendType) async {
-    if (_isOfflineDemo) {
-      return ApiSuccess(SendOtpResponseModel(
-        createdTimeUtc: DateTime.now().toUtc().toIso8601String(),
-        adjustSeconds: 0,
-        remainingSeconds: 60,
-        debugOtpCode: '123456',
-        message: 'Mã OTP 123456 đã được gửi tới số điện thoại $phone (Demo)',
-      ));
-    }
     try {
       final input = OtpSendInputModel(
         soDienThoai: phone,
@@ -139,12 +117,6 @@ class AuthRepositoryImpl implements AuthRepository {
 
   @override
   Future<ApiResult<int>> verifyOtp(String phone, String otp, String key, int adjustSeconds) async {
-    if (_isOfflineDemo) {
-      if (otp == '123456') {
-        return const ApiSuccess(1);
-      }
-      return ApiFailure(ApiException.validation('Mã OTP không chính xác (Demo)'));
-    }
     try {
       final input = OtpVerifyInputModel(
         soDienThoai: phone,
@@ -170,9 +142,6 @@ class AuthRepositoryImpl implements AuthRepository {
     String key,
     int adjustSeconds,
   ) async {
-    if (_isOfflineDemo) {
-      return const ApiSuccess('Đăng ký tài khoản thành công! Vui lòng đăng nhập.');
-    }
     try {
       final input = DkkSignUpRequestModel(
         soDienThoai: phone,
@@ -199,9 +168,6 @@ class AuthRepositoryImpl implements AuthRepository {
     String key,
     int adjustSeconds,
   ) async {
-    if (_isOfflineDemo) {
-      return const ApiSuccess('Đặt lại mật khẩu thành công! Vui lòng đăng nhập.');
-    }
     try {
       final input = DkkResetPasswordRequestModel(
         soDienThoai: phone,
@@ -225,9 +191,6 @@ class AuthRepositoryImpl implements AuthRepository {
     String newPassword,
     String confirmPassword,
   ) async {
-    if (_isOfflineDemo) {
-      return const ApiSuccess(true);
-    }
     try {
       final input = ChangePasswordRequestModel(
         matKhauCu: oldPassword,
@@ -251,9 +214,6 @@ class AuthRepositoryImpl implements AuthRepository {
     String key,
     int adjustSeconds,
   ) async {
-    if (_isOfflineDemo) {
-      return const ApiSuccess('Xóa tài khoản thành công!');
-    }
     try {
       final input = DkkResetPasswordRequestModel(
         soDienThoai: phone,
