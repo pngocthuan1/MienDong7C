@@ -77,7 +77,7 @@ class _CloudflareTurnstileState extends State<CloudflareTurnstile> {
   @override
   Widget build(BuildContext context) {
     return Container(
-      width: double.infinity,
+      width: 300,
       decoration: BoxDecoration(
         color: const Color(0xFFF8FAFC), // bg-slate-50/50
         border: Border.all(

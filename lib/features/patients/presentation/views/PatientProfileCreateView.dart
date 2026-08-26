@@ -909,7 +909,7 @@ class _PatientProfileCreateViewState extends State<PatientProfileCreateView> {
                                   shape: RoundedRectangleBorder(
                                     borderRadius: BorderRadius.circular(12),
                                   ),
-                                  padding: const EdgeInsets.symmetric(vertical: 14),
+                                  padding: const EdgeInsets.symmetric(vertical: 18),
                                   elevation: 2,
                                 ),
                                 child: _viewModel.continueCommand.running
@@ -923,7 +923,7 @@ class _PatientProfileCreateViewState extends State<PatientProfileCreateView> {
                                       )
                                     : const Text(
                                         'Đăng ký khám',
-                                        style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
+                                        style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold, letterSpacing: 0.5),
                                       ),
                               ),
                             );

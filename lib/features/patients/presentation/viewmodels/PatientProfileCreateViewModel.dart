@@ -17,7 +17,7 @@ class PatientProfileCreateViewModel extends BasePortalViewModel {
   ) : super(repository, sessionStore) {
     fullNameController.text = session.user.fullName;
     phoneController.text = session.user.phoneNumber;
-    birthYearController.text = '1997';
+    birthYearController.text = '';
     continueCommand = Command0<MedicalTicketEntity>(_continueFlow);
     loadProfilesCommand = Command0<List<PatientProfileDraftEntity>>(_loadProfiles);
     loadProfilesCommand.execute();

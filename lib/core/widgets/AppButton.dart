@@ -57,14 +57,15 @@ class AppButton extends StatelessWidget {
             style: FilledButton.styleFrom(
               backgroundColor: AppColors.primary,
               foregroundColor: Colors.white,
-              minimumSize: const Size.fromHeight(56),
-              padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 20),
+              minimumSize: const Size.fromHeight(60),
+              padding: const EdgeInsets.symmetric(vertical: 18, horizontal: 20),
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(AppSizes.buttonRadius),
               ),
               textStyle: const TextStyle(
-                fontSize: 15,
+                fontSize: 17,
                 fontWeight: FontWeight.w700,
+                letterSpacing: 0.5,
               ),
             ),
             child: child,
@@ -78,14 +79,15 @@ class AppButton extends StatelessWidget {
             style: FilledButton.styleFrom(
               backgroundColor: AppColors.primarySoft,
               foregroundColor: AppColors.primaryDark,
-              minimumSize: const Size.fromHeight(56),
-              padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 20),
+              minimumSize: const Size.fromHeight(60),
+              padding: const EdgeInsets.symmetric(vertical: 18, horizontal: 20),
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(AppSizes.buttonRadius),
               ),
               textStyle: const TextStyle(
-                fontSize: 15,
+                fontSize: 17,
                 fontWeight: FontWeight.w700,
+                letterSpacing: 0.5,
               ),
             ),
             child: child,
