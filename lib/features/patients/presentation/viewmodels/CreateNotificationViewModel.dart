@@ -112,6 +112,12 @@ class CreateNotificationViewModel extends BasePortalViewModel {
     super.repository,
     super.sessionStore,
   ) {
+    // TODO: 'Lê Nguyễn Gia Hưng' đang được dùng làm tên người gửi MẶC ĐỊNH
+    // khi session.user.fullName rỗng. Nếu đây không phải giá trị test còn
+    // sót lại, cân nhắc đổi thành thông điệp trung tính hơn (ví dụ: tên
+    // phòng ban gửi, hoặc chặn gửi thông báo nếu chưa xác định được người
+    // gửi) — tránh hiển thị nhầm tên 1 cá nhân cụ thể trong thông báo thật
+    // gửi tới toàn bộ nhân viên.
     senderName = session.user.fullName.isNotEmpty ? session.user.fullName : 'Lê Nguyễn Gia Hưng';
     senderDepartment = 'Hệ thống thông báo nội bộ';
 
@@ -123,13 +129,17 @@ class CreateNotificationViewModel extends BasePortalViewModel {
     searchController.addListener(_onSearchChanged);
   }
 
+  void refreshUI() {
+    notifyIfMounted();
+  }
+
   // Active Tab Index: 0 = Nội dung, 1 = Nơi nhận
   int _activeTabIndex = 0;
   int get activeTabIndex => _activeTabIndex;
   set activeTabIndex(int index) {
     if (_activeTabIndex == index) return;
     _activeTabIndex = index;
-    notifyListeners();
+    notifyIfMounted();
   }
 
   // --- TAB 1: NỘI DUNG ---
@@ -146,7 +156,7 @@ class CreateNotificationViewModel extends BasePortalViewModel {
       attachments.where((a) => !a.isImage).toList();
 
   void _onContentChanged() {
-    notifyListeners();
+    notifyIfMounted();
   }
 
   // --- THÔNG SỐ SỐ THÔNG BÁO THEO THÁNG & TỰ ĐỘNG ĐỔI TÊN FILE ---
@@ -168,8 +178,15 @@ class CreateNotificationViewModel extends BasePortalViewModel {
 
       int currentSeq = prefs.getInt(monthKey) ?? 19;
       _notificationNumber = currentSeq;
-      notifyListeners();
-    } catch (_) {}
+      notifyIfMounted();
+    } catch (e) {
+      // Log lại thay vì nuốt im lặng — nếu SharedPreferences lỗi,
+      // _notificationNumber giữ giá trị mặc định 19 mà không ai biết
+      // vì sao, gây khó debug khi số thứ tự thông báo bị sai lệch.
+      if (kDebugMode) {
+        debugPrint('[CreateNotificationViewModel] initNotificationNumber failed: $e');
+      }
+    }
   }
 
   /// Thêm tệp chọn thực tế (Tự động đổi tên theo số thông báo 01.pdf, 01.doc...)
@@ -182,7 +199,12 @@ class CreateNotificationViewModel extends BasePortalViewModel {
     final ext = rawExt.toLowerCase();
     final isImg = ['jpg', 'jpeg', 'png', 'bmp', 'webp', 'heic'].contains(ext);
 
-    // Quy tắc 1 TRONG 2: Không cho trộn tệp tài liệu và ảnh
+    // Ràng buộc "1 trong 2": không cho trộn ảnh và tài liệu trong cùng
+    // 1 thông báo. Trước đây chỉ addRealCameraPhoto() kiểm tra điều này,
+    // còn hàm này (dùng khi chọn file thủ công từ thư viện) bị thiếu check
+    // — khiến người dùng có thể vô tình thêm cả ảnh lẫn PDF, nhưng
+    // prepareApiPayload() chỉ lấy 1 trong 2 loại, làm rơi mất file đã chọn
+    // mà không có cảnh báo gì.
     if (isImg && isDocumentMode) {
       return AddAttachmentResult.cannotMixImageAndDocument;
     }
@@ -190,17 +212,15 @@ class CreateNotificationViewModel extends BasePortalViewModel {
       return AddAttachmentResult.cannotMixImageAndDocument;
     }
 
-    if (isImg) {
-      if (totalImageSizeBytes + sizeBytes > maxTotalImageSizeBytes) {
-        return AddAttachmentResult.exceedsTotalImageSize;
-      }
-    } else {
-      if (documentAttachments.isNotEmpty) {
-        return AddAttachmentResult.exceedsFileCount;
-      }
-      if (sizeBytes > maxSingleFileSizeBytes) {
-        return AddAttachmentResult.exceedsFileSize;
-      }
+    if (sizeBytes > maxSingleFileSizeBytes) {
+      return AddAttachmentResult.exceedsFileSize;
+    }
+
+    // Giới hạn tổng dung lượng ảnh (5MB) — trước đây chỉ được check ở
+    // addRealCameraPhoto(), không được check ở đây, nên chọn nhiều ảnh
+    // từ thư viện có thể vượt quá tổng cho phép mà không bị chặn.
+    if (isImg && totalImageSizeBytes + sizeBytes > maxTotalImageSizeBytes) {
+      return AddAttachmentResult.exceedsTotalImageSize;
     }
 
     // TỰ ĐỘNG ĐỔI TÊN FILE THEO SỐ THÔNG BÁO (ví dụ: 19.PDF hoặc 19.DOCX)
@@ -217,7 +237,7 @@ class CreateNotificationViewModel extends BasePortalViewModel {
       extension: ext,
       isCompressed: isImg && sizeBytes < 500 * 1024,
     ));
-    notifyListeners();
+    notifyIfMounted();
     return AddAttachmentResult.success;
   }
 
@@ -283,7 +303,7 @@ class CreateNotificationViewModel extends BasePortalViewModel {
       extension: 'jpg',
       isCompressed: true,
     ));
-    notifyListeners();
+    notifyIfMounted();
     return AddAttachmentResult.success;
   }
 
@@ -304,7 +324,7 @@ class CreateNotificationViewModel extends BasePortalViewModel {
     );
 
     attachments.add(attachment);
-    notifyListeners();
+    notifyIfMounted();
     return attachment;
   }
 
@@ -339,7 +359,7 @@ class CreateNotificationViewModel extends BasePortalViewModel {
 
   void removeAttachmentById(String id) {
     attachments.removeWhere((a) => a.id == id);
-    notifyListeners();
+    notifyIfMounted();
   }
 
   // --- TAB 2: NƠI NHẬN ---
@@ -349,7 +369,7 @@ class CreateNotificationViewModel extends BasePortalViewModel {
     if (_targetMode == mode) return;
     _targetMode = mode;
     _subFilter = RecipientSubFilter.all; // Mặc định chuyển sang tab 'Tất cả' để hiển thị đầy đủ danh sách nhóm!
-    notifyListeners();
+    notifyIfMounted();
   }
 
   RecipientSubFilter _subFilter = RecipientSubFilter.all;
@@ -357,7 +377,7 @@ class CreateNotificationViewModel extends BasePortalViewModel {
   void setSubFilter(RecipientSubFilter filter) {
     if (_subFilter == filter) return;
     _subFilter = filter;
-    notifyListeners();
+    notifyIfMounted();
   }
 
   final searchController = TextEditingController();
@@ -366,10 +386,11 @@ class CreateNotificationViewModel extends BasePortalViewModel {
 
   void _onSearchChanged() {
     _searchQuery = searchController.text.trim().toLowerCase();
-    notifyListeners();
+    notifyIfMounted();
   }
 
   final Set<String> selectedGroupIds = {};
+  final Set<String> selectedMemberIds = {};
   final Set<String> expandedGroupIds = {};
 
   bool isGroupExpanded(String groupId) => expandedGroupIds.contains(groupId);
@@ -380,11 +401,15 @@ class CreateNotificationViewModel extends BasePortalViewModel {
     } else {
       expandedGroupIds.add(groupId);
     }
-    notifyListeners();
+    notifyIfMounted();
   }
 
   bool isGroupSelected(RecipientGroup group) => selectedGroupIds.contains(group.id);
 
+  // TODO: luôn trả về false — checkbox 3 trạng thái ("chọn 1 phần thành
+  // viên trong nhóm") dường như chưa được implement. Nếu UI có hiển thị
+  // trạng thái này, cần bổ sung logic so sánh selectedMemberIds với
+  // group.members. Nếu không dùng, cân nhắc xóa hàm này cho gọn.
   bool isGroupPartiallySelected(RecipientGroup group) => false;
 
   void toggleGroupSelect(RecipientGroup group) {
@@ -393,25 +418,25 @@ class CreateNotificationViewModel extends BasePortalViewModel {
     } else {
       selectedGroupIds.add(group.id);
     }
-    notifyListeners();
+    notifyIfMounted();
   }
 
   void selectAll() {
     for (final group in recipientGroups) {
       selectedGroupIds.add(group.id);
     }
-    notifyListeners();
+    notifyIfMounted();
   }
 
   void deselectAll() {
     selectedGroupIds.clear();
-    notifyListeners();
+    notifyIfMounted();
   }
 
   int get totalSelectedCount {
     if (_targetMode == 'all') return totalRecipientCount;
 
-    // Nếu người dùng tích chọn nhóm "Tất cả", hiển thị tổng số cá nhân chuẩn 626
+    // Nếu người dùng tích chọn nhóm "Tất cả", hiển thị tổng số cá nhân chuẩn
     for (final group in recipientGroups) {
       if (selectedGroupIds.contains(group.id)) {
         if (group.name.toLowerCase().trim() == 'tất cả' || group.id == 'nhom_1') {
@@ -432,18 +457,28 @@ class CreateNotificationViewModel extends BasePortalViewModel {
   }
 
   List<String> get selectedNoiNhanIds {
-    if (_targetMode == 'all' || selectedGroupIds.isEmpty) {
-      return ['ALL'];
+    if (_targetMode == 'all' || (selectedGroupIds.isEmpty && selectedMemberIds.isEmpty)) {
+      return [];
     }
-    final Set<String> ids = {};
+    final List<String> noiNhanList = [];
+
     for (final group in recipientGroups) {
       if (selectedGroupIds.contains(group.id)) {
-        for (final m in group.members) {
-          ids.add(m.id);
+        final rawId = group.id.startsWith('nhom_') ? group.id.substring(5) : group.id;
+        if (rawId.isNotEmpty && rawId != '1') {
+          noiNhanList.add(rawId);
         }
       }
     }
-    return ids.isNotEmpty ? ids.toList() : ['ALL'];
+
+    for (final mId in selectedMemberIds) {
+      final cleanId = mId.trim();
+      if (cleanId.isNotEmpty) {
+        noiNhanList.add(';$cleanId');
+      }
+    }
+
+    return noiNhanList;
   }
 
   List<String> get selectedRecipientNames {
@@ -461,6 +496,13 @@ class CreateNotificationViewModel extends BasePortalViewModel {
 
   final List<RecipientGroup> recipientGroups = [];
 
+  // TODO: 626 là số nhân viên hardcode dùng làm giá trị FALLBACK khi API
+  // loadListMasterFromApi() thất bại hoặc trả về danh sách rỗng. Nếu số
+  // nhân viên thực tế đã thay đổi kể từ khi giá trị này được viết, người
+  // dùng sẽ thấy số liệu "Tất cả nhân viên" SAI mà không có cảnh báo nào
+  // cho biết đây là dữ liệu fallback, không phải số liệu thời gian thực.
+  // Cân nhắc: (1) cập nhật định kỳ giá trị này, hoặc (2) hiển thị cảnh
+  // báo rõ ràng cho người dùng khi đang dùng fallback thay vì dữ liệu API.
   int _totalUniqueUsersCount = 626;
 
   int get totalRecipientCount => _totalUniqueUsersCount > 0 ? _totalUniqueUsersCount : 626;
@@ -488,7 +530,7 @@ class CreateNotificationViewModel extends BasePortalViewModel {
       final listNoiNhan = (rawListNoiNhan is List) ? rawListNoiNhan : [];
       final listNhom = (rawListNhom is List) ? rawListNhom : [];
 
-      // 1. Ánh xạ toàn bộ danh sách cá nhân chuẩn (626 người) từ ListNoiNhan theo UserId / Ma / Username
+      // 1. Ánh xạ toàn bộ danh sách cá nhân chuẩn từ ListNoiNhan theo UserId / Ma / Username
       final Map<String, RecipientMember> memberMap = {};
       final Map<String, RecipientMember> uniqueUserMap = {};
 
@@ -523,7 +565,7 @@ class CreateNotificationViewModel extends BasePortalViewModel {
 
       final List<RecipientGroup> loadedGroups = [];
 
-      // 2. Dựng các Nhóm từ ListNhom chuẩn theo danh sách 626 nhân viên
+      // 2. Dựng các Nhóm từ ListNhom chuẩn theo danh sách nhân viên
       for (final nhomItem in listNhom) {
         if (nhomItem is! Map<String, dynamic>) continue;
         final gId = _extractKey(nhomItem, ['id', 'Id', 'ID'])?.toString() ?? '';
@@ -533,7 +575,7 @@ class CreateNotificationViewModel extends BasePortalViewModel {
 
         final List<RecipientMember> groupMembers = [];
 
-        // Nếu là nhóm "Tất cả" (hoặc id = 1), gán toàn bộ 626 nhân viên chuẩn
+        // Nếu là nhóm "Tất cả" (hoặc id = 1), gán toàn bộ nhân viên chuẩn
         if (gName.toLowerCase().trim() == 'tất cả' || gId == '1') {
           groupMembers.addAll(uniqueUserMap.values);
         } else {
@@ -567,11 +609,11 @@ class CreateNotificationViewModel extends BasePortalViewModel {
       if (loadedGroups.isNotEmpty) {
         recipientGroups.clear();
         recipientGroups.addAll(loadedGroups);
-        notifyListeners();
+        notifyIfMounted();
       }
     } catch (e) {
       if (kDebugMode) {
-        print('⚠️ Exception loading ListMaster: $e');
+        debugPrint('⚠️ Exception loading ListMaster: $e');
       }
     }
   }
@@ -632,8 +674,15 @@ class CreateNotificationViewModel extends BasePortalViewModel {
           final prefs = await SharedPreferences.getInstance();
           await prefs.setInt(monthKey, _notificationNumber + 1);
           _notificationNumber += 1;
-          notifyListeners();
-        } catch (_) {}
+          notifyIfMounted();
+        } catch (e) {
+          // Log lại thay vì nuốt im lặng — nếu lưu số thứ tự thất bại,
+          // lần gửi thông báo tiếp theo có thể dùng lại đúng số cũ,
+          // gây trùng tên file tự động đổi tên (ví dụ 2 file cùng "19.pdf").
+          if (kDebugMode) {
+            debugPrint('[CreateNotificationViewModel] persist notificationNumber failed: $e');
+          }
+        }
       }
 
       return result;

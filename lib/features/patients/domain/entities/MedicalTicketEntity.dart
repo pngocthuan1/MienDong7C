@@ -196,4 +196,54 @@ class MedicalTicketEntity {
       isPast: isPast ?? this.isPast,
     );
   }
+
+  DateTime? get parsedTicketDate {
+    if (selectedDate != null && selectedDate!.trim().isNotEmpty) {
+      final d = _tryParseDate(selectedDate!);
+      if (d != null) return d;
+    }
+    if (scheduleText.trim().isNotEmpty) {
+      final d = _tryParseDate(scheduleText);
+      if (d != null) return d;
+    }
+    if (createdAtText.trim().isNotEmpty) {
+      final d = _tryParseDate(createdAtText);
+      if (d != null) return d;
+    }
+    return null;
+  }
+
+  static DateTime? _tryParseDate(String raw) {
+    try {
+      final clean = raw.trim();
+      final isoParsed = DateTime.tryParse(clean);
+      if (isoParsed != null) return isoParsed;
+
+      final parts = clean.split(RegExp(r'\s+'));
+      for (final p in parts) {
+        final dateClean = p.replaceAll(',', '').trim();
+        final slashParts = dateClean.split('/');
+        if (slashParts.length == 3) {
+          final day = int.tryParse(slashParts[0]);
+          final month = int.tryParse(slashParts[1]);
+          final year = int.tryParse(slashParts[2]);
+          if (day != null && month != null && year != null) {
+            return DateTime(year, month, day);
+          }
+        }
+        final dashParts = dateClean.split('-');
+        if (dashParts.length == 3) {
+          if (dashParts[0].length == 4) {
+            final year = int.tryParse(dashParts[0]);
+            final month = int.tryParse(dashParts[1]);
+            final day = int.tryParse(dashParts[2]);
+            if (day != null && month != null && year != null) {
+              return DateTime(year, month, day);
+            }
+          }
+        }
+      }
+    } catch (_) {}
+    return null;
+  }
 }

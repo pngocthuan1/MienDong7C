@@ -20,6 +20,7 @@ abstract class AuthRepository {
 
 
   // --- OTP & Account APIs ---
+  Future<ApiResult<bool>> checkExistAccount(String phone);
   Future<ApiResult<String>> generateRandomKey();
   Future<ApiResult<SendOtpResponseModel>> sendOtp(String phone, String key, String sendType);
   Future<ApiResult<int>> verifyOtp(String phone, String otp, String key, int adjustSeconds);

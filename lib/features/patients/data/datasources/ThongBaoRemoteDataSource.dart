@@ -1,11 +1,8 @@
 import 'dart:io';
-import 'dart:convert';
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:benhvien7c/core/network/DioClient.dart';
 import 'package:benhvien7c/core/services/FirebaseTokenService.dart';
-import 'package:benhvien7c/core/session/AppSessionStore.dart';
-import 'package:benhvien7c/features/patients/domain/entities/NotificationItemEntity.dart';
 import 'package:benhvien7c/features/patients/domain/entities/NotificationReadStatusEntity.dart';
 
 /// Class gọi trực tiếp các API REST thật của Hệ thống Bệnh Viện 7C (/api/ThongBao & /api/Firebase)
@@ -21,10 +18,16 @@ class ThongBaoRemoteDataSource {
     String? toDateStr,
     int countLocal = 0,
   }) async {
+    final now = DateTime.now();
+    final defaultToDate = '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')} 23:59:59';
+    // Lấy từ ngày 01 của tháng trước (tự động bao phủ trọn vẹn cả tháng 28, 29, 30 và 31 ngày)
+    final prevMonth = DateTime(now.year, now.month - 1, 1);
+    final defaultFromDate = '${prevMonth.year}-${prevMonth.month.toString().padLeft(2, '0')}-01 00:00:00';
+
     final payload = {
       "tenDangNhapHis": hisUsername,
-      "tuNgay": fromDateStr ?? "2026-01-01 00:00:00",
-      "denNgay": toDateStr ?? "2026-12-31 23:59:59",
+      "tuNgay": fromDateStr ?? defaultFromDate,
+      "denNgay": toDateStr ?? defaultToDate,
       "countLocalNewThongBao": countLocal,
       "deviceInfo": FirebaseTokenService.instance.deviceInfoString,
       "firebaseToken": FirebaseTokenService.instance.fcmToken,
@@ -105,7 +108,7 @@ class ThongBaoRemoteDataSource {
       "TieuDe": title.isNotEmpty ? title : "THÔNG BÁO NỘI BỘ",
       "NoiDung": content,
       "NoiGui": parsedNoiGui,
-      "NoiNhan": noiNhanList.isNotEmpty ? noiNhanList : ["ALL"],
+      "NoiNhan": noiNhanList,
       "HisUserId": hisUserId,
       "LinkCongVan": "",
       "ListFile": listFile ?? [],
@@ -166,32 +169,73 @@ class ThongBaoRemoteDataSource {
   }
 
   /// 7. GET /api/ThongBao/CheckReadUser - Kiểm tra danh sách người dùng đã đọc
-  Future<List<NotificationReadStatusEntity>> checkReadUser(String notificationId, {String schema = "hospi_2608"}) async {
-    final response = await _dioClient.dio.get(
-      '/api/ThongBao/CheckReadUser',
-      queryParameters: {
-        "id": notificationId,
-        "schema": schema,
-      },
-    );
-    final rawData = _unwrapApiResult(response.data);
-    if (rawData is List) {
-      return rawData.map((e) {
-        final m = e as Map<String, dynamic>;
-        final userId = m['UserId']?.toString() ?? '';
-        final userName = m['Ten']?.toString() ?? 'Người dùng';
-        final readDateStr = m['NgayNhan'] as String?;
-        final isRead = readDateStr != null && readDateStr.isNotEmpty;
+  Future<List<NotificationReadStatusEntity>> checkReadUser(String notificationId, {String? schema}) async {
+    final now = DateTime.now();
+    final mm = now.month.toString().padLeft(2, '0');
+    final yy = (now.year % 100).toString().padLeft(2, '0');
+    final dynamicSchema = schema ?? 'hospi$mm$yy';
 
-        return NotificationReadStatusEntity(
-          userId: userId,
-          userName: userName,
-          userRole: 'Thành viên',
-          isRead: isRead,
-          readAt: isRead ? DateTime.tryParse(readDateStr) : null,
+    try {
+      final response = await _dioClient.dio.get(
+        '/api/ThongBao/CheckReadUser',
+        queryParameters: {
+          "id": notificationId,
+          "schema": dynamicSchema,
+        },
+      );
+      final rawData = _unwrapApiResult(response.data);
+      if (rawData is List) {
+        return rawData.map((e) {
+          final m = e as Map<String, dynamic>;
+          final userId = m['UserId']?.toString() ?? m['userId']?.toString() ?? '';
+          final userName = m['MaVaTen']?.toString() ?? m['Ten']?.toString() ?? m['ten']?.toString() ?? m['UserId']?.toString() ?? 'Nhân viên';
+          final readDateStr = m['NgayNhan']?.toString() ?? m['ngayNhan']?.toString();
+          final trangThaiVal = m['TrangThai'] as int? ?? m['trangThai'] as int? ?? 0;
+          final isRead = trangThaiVal != 1 || (readDateStr != null && readDateStr.isNotEmpty);
+
+          return NotificationReadStatusEntity(
+            userId: userId,
+            userName: userName,
+            userRole: m['KhoaPhong']?.toString() ?? m['khoaPhong']?.toString() ?? 'Phòng ban',
+            isRead: isRead,
+            readAt: readDateStr != null ? DateTime.tryParse(readDateStr) : null,
+          );
+        }).toList();
+      }
+    } catch (_) {}
+
+    if (schema == null || schema != 'hospi_${yy}${mm}') {
+      try {
+        final fallbackSchema = 'hospi_${yy}${mm}';
+        final response = await _dioClient.dio.get(
+          '/api/ThongBao/CheckReadUser',
+          queryParameters: {
+            "id": notificationId,
+            "schema": fallbackSchema,
+          },
         );
-      }).toList();
+        final rawData = _unwrapApiResult(response.data);
+        if (rawData is List) {
+          return rawData.map((e) {
+            final m = e as Map<String, dynamic>;
+            final userId = m['UserId']?.toString() ?? m['userId']?.toString() ?? '';
+            final userName = m['MaVaTen']?.toString() ?? m['Ten']?.toString() ?? m['ten']?.toString() ?? m['UserId']?.toString() ?? 'Nhân viên';
+            final readDateStr = m['NgayNhan']?.toString() ?? m['ngayNhan']?.toString();
+            final trangThaiVal = m['TrangThai'] as int? ?? m['trangThai'] as int? ?? 0;
+            final isRead = trangThaiVal != 1 || (readDateStr != null && readDateStr.isNotEmpty);
+
+            return NotificationReadStatusEntity(
+              userId: userId,
+              userName: userName,
+              userRole: m['KhoaPhong']?.toString() ?? m['khoaPhong']?.toString() ?? 'Phòng ban',
+              isRead: isRead,
+              readAt: readDateStr != null ? DateTime.tryParse(readDateStr) : null,
+            );
+          }).toList();
+        }
+      } catch (_) {}
     }
+
     return [];
   }
 
@@ -231,6 +275,30 @@ class ThongBaoRemoteDataSource {
 
     final response = await _dioClient.dio.post(
       '/api/Firebase/Remove',
+      data: payload,
+    );
+    final res = _unwrapApiResult(response.data);
+    return res == true;
+  }
+
+  /// 10. POST /api/Firebase/SetBadge - Đồng bộ số Badge ngoài Icon App
+  Future<bool> setFirebaseBadge({
+    required String userId,
+    required String fcmToken,
+    required String deviceInfo,
+    required int badgeNumber,
+    String platform = "Android",
+  }) async {
+    final payload = {
+      "UserId": userId,
+      "DeviceInfo": deviceInfo,
+      "FirebaseToken": fcmToken,
+      "Platform": platform,
+      "BadgeNumber": badgeNumber,
+    };
+
+    final response = await _dioClient.dio.post(
+      '/api/Firebase/SetBadge',
       data: payload,
     );
     final res = _unwrapApiResult(response.data);

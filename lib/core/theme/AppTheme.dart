@@ -25,6 +25,12 @@ class AppTheme {
       cardColor: AppColors.surface,
       dividerColor: AppColors.border,
       inputDecorationTheme: InputDecorationTheme(
+        errorMaxLines: 5,
+        errorStyle: const TextStyle(
+          color: AppColors.error,
+          fontSize: 12.5,
+          height: 1.35,
+        ),
         filled: true,
         fillColor: Colors.white,
         prefixIconColor: const Color(0xFF94A3B8),

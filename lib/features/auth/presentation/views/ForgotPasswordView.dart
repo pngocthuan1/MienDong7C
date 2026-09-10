@@ -82,6 +82,9 @@ class _ForgotPasswordViewState extends State<ForgotPasswordView> {
         return;
       }
       await _viewModel.requestOtpCommand.execute();
+      if (_viewModel.phoneError != null) {
+        _formKey.currentState!.validate();
+      }
     } catch (_) {}
   }
 

@@ -34,12 +34,16 @@ class PasswordRuleBox extends StatelessWidget {
             label: 'Tối thiểu 8 ký tự',
           ),
           _RuleItem(
-            isValid: Validators.hasLetter(password),
-            label: 'Ít nhất 1 chữ cái',
+            isValid: Validators.startsWithUppercase(password),
+            label: 'Ít nhất 1 chữ hoa ở đầu',
           ),
           _RuleItem(
             isValid: Validators.hasNumber(password),
             label: 'Ít nhất 1 chữ số',
+          ),
+          _RuleItem(
+            isValid: Validators.hasSpecialChar(password),
+            label: 'Ít nhất 1 ký tự đặc biệt',
           ),
         ],
       ),

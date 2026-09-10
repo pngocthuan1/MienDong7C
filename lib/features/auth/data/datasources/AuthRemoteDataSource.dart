@@ -107,6 +107,29 @@ class AuthRemoteDataSource {
     }
   }
 
+  /// Kiểm tra số điện thoại đã có tài khoản trên hệ thống hay chưa
+  Future<bool> checkExistAccount(String phoneNumber) async {
+    try {
+      final response = await _dioClient.dio.post(
+        '/api/TaiKhoan/CheckExistAccount',
+        data: {
+          'SoDienThoai': phoneNumber,
+          'MatKhau': '.',
+          'HoTen': '.',
+          'Otp': '.',
+        },
+      );
+      return ApiValidator.validateResponse(
+        json: response.data as Map<String, dynamic>,
+        fromJsonT: (data) => data as bool,
+      );
+    } on DioException catch (e) {
+      throw e.error is ApiException
+          ? e.error as ApiException
+          : ApiException.fromDioError(e);
+    }
+  }
+
   Future<String> signUp(DkkSignUpRequestModel request) async {
     try {
       final response = await _dioClient.dio.post(

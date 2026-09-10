@@ -47,14 +47,15 @@ class AuthCardShell extends StatelessWidget {
                       border: Border.all(color: const Color(0xFFDBEAFE)),
                     ),
                     child: Column(
-                      children: const [
-                        Icon(
-                          Icons.local_hospital_rounded,
-                          size: 44,
-                          color: Color(0xFF2563EB),
+                      children: [
+                        Image.asset(
+                          'assets/images/logo.png',
+                          width: 72,
+                          height: 72,
+                          fit: BoxFit.contain,
                         ),
-                        SizedBox(height: 10),
-                        Text(
+                        const SizedBox(height: 10),
+                        const Text(
                           'Bệnh viện Miền Đông 7C',
                           style: TextStyle(
                             color: Color(0xFF1E3A8A),
@@ -62,8 +63,8 @@ class AuthCardShell extends StatelessWidget {
                             fontSize: 17,
                           ),
                         ),
-                        SizedBox(height: 4),
-                        Text(
+                        const SizedBox(height: 4),
+                        const Text(
                           'Hệ thống Đăng ký & Đặt lịch khám bệnh',
                           textAlign: TextAlign.center,
                           style: TextStyle(

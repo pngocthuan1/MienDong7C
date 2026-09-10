@@ -108,11 +108,29 @@ class SecureStorageService {
 
   Future<bool> isRefreshTokenExpired() async {
     final expires = await getExpiresRefreshToken();
-    if (expires == null || expires.isEmpty) return true;
+    if (expires == null || expires.isEmpty) return false;
 
-    final ticks = int.tryParse(expires);
-    if (ticks == null) return true;
-    return DateTimeConverter.isExpired(ticks);
+    try {
+      final ticks = int.tryParse(expires);
+      if (ticks == null) {
+        final parsedIso = DateTime.tryParse(expires);
+        if (parsedIso == null) return false;
+        return DateTime.now().isAfter(parsedIso);
+      }
+
+      DateTime expiryDate;
+      if (ticks > 600000000000000000) {
+        expiryDate = DateTimeConverter.fromTicks(ticks);
+      } else if (ticks > 100000000000) {
+        expiryDate = DateTime.fromMillisecondsSinceEpoch(ticks, isUtc: true).toLocal();
+      } else {
+        expiryDate = DateTime.fromMillisecondsSinceEpoch(ticks * 1000, isUtc: true).toLocal();
+      }
+
+      return DateTime.now().isAfter(expiryDate);
+    } catch (_) {
+      return false;
+    }
   }
 
   // ==================== Device ID ====================

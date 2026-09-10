@@ -85,6 +85,12 @@ class AppTextField extends StatelessWidget {
         prefixIcon: prefixIcon != null ? Icon(prefixIcon) : null,
         filled: readOnly,
         fillColor: readOnly ? const Color(0xFFF1F5F9) : null,
+        errorMaxLines: 5,
+        errorStyle: const TextStyle(
+          color: Color(0xFFEF4444),
+          fontSize: 12.5,
+          height: 1.35,
+        ),
       ),
     );
   }

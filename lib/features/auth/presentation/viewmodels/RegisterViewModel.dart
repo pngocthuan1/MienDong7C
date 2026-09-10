@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:benhvien7c/core/network/ApiResult.dart';
 import 'package:benhvien7c/core/network/ApiException.dart';
+import 'package:benhvien7c/core/network/ApiResult.dart';
 import 'package:benhvien7c/core/utils/Validators.dart';
 import 'package:benhvien7c/features/auth/domain/entities/UserRole.dart';
 import 'package:benhvien7c/features/auth/data/models/DkkAuthModels.dart';
@@ -25,7 +25,12 @@ class Command<T> extends ChangeNotifier {
 
     try {
       _result = await _action();
-    } catch (_) {
+    } catch (e,stackTrace) {
+      debugPrint('[Command] Unhandled error during execute(): $e');
+      debugPrintStack(stackTrace: stackTrace);
+       _result = ApiFailure(
+        UnknownException('Đã xảy ra lỗi không xác định. Vui lòng thử lại.'),
+      );
     } finally {
       _running = false;
       notifyListeners();
@@ -139,23 +144,29 @@ class RegisterViewModel extends ChangeNotifier {
   int adjustSeconds = 0;
   int remainingSeconds = 60;
 
+  bool _isPhoneAlreadyExistsMessage(String msg) {
+    return msg.contains('tồn tại') ||
+        msg.contains('đã được') ||
+        msg.contains('đã sử dụng') ||
+        msg.contains('đã đăng ký') ||
+        msg.contains('104') ||
+        msg.contains('Exist');
+  }
+
   Future<ApiResult<String>> _register() async {
     _message = null;
-    phoneError = null;
-    notifyListeners();
-
     final phone = phoneController.text.trim();
     final cleanPhone = phone.replaceAll(RegExp(r'\D'), '');
 
-    final prefs = await SharedPreferences.getInstance();
-
-    final name = fullNameController.text.trim();
-    if (cleanPhone.isNotEmpty && name.isNotEmpty) {
-      await prefs.setString('full_name_$cleanPhone', name);
-      await prefs.setString('saved_full_name', name);
+    // 1. Kiểm tra trên Server C# xem Số điện thoại đã có tài khoản hay chưa -> CHẶN NGAY TẠI MÀN HÌNH ĐĂNG KÝ
+    final checkResult = await _authRepository.checkExistAccount(phone);
+    if (checkResult is ApiSuccess<bool> && checkResult.data == true) {
+      phoneError = 'Số điện thoại này đã được đăng ký tài khoản. Vui lòng đăng nhập hoặc dùng tính năng Quên mật khẩu.';
+      notifyListeners();
+      return ApiFailure(ApiException.validation(phoneError!));
     }
 
-    // 1. Sinh khóa ngẫu nhiên
+    // 2. Sinh khóa ngẫu nhiên từ Server C#
     final keyResult = await _authRepository.generateRandomKey();
     if (keyResult is ApiFailure<String>) {
       _message = keyResult.exception.message;
@@ -164,16 +175,11 @@ class RegisterViewModel extends ChangeNotifier {
     }
     final key = (keyResult as ApiSuccess<String>).data;
 
-    // 2. Gửi mã OTP
+    // 3. Gửi mã OTP thực tế (nếu SĐT chưa từng đăng ký)
     final otpResult = await _authRepository.sendOtp(phone, key, 'SignUp');
     if (otpResult is ApiFailure<SendOtpResponseModel>) {
       final msg = otpResult.exception.message;
-      if (msg.contains('tồn tại') ||
-          msg.contains('đã được') ||
-          msg.contains('đã sử dụng') ||
-          msg.contains('đã đăng ký') ||
-          msg.contains('104') ||
-          msg.contains('Exist')) {
+      if (_isPhoneAlreadyExistsMessage(msg)) {
         phoneError = 'Số điện thoại này đã được đăng ký tài khoản. Vui lòng đăng nhập hoặc dùng tính năng Quên mật khẩu.';
       } else {
         _message = msg;
@@ -181,7 +187,16 @@ class RegisterViewModel extends ChangeNotifier {
       notifyListeners();
       return ApiFailure(otpResult.exception);
     }
+
     final otpData = (otpResult as ApiSuccess<SendOtpResponseModel>).data;
+    final serverMsg = otpData.message ?? '';
+
+    // Nếu Server trả về 200 OK nhưng nội dung message thông báo số đã tồn tại / đã đăng ký
+    if (_isPhoneAlreadyExistsMessage(serverMsg)) {
+      phoneError = 'Số điện thoại này đã được đăng ký tài khoản. Vui lòng đăng nhập hoặc dùng tính năng Quên mật khẩu.';
+      notifyListeners();
+      return ApiFailure(ApiException.validation(phoneError!));
+    }
 
     otpKey = key;
     adjustSeconds = otpData.adjustSeconds;

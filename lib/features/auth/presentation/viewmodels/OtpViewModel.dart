@@ -7,6 +7,16 @@ import 'package:benhvien7c/features/auth/data/models/DkkAuthModels.dart';
 import 'package:benhvien7c/features/auth/presentation/viewmodels/RegisterViewModel.dart';
 import 'package:benhvien7c/features/auth/presentation/views/AuthFlowArguments.dart';
 
+bool isPhoneAlreadyExistsMessage(String msg) {
+  return msg.contains('tồn tại') ||
+      msg.contains('đã được') ||
+      msg.contains('đã sử dụng') ||
+      msg.contains('đã đăng ký') ||
+      msg.contains('104') ||
+      msg.contains('Exist');
+}
+
+
 class OtpViewModel extends ChangeNotifier {
   final AuthRepository _authRepository;
   final String phoneNumber;
@@ -69,31 +79,49 @@ class OtpViewModel extends ChangeNotifier {
         adjustSeconds,
       );
       if (res is ApiFailure<String>) {
-        _message = res.exception.message;
+        final msg = res.exception.message;
+        if (isPhoneAlreadyExistsMessage(msg)) {
+          _message = 'Số điện thoại này đã được đăng ký tài khoản. Vui lòng đăng nhập hoặc dùng tính năng Quên mật khẩu.';
+        } else {
+          _message = msg;
+        }
         notifyListeners();
-        return res;
+        return ApiFailure(ApiException.validation(_message!));
       }
+
       final data = (res as ApiSuccess<String>).data;
       if (data == 'Invalid') {
         _message = 'Mã OTP không hợp lệ hoặc đăng ký thất bại';
         notifyListeners();
         return ApiFailure(ApiException.validation(_message!));
       }
-      SharedPreferences.getInstance().then((prefs) {
-        final list = (prefs.getStringList('registered_phone_numbers') ?? ['0822380103', '0902377251', '0987654321']).toSet();
-        final clean = phoneNumber.replaceAll(RegExp(r'\D'), '');
-        if (clean.isNotEmpty) {
-          list.add(clean);
-          if (fullName.trim().isNotEmpty) {
-            prefs.setString('full_name_$clean', fullName.trim());
-            prefs.setString('saved_full_name', fullName.trim());
-          }
-        }
-        prefs.setStringList('registered_phone_numbers', list.toList());
-      });
+
+      final prefs = await SharedPreferences.getInstance();
+      final clean = phoneNumber.replaceAll(RegExp(r'\D'), '');
+      if (fullName.trim().isNotEmpty) {
+        await prefs.setString('full_name_$clean', fullName.trim());
+        await prefs.setString('saved_full_name', fullName.trim());
+      }
+
       return res;
     } else {
       if (otp.length != 6) {
+           // Với luồng quên mật khẩu (purpose != registration), OTP ở bước này
+      // CHỈ được kiểm tra độ dài (đủ 6 số) phía client, chưa gọi backend
+      // để xác minh mã có đúng hay không — đây là chủ đích thiết kế,
+      // không phải thiếu sót.
+      //
+      // Việc xác thực OTP thật sự diễn ra ở bước KẾ TIẾP: màn hình đặt
+      // mật khẩu mới (ResetPasswordViewModel._resetPassword()) sẽ gửi
+      // `otp` này kèm `key`/`adjustSeconds` lên API `resetPassword(...)`,
+      // và server sẽ từ chối nếu OTP sai/hết hạn.
+      //
+      // Lưu ý quan trọng: nếu người dùng bấm "Gửi lại mã" (resend) tại
+      // màn OTP này, `key`/`adjustSeconds` sẽ được cập nhật lại trong
+      // OtpViewModel. Khi điều hướng sang ResetPasswordViewModel, PHẢI
+      // truyền đúng `key`/`adjustSeconds` MỚI NHẤT (sau resend), không
+      // phải giá trị ban đầu — nếu không, server sẽ so khớp sai OTP dù
+      // người dùng nhập đúng mã vừa nhận.
         _message = 'Vui lòng nhập đủ 6 chữ số OTP';
         notifyListeners();
         return ApiFailure(ApiException.validation(_message!));
@@ -102,9 +130,45 @@ class OtpViewModel extends ChangeNotifier {
     }
   }
 
+  int resendCount = 0;
+  DateTime? _lockUntil;
+
+  static const int maxResendAttempts = 3;
+  static const int resendLockoutMinutes = 5;
+
+  bool get isResendLocked {
+    if (_lockUntil == null) return false;
+    return DateTime.now().isBefore(_lockUntil!);
+  }
+
+  int get remainingLockoutSeconds {
+    if (_lockUntil == null) return 0;
+    final diff = _lockUntil!.difference(DateTime.now()).inSeconds;
+    return diff > 0 ? diff : 0;
+  }
+
   Future<ApiResult<String>> _resendOtp() async {
     _message = null;
     notifyListeners();
+    if(_lockUntil != null && !isResendLocked) {
+      _lockUntil = null;
+      resendCount = 0;
+    }
+
+    // 0. Kiểm tra khóa nếu đã yêu cầu quá 3 lần
+    if (isResendLocked) {
+      final minutes = (remainingLockoutSeconds / 60).ceil();
+      _message = 'Bạn đã gửi lại mã OTP quá 3 lần. Vui lòng chờ $minutes phút để thử lại!';
+      notifyListeners();
+      return ApiFailure(ApiException.validation(_message!));
+    }
+
+    if (resendCount >= maxResendAttempts) {
+      _lockUntil = DateTime.now().add(const Duration(minutes: resendLockoutMinutes));
+      _message = 'Bạn đã yêu cầu gửi lại OTP quá 3 lần. Vui lòng tạm dừng 5 phút để bảo vệ hệ thống!';
+      notifyListeners();
+      return ApiFailure(ApiException.validation(_message!));
+    }
 
     // 1. Sinh khóa mới
     final keyResult = await _authRepository.generateRandomKey();
@@ -124,6 +188,11 @@ class OtpViewModel extends ChangeNotifier {
       return ApiFailure(otpResult.exception);
     }
     final otpData = (otpResult as ApiSuccess<SendOtpResponseModel>).data;
+
+    resendCount++;
+    if (resendCount >= maxResendAttempts) {
+      _lockUntil = DateTime.now().add(const Duration(minutes: resendLockoutMinutes));
+    }
 
     key = newKey;
     adjustSeconds = otpData.adjustSeconds;

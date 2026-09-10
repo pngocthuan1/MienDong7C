@@ -22,21 +22,22 @@ class AuthHeader extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Container(
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
           decoration: BoxDecoration(
             color: AppColors.primarySoft,
             borderRadius: BorderRadius.circular(AppSizes.fieldRadius),
           ),
-          child: const Row(
+          child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(Icons.favorite_rounded, color: AppColors.primary),
-              SizedBox(width: 10),
-              Text(
-                'HPS Hospital',
+              Image.asset('assets/images/logo.png', width: 24, height: 24, fit: BoxFit.contain),
+              const SizedBox(width: 10),
+              const Text(
+                'Bệnh viện 7C',
                 style: TextStyle(
                   color: AppColors.primaryDark,
                   fontWeight: FontWeight.w800,
+                  fontSize: 15,
                 ),
               ),
             ],
@@ -48,11 +49,22 @@ class AuthHeader extends StatelessWidget {
             Container(
               width: 52,
               height: 52,
+              padding: const EdgeInsets.all(6),
               decoration: BoxDecoration(
-                color: AppColors.primary,
+                color: Colors.white,
                 borderRadius: BorderRadius.circular(AppSizes.fieldRadius),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.08),
+                    blurRadius: 8,
+                    offset: const Offset(0, 2),
+                  ),
+                ],
               ),
-              child: Icon(icon, color: Colors.white, size: 28),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(AppSizes.fieldRadius - 4),
+                child: Image.asset('assets/images/logo.png', fit: BoxFit.contain),
+              ),
             ),
             const SizedBox(width: 16),
             Expanded(

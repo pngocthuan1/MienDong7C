@@ -24,4 +24,6 @@ class RouteNames {
   static const String medicalTicket = '/medical-ticket';
   static const String createNotification = '/create-notification';
   static const String notificationRecipientStatus = '/notification-recipient-status';
+  static const String personalProfile = '/personal-profile';
+  static const String aboutApp = '/about-app';
 }

@@ -155,7 +155,7 @@ class _CreateNotificationViewState extends State<CreateNotificationView> with Si
       );
       if (shouldSwitch) {
         _viewModel.attachments.clear();
-        _viewModel.notifyListeners();
+        _viewModel.refreshUI();
       } else {
         return;
       }
@@ -168,74 +168,60 @@ class _CreateNotificationViewState extends State<CreateNotificationView> with Si
       );
       if (shouldReplace) {
         _viewModel.attachments.clear();
-        _viewModel.notifyListeners();
+        _viewModel.refreshUI();
       } else {
         return;
       }
     }
 
     try {
-      // Chỉ mở & lọc các Tệp Văn Bản / Tài Liệu (Bảo toàn 100% nguyên gốc, không nén)
-      final List<PlatformFile>? files = await FilePicker.pickFiles(
-        type: FileType.custom,
-        allowedExtensions: ['pdf', 'docx', 'doc', 'xlsx', 'xls', 'pptx', 'ppt', 'txt', 'zip', 'rar', 'csv', 'log', 'rtf'],
-        allowMultiple: false,
+      // Cho phép chọn TẤT CẢ CÁC LOẠI TỆP (PDF, Word, Excel, PowerPoint, ZIP, RAR, Ảnh, Video,...)
+      final files = await FilePicker.pickFiles(
+        type: FileType.any,
+        allowMultiple: true,
       );
 
       if (files != null && files.isNotEmpty) {
-        final file = files.first;
-        if (file.name.isEmpty) return;
+        final List<({String fileName, String filePath, int sizeBytes})> items = [];
+        for (final file in files) {
+          if (file.name.isEmpty) continue;
 
-        int calculatedSize = 0;
-        if (file.path != null && file.path!.isNotEmpty && File(file.path!).existsSync()) {
-          try {
-            calculatedSize = File(file.path!).lengthSync();
-          } catch (_) {
-            calculatedSize = 250 * 1024;
+          int calculatedSize = 250 * 1024;
+          if (file.path != null && file.path!.isNotEmpty) {
+            try {
+              final f = File(file.path!);
+              if (f.existsSync()) {
+                calculatedSize = f.lengthSync();
+              }
+            } catch (_) {}
           }
-        } else {
-          calculatedSize = 250 * 1024;
+
+          items.add((
+            fileName: file.name,
+            filePath: file.path ?? '/device/${file.name}',
+            sizeBytes: calculatedSize,
+          ));
         }
 
-        final result = _viewModel.addRealPickedAttachment(
-          fileName: file.name,
-          filePath: file.path ?? '/device/${file.name}',
-          sizeBytes: calculatedSize,
-        );
+        final batchRes = _viewModel.addRealPickedAttachmentBatch(items);
 
         if (mounted) {
-          switch (result) {
-            case AddAttachmentResult.success:
-              final mb = (calculatedSize / (1024 * 1024)).toStringAsFixed(1);
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text('📎 Đã đính kèm Tệp Văn Bản gốc: ${file.name} ($mb MB <= 5.0 MB - Giữ nguyên 100%)'),
-                  backgroundColor: const Color(0xFF10B981),
-                  duration: const Duration(seconds: 3),
-                ),
-              );
-              break;
-            case AddAttachmentResult.exceedsFileCount:
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('⚠️ Bạn chỉ được phép chọn tối đa 1 tệp văn bản! Vui lòng xóa tệp hiện tại nếu muốn chọn tệp khác.'),
-                  backgroundColor: Color(0xFFEA580C),
-                  duration: Duration(seconds: 4),
-                ),
-              );
-              break;
-            case AddAttachmentResult.exceedsFileSize:
-              final mbStr = (calculatedSize / (1024 * 1024)).toStringAsFixed(1);
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text('⚠️ Tệp văn bản đã chọn ($mbStr MB) vượt quá dung lượng cho phép! (Tối đa 5.0 MB)'),
-                  backgroundColor: Colors.redAccent,
-                  duration: const Duration(seconds: 4),
-                ),
-              );
-              break;
-            default:
-              break;
+          if (batchRes.addedCount > 0) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('📎 Đã đính kèm ${batchRes.addedCount} tệp thành công!'),
+                backgroundColor: const Color(0xFF10B981),
+                duration: const Duration(seconds: 3),
+              ),
+            );
+          } else if (batchRes.rejectedSizeCount > 0) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('⚠️ Tệp đính kèm vượt quá dung lượng cho phép! (Tối đa 5MB)'),
+                backgroundColor: Colors.redAccent,
+                duration: Duration(seconds: 4),
+              ),
+            );
           }
         }
       }
@@ -243,7 +229,7 @@ class _CreateNotificationViewState extends State<CreateNotificationView> with Si
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Không thể chọn tệp văn bản: ${e.toString()}'),
+            content: Text('Không thể chọn tệp: ${e.toString()}'),
             backgroundColor: Colors.redAccent,
           ),
         );
@@ -338,7 +324,7 @@ class _CreateNotificationViewState extends State<CreateNotificationView> with Si
       );
       if (shouldSwitch) {
         _viewModel.attachments.clear();
-        _viewModel.notifyListeners();
+        _viewModel.refreshUI();
       } else {
         return;
       }
@@ -505,7 +491,7 @@ class _CreateNotificationViewState extends State<CreateNotificationView> with Si
       );
       if (shouldSwitch) {
         _viewModel.attachments.clear();
-        _viewModel.notifyListeners();
+        _viewModel.refreshUI();
       } else {
         return;
       }
@@ -1024,7 +1010,7 @@ class _CreateNotificationViewState extends State<CreateNotificationView> with Si
       );
       if (shouldSwitch) {
         _viewModel.attachments.clear();
-        _viewModel.notifyListeners();
+        _viewModel.refreshUI();
       } else {
         return;
       }
@@ -1470,8 +1456,8 @@ class _CreateNotificationViewState extends State<CreateNotificationView> with Si
                         style: ElevatedButton.styleFrom(
                           backgroundColor: Colors.white,
                           foregroundColor: const Color(0xFF2F7DE1),
-                          disabledBackgroundColor: Colors.white.withOpacity(0.5),
-                          disabledForegroundColor: const Color(0xFF2F7DE1).withOpacity(0.6),
+                          disabledBackgroundColor: Colors.white.withAlpha(129),
+                          disabledForegroundColor: const Color(0xFF2F7DE1).withAlpha(154),
                           elevation: 0,
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(20),
@@ -2274,7 +2260,6 @@ class _CreateNotificationViewState extends State<CreateNotificationView> with Si
               final group = _viewModel.filteredRecipientGroups[idx];
               final isExpanded = _viewModel.isGroupExpanded(group.id);
               final isSelected = _viewModel.isGroupSelected(group);
-              final isPartial = _viewModel.isGroupPartiallySelected(group);
 
               return Container(
                 margin: const EdgeInsets.only(bottom: 10),

@@ -24,14 +24,14 @@ class CccdData {
   String get birthYear {
     if (birthDate.contains('/')) {
       final dateParts = birthDate.split('/');
-      if (dateParts.isNotEmpty) {
+      if (dateParts.isNotEmpty && dateParts.last.trim().isNotEmpty) {
         return dateParts.last.trim();
       }
     }
     if (birthDate.length >= 4) {
       return birthDate.substring(birthDate.length - 4);
     }
-    return birthDate.isNotEmpty ? birthDate.trim() : '1997';
+    return birthDate.trim();
   }
 }
 
@@ -81,7 +81,9 @@ class CccdParserHelper {
       if (parts.length < 5) return null;
 
       // Kiểm tra xem là BHYT truyền thống hay CCCD
-      final isBhyt = firstField.length != 12 || !RegExp(r'^\d{12}$').hasMatch(firstField);
+       final looksLikeCccdNumber = RegExp(r'^\d{12}$').hasMatch(firstField);
+      final isCccdFormat = parts.length == 7 && looksLikeCccdNumber;
+      final isBhyt = !isCccdFormat;
 
       if (isBhyt) {
         // Định dạng 2: BHYT giấy truyền thống (5+ trường)
@@ -97,7 +99,26 @@ class CccdParserHelper {
           issueDate: parts.length > 8 ? parts[8].trim() : '',
           isBhyt: true,
         );
-      } else {
+      } 
+      
+      if(parts.length < 5) return null;
+
+      if(isBhyt) {
+        // Định dạng 2: BHYT giấy truyền thống (5+ trường)
+        final rawGender = parts[3].trim();
+        final genderText = (rawGender == '2' || rawGender == 'Nữ') ? 'Nữ' : 'Nam';
+        return CccdData(
+       cccdNumber: firstField,
+          oldIdNumber: '',
+          fullName: decodeHexIfNeeded(parts[1]),
+          birthDate: parts[2].trim(),
+          gender: genderText,
+          address: decodeHexIfNeeded(parts[4]),
+          issueDate: parts.length > 8 ? parts[8].trim() : '',
+          isBhyt: true,
+        );
+      }
+      else {
         // Định dạng 3: Thẻ Căn cước công dân (CCCD) Việt Nam
         return CccdData(
           cccdNumber: firstField,

@@ -50,15 +50,32 @@ class PortalRepositoryImpl implements PortalRepository {
       final res = await thongBaoRemote.fetchNotificationList(
         hisUsername: hisUsername,
       );
-      final badgeNumber = (res['BadgeNumer'] as num?)?.toInt() ?? 0;
       final rawList = res['ListThongBao'] as List<dynamic>? ?? [];
+      final prefs = await SharedPreferences.getInstance();
+      final readSet = prefs.getStringList('read_notif_ids_$hisUsername') ?? [];
+      final importantSet = prefs.getStringList('important_notif_ids_$hisUsername') ?? [];
 
-      return Ok(NotificationSummaryEntity(
-        total: rawList.length,
-        unread: badgeNumber,
-        important: 0,
-        lastUpdatedLabel: rawList.isNotEmpty ? (rawList.first['NgayGui'] as String? ?? '') : '',
-      ));
+      final items = rawList.map((e) {
+        final item = NotificationItemEntity.fromApiJson(e as Map<String, dynamic>);
+        if (readSet.contains(item.id)) {
+          item.isRead = true;
+        }
+        return item;
+      }).toList();
+
+      final actualUnread = items.where((e) => !e.isRead).length;
+
+      final summary = NotificationSummaryEntity(
+        total: items.length,
+        unread: actualUnread,
+        important: importantSet.length,
+        lastUpdatedLabel: items.isNotEmpty ? items.first.timeLabel : '',
+      );
+      if (summary.total > 0 || summary.unread >= 0) {
+        AppSessionStore.instance.updateNotificationSummary(summary);
+      }
+
+      return Ok(summary);
     } on Exception catch (exception) {
       return Error(exception, exception.toString());
     } catch (error) {
@@ -73,21 +90,44 @@ class PortalRepositoryImpl implements PortalRepository {
     try {
       final thongBaoRemote = _thongBaoRemoteDataSource ?? ThongBaoRemoteDataSource(AppLocator.dioClient);
       final hisUsername = _getHisUsername();
+      final prefs = await SharedPreferences.getInstance();
 
+      final downloadedSet = prefs.getStringList('downloaded_notif_ids_$hisUsername') ?? [];
+      final readSet = prefs.getStringList('read_notif_ids_$hisUsername') ?? [];
+      final importantSet = prefs.getStringList('important_notif_ids_$hisUsername') ?? [];
+
+      // 1. Gọi Server C# lấy toàn bộ danh sách thông báo chuẩn thực tế từ Server
       final res = await thongBaoRemote.fetchNotificationList(
         hisUsername: hisUsername,
+        countLocal: 0,
       );
+
+      final badgeNumber = (res['BadgeNumer'] as num?)?.toInt() ?? 0;
       final rawList = res['ListThongBao'] as List<dynamic>? ?? [];
-      final prefs = await SharedPreferences.getInstance();
-      final downloadedSet = prefs.getStringList('downloaded_notif_ids_$hisUsername') ?? [];
 
       final serverItems = rawList.map((e) {
         final item = NotificationItemEntity.fromApiJson(e as Map<String, dynamic>);
         if (downloadedSet.contains(item.id)) {
           item.isDownloaded = true;
         }
+        if (readSet.contains(item.id)) {
+          item.isRead = true;
+        }
+        if (importantSet.contains(item.id)) {
+          item.isImportant = true;
+        }
         return item;
       }).toList();
+
+      final summary = NotificationSummaryEntity(
+        total: serverItems.length,
+        unread: serverItems.where((e) => !e.isRead).length,
+        important: importantSet.length,
+        lastUpdatedLabel: serverItems.isNotEmpty ? serverItems.first.timeLabel : '',
+      );
+      if (summary.total > 0 || summary.unread >= 0) {
+        AppSessionStore.instance.updateNotificationSummary(summary);
+      }
 
       _datasource.setNotifications(role, serverItems);
 
@@ -96,6 +136,30 @@ class PortalRepositoryImpl implements PortalRepository {
       return Error(exception, exception.toString());
     } catch (error) {
       return Error(Exception(error.toString()), error.toString());
+    }
+  }
+
+  @override
+  Future<Result<bool>> toggleNotificationImportant(
+    UserRole role,
+    String notificationId,
+  ) async {
+    try {
+      final username = _getHisUsername();
+      final prefs = await SharedPreferences.getInstance();
+      final list = prefs.getStringList('important_notif_ids_$username') ?? [];
+      final set = list.toSet();
+      final isNowImportant = !set.contains(notificationId);
+
+      if (isNowImportant) {
+        set.add(notificationId);
+      } else {
+        set.remove(notificationId);
+      }
+      await prefs.setStringList('important_notif_ids_$username', set.toList());
+      return Ok(isNowImportant);
+    } catch (e) {
+      return Error(Exception(e.toString()), e.toString());
     }
   }
 
@@ -116,7 +180,7 @@ class PortalRepositoryImpl implements PortalRepository {
         await thongBaoRemote.markNotificationStatus(
           username: username,
           notificationId: notificationId,
-          trangThai: 1,
+          trangThai: 2,
           schema: dynamicSchema,
         );
       } catch (_) {
@@ -124,11 +188,18 @@ class PortalRepositoryImpl implements PortalRepository {
           await thongBaoRemote.markNotificationStatus(
             username: username,
             notificationId: notificationId,
-            trangThai: 1,
+            trangThai: 2,
             schema: 'hospi_${yy}${mm}',
           );
         } catch (_) {}
       }
+
+      try {
+        final prefs = await SharedPreferences.getInstance();
+        final readSet = (prefs.getStringList('read_notif_ids_$username') ?? []).toSet();
+        readSet.add(notificationId);
+        await prefs.setStringList('read_notif_ids_$username', readSet.toList());
+      } catch (_) {}
 
       final message = await _datasource.markNotificationAsRead(
         role,
@@ -333,7 +404,7 @@ class PortalRepositoryImpl implements PortalRepository {
         maBN: maBN,
         maBhytHoacMaBn: maBhytHoacMaBn,
         hoTen: draft.fullName,
-        gioiTinh: draft.gender,
+        gioiTinh: (draft.gender.trim().toLowerCase() == 'nữ' || draft.gender.trim().toLowerCase() == 'nu') ? 'Nữ' : 'Nam',
         namSinh: draft.birthYear,
         soDienThoai: draft.phoneNumber,
         ngayKham: formattedNgayKham,
@@ -506,25 +577,50 @@ class PortalRepositoryImpl implements PortalRepository {
         );
       }).toList();
 
+      final prefs = await SharedPreferences.getInstance();
+      final hisUsername = _getHisUsername();
+      final deletedKeySet = (prefs.getStringList('deleted_patient_profile_keys_$hisUsername') ?? []).toSet();
+
       final localProfiles = await _datasource.loadPatientProfiles();
       final Map<String, PatientProfileDraftEntity> profileMap = {};
 
+      void addOrUpdateProfile(PatientProfileDraftEntity p) {
+        if (p.isDeleted) return;
+        final pName = p.fullName.trim().toLowerCase();
+        final pYear = p.birthYear.trim();
+        final pId = (p.identifier.isNotEmpty && p.identifier != 'N/A') ? p.identifier.trim().toLowerCase() : '';
+        final fallbackKey = '${pName}_$pYear';
+
+        final primaryKey = pId.isNotEmpty ? pId : fallbackKey;
+        if (primaryKey.isEmpty || primaryKey == '_') return;
+
+        if (deletedKeySet.contains(primaryKey) || deletedKeySet.contains(fallbackKey)) {
+          return;
+        }
+
+        final existing = profileMap[primaryKey];
+        if (existing == null) {
+          profileMap[primaryKey] = p;
+        } else {
+          profileMap[primaryKey] = PatientProfileDraftEntity(
+            identifier: (p.identifier.isNotEmpty && p.identifier != 'N/A') ? p.identifier : existing.identifier,
+            maSo: p.maSo ?? existing.maSo,
+            fullName: p.fullName.isNotEmpty ? p.fullName : existing.fullName,
+            birthYear: p.birthYear.isNotEmpty ? p.birthYear : existing.birthYear,
+            gender: (p.gender == 'Nữ' || p.gender == 'Nam') ? p.gender : existing.gender,
+            phoneNumber: p.phoneNumber.isNotEmpty ? p.phoneNumber : existing.phoneNumber,
+            dangKyGiup: p.dangKyGiup ?? existing.dangKyGiup,
+            isDeleted: false,
+          );
+        }
+      }
+
       for (var p in remoteProfiles) {
-        final key = (p.maSo != null && p.maSo!.isNotEmpty)
-            ? p.maSo!.trim().toLowerCase()
-            : '${p.fullName.trim().toLowerCase()}_${p.birthYear.trim()}_${p.identifier.trim().toLowerCase()}';
-        profileMap[key] = p;
+        addOrUpdateProfile(p);
       }
 
       for (var p in localProfiles) {
-        if (p.isDeleted) continue;
-        final key = (p.maSo != null && p.maSo!.isNotEmpty)
-            ? p.maSo!.trim().toLowerCase()
-            : '${p.fullName.trim().toLowerCase()}_${p.birthYear.trim()}_${p.identifier.trim().toLowerCase()}';
-
-        if (!profileMap.containsKey(key)) {
-          profileMap[key] = p;
-        }
+        addOrUpdateProfile(p);
       }
 
       return Ok(profileMap.values.toList());
@@ -538,6 +634,19 @@ class PortalRepositoryImpl implements PortalRepository {
   @override
   Future<Result<void>> savePatientProfile(PatientProfileDraftEntity profile) async {
     try {
+      final prefs = await SharedPreferences.getInstance();
+      final hisUsername = _getHisUsername();
+      final keySet = (prefs.getStringList('deleted_patient_profile_keys_$hisUsername') ?? []).toSet();
+
+      final pName = profile.fullName.trim().toLowerCase();
+      final pYear = profile.birthYear.trim();
+      final pId = (profile.identifier.isNotEmpty && profile.identifier != 'N/A') ? profile.identifier.trim().toLowerCase() : '';
+      final fallbackKey = '${pName}_$pYear';
+
+      if (pId.isNotEmpty) keySet.remove(pId);
+      keySet.remove(fallbackKey);
+
+      await prefs.setStringList('deleted_patient_profile_keys_$hisUsername', keySet.toList());
       await _datasource.savePatientProfile(profile);
       return const Ok(null);
     } on Exception catch (exception) {
@@ -732,8 +841,8 @@ class PortalRepositoryImpl implements PortalRepository {
   String _mapServerGender(dynamic rawGender, String fallback) {
     if (rawGender == null) return fallback;
     final str = rawGender.toString().trim();
-    if (str == '0' || str.toLowerCase() == 'nam') return 'Nam';
-    if (str == '1' || str.toLowerCase() == 'nữ' || str.toLowerCase() == 'nu') return 'Nữ';
+    if (str == '0' || str.toLowerCase() == 'nam' || str.toLowerCase() == 'male') return 'Nam';
+    if (str == '1' || str.toLowerCase() == 'nữ' || str.toLowerCase() == 'nu' || str.toLowerCase() == 'female') return 'Nữ';
     if (str.isEmpty || str == '2') return fallback;
     return fallback;
   }

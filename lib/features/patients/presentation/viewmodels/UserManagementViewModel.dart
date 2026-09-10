@@ -25,92 +25,39 @@ class UserManagementViewModel extends BasePortalViewModel {
   UserManagementVisitStatus? get selectedStatus => _selectedStatus;
 
   List<UserManagementUserEntity> get filteredUsers {
-    try {
-      final query = searchController.text.trim().toLowerCase();
-      return _users
-          .where((user) {
-            final matchesStatus =
-                _selectedStatus == null ||
-                user.currentStatus == _selectedStatus;
-            if (!matchesStatus) {
-              return false;
-            }
-
-            if (query.isEmpty) {
-              return true;
-            }
-
-            return user.fullName.toLowerCase().contains(query) ||
-                user.phoneNumber.contains(query) ||
-                user.patientCode.toLowerCase().contains(query);
-          })
-          .toList(growable: false);
-    } catch (_) {
-      return _users;
-    }
-  }
+    final query = searchController.text.trim().toLowerCase();
+  return _users.where((user) {
+    final matchesStatus = _selectedStatus == null || user.currentStatus == _selectedStatus;
+    if (!matchesStatus) return false;
+    if (query.isEmpty) return true;
+    return user.fullName.toLowerCase().contains(query) ||
+        user.phoneNumber.contains(query) ||
+        user.patientCode.toLowerCase().contains(query);
+  }).toList(growable: false);
+ }
 
   Map<UserManagementVisitStatus, int> get statusCounts {
-    try {
-      final counts = {
-        for (final status in UserManagementVisitStatus.values) status: 0,
-      };
-      for (final user in _users) {
-        counts[user.currentStatus] = (counts[user.currentStatus] ?? 0) + 1;
-      }
-      return counts;
-    } catch (_) {
-      return {for (final status in UserManagementVisitStatus.values) status: 0};
-    }
+    final counts = {for (final status in UserManagementVisitStatus.values) status: 0};
+  for (final user in _users) {
+    counts[user.currentStatus] = (counts[user.currentStatus] ?? 0) + 1;
+  }
+  return counts;
   }
 
-  int get activeUsersCount {
-    try {
-      return _users.where((user) => user.currentStatus.isActiveFlow).length;
-    } catch (_) {
-      return 0;
-    }
-  }
-
-  int get completedUsersCount {
-    try {
-      return _users
-          .where(
-            (user) => user.currentStatus == UserManagementVisitStatus.completed,
-          )
-          .length;
-    } catch (_) {
-      return 0;
-    }
-  }
-
-  int get rejectedUsersCount {
-    try {
-      return _users
-          .where(
-            (user) => user.currentStatus == UserManagementVisitStatus.rejected,
-          )
-          .length;
-    } catch (_) {
-      return 0;
-    }
-  }
+  int get activeUsersCount => _users.where((u) => u.currentStatus.isActiveFlow).length;
+  int get completedUsersCount => _users.where((u) => u.currentStatus == UserManagementVisitStatus.completed).length;
+  int get rejectedUsersCount => _users.where((u) => u.currentStatus == UserManagementVisitStatus.rejected).length;
 
   void updateSearch(String value) {
-    try {
       clearMessage();
-      notifyListeners();
-    } catch (_) {}
+      notifyIfMounted();
   }
 
   void selectStatus(UserManagementVisitStatus? status) {
-    try {
-      if (_selectedStatus == status) {
-        return;
-      }
+    
+      if (_selectedStatus == status) return;
       _selectedStatus = status;
-      notifyListeners();
-    } catch (_) {}
+      notifyIfMounted();
   }
 
   Future<Result<List<UserManagementUserEntity>>> _loadUsers() async {
@@ -126,7 +73,7 @@ class UserManagementViewModel extends BasePortalViewModel {
         ok: (data) {
           _users = data;
           clearMessage();
-          notifyListeners();
+          notifyIfMounted();
         },
         error: (_, message) {
           setMessage(message);

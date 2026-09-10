@@ -21,6 +21,11 @@ abstract class PortalRepository {
     String notificationId,
   );
 
+  Future<Result<bool>> toggleNotificationImportant(
+    UserRole role,
+    String notificationId,
+  );
+
   Future<Result<String>> markAllNotificationsAsRead(UserRole role);
 
   Future<Result<String>> downloadNotificationAttachment(

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:benhvien7c/app/router/RouteNames.dart';
 import 'package:benhvien7c/core/navigation/AppNavigator.dart';
+import 'package:benhvien7c/core/session/AppSessionStore.dart';
 import 'package:benhvien7c/core/theme/AppColors.dart';
 import 'package:benhvien7c/features/auth/domain/entities/AuthSessionEntity.dart';
 import 'package:benhvien7c/features/patients/domain/entities/NotificationSummaryEntity.dart';
@@ -16,7 +17,8 @@ class PortalDrawer extends StatelessWidget {
     this.onTypeFourDemoTap,
     this.onDevTestingTap,
     this.onChangePasswordTap,
-    required this.onDeleteAccountTap,
+    this.onPersonalProfileTap,
+    this.onDeleteAccountTap,
     required this.onAboutTap,
     required this.onLogoutTap,
     super.key,
@@ -33,13 +35,19 @@ class PortalDrawer extends StatelessWidget {
   final VoidCallback? onDevTestingTap;
   final VoidCallback? onUserManagementTap;
   final VoidCallback? onChangePasswordTap;
-  final VoidCallback onDeleteAccountTap;
+  final VoidCallback? onPersonalProfileTap;
+  final VoidCallback? onDeleteAccountTap;
   final VoidCallback onAboutTap;
   final VoidCallback onLogoutTap;
   final Function(NotificationFilter filter)? onFilterTap;
 
   @override
   Widget build(BuildContext context) {
+    final globalSummary = AppSessionStore.instance.notificationSummary;
+    final effectiveSummary = (summary.total > 0 || summary.unread > 0 || summary.important > 0)
+        ? summary
+        : globalSummary;
+
     return Drawer(
       width: MediaQuery.of(context).size.width * 0.82,
       child: Column(
@@ -120,31 +128,31 @@ class PortalDrawer extends StatelessWidget {
                     children: [
                       _CounterTile(
                         label: 'Tất cả',
-                        value: summary.total,
+                        value: effectiveSummary.total,
                         color: const Color(0xFF4285F4),
                         onTap: () => onFilterTap?.call(NotificationFilter.all),
                       ),
                       _CounterTile(
                         label: 'Chưa đọc',
-                        value: summary.unread,
+                        value: effectiveSummary.unread,
                         color: const Color(0xFF34A853),
                         onTap: () => onFilterTap?.call(NotificationFilter.unread),
                       ),
                       _CounterTile(
                         label: 'Đã đọc',
-                        value: summary.total - summary.unread,
+                        value: effectiveSummary.total - effectiveSummary.unread,
                         color: const Color(0xFF9AA0A6),
                         onTap: () => onFilterTap?.call(NotificationFilter.read),
                       ),
                       _CounterTile(
                         label: 'Quan trọng',
-                        value: summary.important,
+                        value: effectiveSummary.important,
                         color: const Color(0xFFFBBC05),
                         onTap: () => onFilterTap?.call(NotificationFilter.important),
                       ),
                       _CounterTile(
                         label: 'Rất quan trọng',
-                        value: summary.important > 0 ? 1 : 0,
+                        value: effectiveSummary.important > 0 ? 1 : 0,
                         color: const Color(0xFFEA4335),
                         onTap: () => onFilterTap?.call(NotificationFilter.veryImportant),
                       ),
@@ -184,9 +192,12 @@ class PortalDrawer extends StatelessWidget {
                   },
                 ),
                 _DrawerTile(
-                  icon: Icons.person_remove_alt_1_rounded,
-                  label: 'Xóa tài khoản',
-                  onTap: onDeleteAccountTap,
+                  icon: Icons.account_circle_rounded,
+                  label: 'Thông tin cá nhân',
+                  onTap: onPersonalProfileTap ?? () {
+                    AppNavigator.safePop(context);
+                    AppNavigator.pushNamed(context, RouteNames.personalProfile);
+                  },
                 ),
                 _DrawerTile(
                   icon: Icons.info_rounded,
@@ -198,13 +209,75 @@ class PortalDrawer extends StatelessWidget {
                   icon: Icons.logout_rounded,
                   label: 'Đăng xuất',
                   iconColor: Colors.red,
-                  onTap: onLogoutTap,
+                  onTap: () {
+                    _showLogoutConfirmationDialog(context, onLogoutTap);
+                  },
                 ),
               ],
             ),
           ),
         ],
       ),
+    );
+  }
+
+  void _showLogoutConfirmationDialog(BuildContext context, VoidCallback onConfirmLogout) {
+    showDialog<void>(
+      context: context,
+      builder: (dialogContext) {
+        return AlertDialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+          title: const Row(
+            children: [
+              Icon(Icons.logout_rounded, color: Color(0xFFDC2626), size: 24),
+              SizedBox(width: 10),
+              Text(
+                'Xác nhận đăng xuất',
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Color(0xFF1E293B)),
+              ),
+            ],
+          ),
+          content: const Text(
+            'Bạn có chắc chắn muốn đăng xuất khỏi tài khoản không?',
+            style: TextStyle(fontSize: 14, color: Color(0xFF475569)),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(),
+              child: const Text(
+                'Hủy',
+                style: TextStyle(
+                  color: Color(0xFF64748B),
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                Navigator.of(dialogContext).pop();
+                AppNavigator.safePop(context);
+                onConfirmLogout();
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFFDC2626),
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+              ),
+              child: const Text(
+                'Đăng xuất',
+                style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
+          ],
+        );
+      },
     );
   }
 }

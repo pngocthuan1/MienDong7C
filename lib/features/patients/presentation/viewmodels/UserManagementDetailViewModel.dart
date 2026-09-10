@@ -21,17 +21,11 @@ class UserManagementDetailViewModel extends BasePortalViewModel {
   UserManagementDetailEntity? detail;
 
   Map<UserManagementVisitStatus, int> get historyStatusCounts {
-    try {
-      final counts = {
-        for (final status in UserManagementVisitStatus.values) status: 0,
-      };
-      for (final history in detail?.histories ?? const []) {
-        counts[history.status] = (counts[history.status] ?? 0) + 1;
-      }
-      return counts;
-    } catch (_) {
-      return {for (final status in UserManagementVisitStatus.values) status: 0};
-    }
+   final counts = {for (final status in UserManagementVisitStatus.values) status: 0};
+  for (final history in detail?.histories ?? const []) {
+    counts[history.status] = (counts[history.status] ?? 0) + 1;
+  }
+  return counts;
   }
 
   Future<Result<UserManagementDetailEntity>> _loadDetail() async {
@@ -49,7 +43,7 @@ class UserManagementDetailViewModel extends BasePortalViewModel {
         ok: (data) {
           detail = data;
           clearMessage();
-          notifyListeners();
+         notifyIfMounted(); 
         },
         error: (_, message) {
           setMessage(message);

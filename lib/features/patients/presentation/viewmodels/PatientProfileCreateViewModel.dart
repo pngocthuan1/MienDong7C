@@ -1,4 +1,6 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:intl/intl.dart';
 import 'package:benhvien7c/core/commands/command.dart';
 import 'package:benhvien7c/core/commands/result.dart';
@@ -51,7 +53,7 @@ class PatientProfileCreateViewModel extends BasePortalViewModel {
   String? selectedDepartment = 'Phòng khám 1 - Nội tổng quát';
   DateTime? selectedDate;
   String? selectedTime;
-  bool saveProfile = true;
+  bool saveProfile = false;
   bool _registerForSomeoneElse = false;
   bool get registerForSomeoneElse => _registerForSomeoneElse;
   set registerForSomeoneElse(bool val) {
@@ -227,56 +229,45 @@ class PatientProfileCreateViewModel extends BasePortalViewModel {
     notifyListeners();
   }
 
+  String _getProfileUniqueKey(PatientProfileDraftEntity profile) {
+    if (profile.identifier.isNotEmpty && profile.identifier != 'N/A') {
+      return profile.identifier.trim().toLowerCase();
+    }
+    return '${profile.fullName.trim().toLowerCase()}_${profile.birthYear.trim()}';
+  }
+
   // Pre-fill fields from saved profile
   void selectProfile(PatientProfileDraftEntity profile) {
-    if (selectedProfileIdentifier == profile.identifier) {
+    final key = _getProfileUniqueKey(profile);
+    if (selectedProfileIdentifier == key) {
       // Toggle off / Unselect
-      selectedProfileIdentifier = null;
-      isExistingProfile = false;
+      clearProfileSelection();
+      return;
+    }
+
+    selectedProfileIdentifier = key;
+    isExistingProfile = true;
+    
+    if (registerForSomeoneElse) {
+      otherFullNameController.text = profile.fullName;
+      otherBirthYearController.text = profile.birthYear;
+      otherGender = profile.gender;
+      otherPhoneController.text = profile.phoneNumber;
+      identifierController.text = (profile.identifier != 'N/A') ? profile.identifier : '';
       
-      if (registerForSomeoneElse) {
-        otherFullNameController.clear();
-        otherBirthYearController.clear();
-        otherGender = 'Nam';
-        otherPhoneController.clear();
-        otherFullNameError = null;
-        otherBirthYearError = null;
-        otherPhoneError = null;
-      } else {
-        identifierController.clear();
-        fullNameController.text = session.user.fullName;
-        birthYearController.text = '1997';
-        _gender = 'Nam';
-        phoneController.clear();
-        fullNameError = null;
-        birthYearError = null;
-        phoneError = null;
-      }
+      otherFullNameError = null;
+      otherBirthYearError = null;
+      otherPhoneError = null;
     } else {
-      selectedProfileIdentifier = profile.identifier;
-      isExistingProfile = true;
+      identifierController.text = (profile.identifier != 'N/A') ? profile.identifier : '';
+      fullNameController.text = profile.fullName;
+      birthYearController.text = profile.birthYear;
+      _gender = profile.gender;
+      phoneController.text = profile.phoneNumber;
       
-      if (registerForSomeoneElse) {
-        otherFullNameController.text = profile.fullName;
-        otherBirthYearController.text = profile.birthYear;
-        otherGender = profile.gender;
-        otherPhoneController.text = profile.phoneNumber;
-        identifierController.text = profile.identifier;
-        
-        otherFullNameError = null;
-        otherBirthYearError = null;
-        otherPhoneError = null;
-      } else {
-        identifierController.text = profile.identifier;
-        fullNameController.text = profile.fullName;
-        birthYearController.text = profile.birthYear;
-        _gender = profile.gender;
-        phoneController.text = profile.phoneNumber;
-        
-        fullNameError = null;
-        birthYearError = null;
-        phoneError = null;
-      }
+      fullNameError = null;
+      birthYearError = null;
+      phoneError = null;
     }
     deleteConfirmIdentifier = null;
     notifyListeners();
@@ -287,7 +278,7 @@ class PatientProfileCreateViewModel extends BasePortalViewModel {
     isExistingProfile = false;
     identifierController.clear();
     fullNameController.text = session.user.fullName;
-    birthYearController.text = '1997';
+    birthYearController.clear();
     _gender = 'Nam';
     phoneController.clear();
     dangKyGiupController.clear();
@@ -393,6 +384,20 @@ class PatientProfileCreateViewModel extends BasePortalViewModel {
   // Load patient profiles from storage
   Future<Result<List<PatientProfileDraftEntity>>> _loadProfiles() async {
     return runSafely(() async {
+      try {
+        final username = session.user.phoneNumber;
+        final prefs = await SharedPreferences.getInstance();
+        final jsonStr = prefs.getString('saved_my_personal_profile_$username');
+        if (jsonStr != null && jsonStr.isNotEmpty) {
+          final draft = PatientProfileDraftEntity.fromJson(jsonDecode(jsonStr));
+          if (draft.fullName.isNotEmpty) fullNameController.text = draft.fullName;
+          if (draft.birthYear.isNotEmpty) birthYearController.text = draft.birthYear;
+          if (draft.phoneNumber.isNotEmpty) phoneController.text = draft.phoneNumber;
+          if (draft.identifier.isNotEmpty) identifierController.text = draft.identifier;
+          if (draft.gender.isNotEmpty) _gender = draft.gender;
+        }
+      } catch (_) {}
+
       final result = await portalRepository.loadPatientProfiles();
       result.when(
         ok: (list) {
@@ -525,18 +530,35 @@ class PatientProfileCreateViewModel extends BasePortalViewModel {
     }
 
     return runSafely(() async {
+      final String inputName = fullNameController.text.trim();
+      final String inputBirthYear = birthYearController.text.trim();
+      final String inputPhone = phoneController.text.trim();
+      final String inputOtherName = otherFullNameController.text.trim();
+      final String inputOtherBirthYear = otherBirthYearController.text.trim();
+      final String inputOtherPhone = otherPhoneController.text.trim();
+
+      final String finalFullName = registerForSomeoneElse
+          ? (inputOtherName.isNotEmpty ? inputOtherName : (inputName.isNotEmpty ? inputName : 'Người thân'))
+          : (inputName.isNotEmpty ? inputName : session.user.fullName);
+
+      final String finalBirthYear = registerForSomeoneElse
+          ? (inputOtherBirthYear.isNotEmpty ? inputOtherBirthYear : (inputBirthYear.isNotEmpty ? inputBirthYear : '2005'))
+          : (inputBirthYear.isNotEmpty ? inputBirthYear : '2005');
+
+      final String finalGender = registerForSomeoneElse
+          ? (inputOtherName.isNotEmpty ? otherGender : _gender)
+          : _gender;
+
+      final String finalPhone = registerForSomeoneElse
+          ? (inputOtherPhone.isNotEmpty ? inputOtherPhone : inputPhone)
+          : inputPhone;
+
       final draft = PatientProfileDraftEntity(
         identifier: identifierController.text.trim(),
-        fullName: registerForSomeoneElse
-            ? (otherFullNameController.text.trim().isEmpty ? 'Người thân' : otherFullNameController.text.trim())
-            : (fullNameController.text.trim().isEmpty ? session.user.fullName : fullNameController.text.trim()),
-        birthYear: registerForSomeoneElse
-            ? (otherBirthYearController.text.trim().isEmpty ? '1997' : otherBirthYearController.text.trim())
-            : (birthYearController.text.trim().isEmpty ? '1997' : birthYearController.text.trim()),
-        gender: registerForSomeoneElse ? otherGender : _gender,
-        phoneNumber: registerForSomeoneElse
-            ? otherPhoneController.text.trim()
-            : phoneController.text.trim(),
+        fullName: finalFullName,
+        birthYear: finalBirthYear,
+        gender: finalGender,
+        phoneNumber: finalPhone,
         dangKyGiup: registerForSomeoneElse ? dangKyGiupController.text.trim() : null,
       );
 
@@ -567,15 +589,13 @@ class PatientProfileCreateViewModel extends BasePortalViewModel {
         final ticket = result.data;
         if (saveProfile) {
           final profileToSave = PatientProfileDraftEntity(
-            identifier: (ticket.patientCode.trim().isNotEmpty && ticket.patientCode != 'N/A')
-                ? ticket.patientCode.trim()
-                : (draft.identifier.trim().isNotEmpty ? draft.identifier.trim() : 'N/A'),
-            fullName: ticket.patientName,
-            birthYear: ticket.birthYear,
-            gender: ticket.gender,
-            phoneNumber: (ticket.phoneNumber != null && ticket.phoneNumber!.isNotEmpty)
-                ? ticket.phoneNumber!
-                : draft.phoneNumber,
+            identifier: (draft.identifier.trim().isNotEmpty && draft.identifier != 'N/A')
+                ? draft.identifier.trim()
+                : ((ticket.patientCode.trim().isNotEmpty && ticket.patientCode != 'N/A') ? ticket.patientCode.trim() : 'N/A'),
+            fullName: draft.fullName,
+            birthYear: draft.birthYear,
+            gender: draft.gender,
+            phoneNumber: draft.phoneNumber,
           );
           await portalRepository.savePatientProfile(profileToSave);
         }

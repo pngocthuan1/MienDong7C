@@ -648,7 +648,18 @@ class PortalMockDatasource {
         list = decoded.map((item) => PatientProfileDraftEntity.fromJson(item as Map<String, dynamic>)).toList();
       }
       
-      final idx = list.indexWhere((element) => element.identifier == profile.identifier && profile.identifier.isNotEmpty);
+      final pName = profile.fullName.trim().toLowerCase();
+      final pYear = profile.birthYear.trim();
+      final pId = (profile.identifier.isNotEmpty && profile.identifier != 'N/A') ? profile.identifier.trim().toLowerCase() : '';
+
+      final idx = list.indexWhere((e) {
+        final eId = (e.identifier.isNotEmpty && e.identifier != 'N/A') ? e.identifier.trim().toLowerCase() : '';
+        if (pId.isNotEmpty && eId.isNotEmpty) {
+          return eId == pId;
+        }
+        return e.fullName.trim().toLowerCase() == pName && e.birthYear.trim() == pYear;
+      });
+
       if (idx >= 0) {
         list[idx] = profile.copyWith(isDeleted: false);
       } else {

@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:benhvien7c/features/auth/domain/entities/AuthSessionEntity.dart';
 import 'package:benhvien7c/features/auth/domain/entities/UserRole.dart';
+import 'package:benhvien7c/features/patients/domain/entities/NotificationSummaryEntity.dart';
 
 class UserProfileSession {
   final String fullName;
@@ -21,15 +22,26 @@ class AppSessionStore extends ChangeNotifier {
 
   AuthSessionEntity? _session;
   UserProfileSession? _currentUser;
+  NotificationSummaryEntity _notificationSummary = const NotificationSummaryEntity(
+    total: 0,
+    unread: 0,
+    important: 0,
+  );
 
   AuthSessionEntity? get session => _session;
   UserProfileSession? get currentUser => _currentUser;
+  NotificationSummaryEntity get notificationSummary => _notificationSummary;
 
   bool get isEmployee => _currentUser?.role == UserRole.employee;
 
   void setSession(AuthSessionEntity session, UserProfileSession user) {
     _session = session;
     _currentUser = user;
+    notifyListeners();
+  }
+
+  void updateNotificationSummary(NotificationSummaryEntity summary) {
+    _notificationSummary = summary;
     notifyListeners();
   }
 
@@ -47,6 +59,11 @@ class AppSessionStore extends ChangeNotifier {
   void clear() {
     _session = null;
     _currentUser = null;
+    _notificationSummary = const NotificationSummaryEntity(
+      total: 0,
+      unread: 0,
+      important: 0,
+    );
     notifyListeners();
   }
 }

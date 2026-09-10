@@ -42,6 +42,8 @@ import 'package:benhvien7c/features/patients/presentation/views/NotificationPlay
 import 'package:benhvien7c/features/patients/presentation/views/AppointmentBookingView.dart';
 import 'package:benhvien7c/features/patients/presentation/views/PatientProfileCreateView.dart';
 import 'package:benhvien7c/features/patients/presentation/views/PatientProfileSelectView.dart';
+import 'package:benhvien7c/features/patients/presentation/views/PersonalProfileView.dart';
+import 'package:benhvien7c/features/patients/presentation/views/AboutAppView.dart';
 import 'package:benhvien7c/features/patients/presentation/views/DevTestingView.dart';
 import 'package:benhvien7c/features/patients/presentation/views/UserManagementView.dart';
 import 'package:benhvien7c/features/patients/presentation/views/UserManagementDetailView.dart';
@@ -205,6 +207,8 @@ class MyApp extends StatelessWidget {
         RouteNames.typeFourProcessing: (context) => const TypeFourProcessingView(),
         RouteNames.typeFourResult: (context) => const TypeFourResultView(),
         RouteNames.createNotification: (context) => const CreateNotificationView(),
+        RouteNames.personalProfile: (context) => const PersonalProfileView(),
+        RouteNames.aboutApp: (context) => const AboutAppView(),
       },
       onGenerateRoute: (settings) {
         if (settings.name == RouteNames.verifyOtp) {
@@ -251,87 +255,6 @@ class MyApp extends StatelessWidget {
         }
         return null;
       },
-    );
-  }
-}
-
-class _PlaceholderPage extends StatelessWidget {
-  const _PlaceholderPage({required this.title, required this.content});
-
-  final String title;
-  final String content;
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(title),
-        leading: Navigator.canPop(context)
-            ? IconButton(
-                icon: const Icon(Icons.arrow_back_ios_new_rounded),
-                onPressed: () => AppNavigator.safePop(context),
-              )
-            : null,
-      ),
-      body: Padding(
-        padding: const EdgeInsets.all(24.0),
-        child: Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              const Icon(
-                Icons.medical_services_outlined,
-                size: 80,
-                color: Color(0xFF0B76D1),
-              ),
-              const SizedBox(height: 24),
-              Text(
-                title,
-                textAlign: TextAlign.center,
-                style: const TextStyle(
-                  fontSize: 22,
-                  fontWeight: FontWeight.bold,
-                  color: Color(0xFF16324F),
-                ),
-              ),
-              const SizedBox(height: 12),
-              Text(
-                content,
-                textAlign: TextAlign.center,
-                style: const TextStyle(
-                  fontSize: 15,
-                  color: Color(0xFF62748A),
-                  height: 1.45,
-                ),
-              ),
-              const SizedBox(height: 32),
-              if (title.contains('Trang chủ'))
-                SizedBox(
-                  width: 200,
-                  child: ElevatedButton.icon(
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFFD64545),
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(vertical: 12),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                    ),
-                    onPressed: () async {
-                      final secureStorage = SecureStorageService();
-                      await secureStorage.clearSession();
-                      if (context.mounted) {
-                        AppNavigator.resetToNamed(context, RouteNames.login);
-                      }
-                    },
-                    icon: const Icon(Icons.logout_rounded),
-                    label: const Text('Đăng xuất'),
-                  ),
-                ),
-            ],
-          ),
-        ),
-      ),
     );
   }
 }

@@ -175,31 +175,7 @@ class _ChangePasswordViewState extends State<ChangePasswordView> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Center(
-                      child: Column(
-                        children: [
-                          Text(
-                            'Đổi mật khẩu tài khoản',
-                            textAlign: TextAlign.center,
-                            style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                                  fontWeight: FontWeight.bold,
-                                  color: const Color(0xFF1E3A8A),
-                                ),
-                          ),
-                          const SizedBox(height: 8),
-                          const Text(
-                            'Vui lòng nhập mật khẩu hiện tại và thiết lập mật khẩu mới cho tài khoản của bạn.',
-                            textAlign: TextAlign.center,
-                            style: TextStyle(
-                              color: Color(0xFF64748B),
-                              fontSize: 14,
-                              height: 1.4,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                              AppPasswordField(
+                    AppPasswordField(
                       controller: _viewModel.currentPasswordController,
                       label: 'Mật khẩu hiện tại',
                       hintText: 'Mật khẩu hiện tại',

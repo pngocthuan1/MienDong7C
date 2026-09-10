@@ -67,6 +67,10 @@ class _HomeViewState extends State<HomeView> {
     return AnimatedBuilder(
       animation: _viewModel,
       builder: (context, _) {
+        final effectiveSummary = (_viewModel.summary.total > 0 || _viewModel.summary.unread > 0)
+            ? _viewModel.summary
+            : AppLocator.sessionStore.notificationSummary;
+
         return PopScope(
           canPop: false,
           onPopInvokedWithResult: (didPop, result) async {
@@ -98,7 +102,7 @@ class _HomeViewState extends State<HomeView> {
             ),
             drawer: PortalDrawer(
               session: session,
-              summary: _viewModel.summary,
+              summary: effectiveSummary,
               onDevTestingTap: () {
                 AppNavigator.safePop(context);
                 AppNavigator.pushNamed(context, RouteNames.devTesting);
@@ -154,28 +158,26 @@ class _HomeViewState extends State<HomeView> {
               },
               onAboutTap: () {
                 AppNavigator.safePop(context);
-                _showInfoDialog(
-                  'Thông tin phần mềm',
-                  'Bệnh viện Quân Dân Y Miền Đông\nỨng dụng chăm sóc sức khỏe và đăng ký khám bệnh trực tuyến.',
-                );
+                AppNavigator.pushNamed(context, RouteNames.aboutApp);
               },
-              onLogoutTap: () {
-                AppLocator.sessionStore.clear();
+              onLogoutTap: () async {
+                await AppLocator.authRepository.logout();
+                if (!context.mounted) return;
                 AppNavigator.resetToNamed(context, RouteNames.login);
               },
             ),
             child: ListView(
               padding: const EdgeInsets.fromLTRB(20, 20, 20, 28),
-            children: [
-              Row(
-                children: [
-                  HomeActionCard(
-                    title: 'Thông Báo\nTin Tức',
-                    icon: Icons.notifications_active_rounded,
-                    badgeCount: _viewModel.summary.total,
-                    gradient: const LinearGradient(
-                      colors: [Color(0xFFFFF4C5), Color(0xFFFFFDF0)],
-                    ),
+              children: [
+                Row(
+                  children: [
+                    HomeActionCard(
+                      title: 'Thông Báo\nTin Tức',
+                      icon: Icons.notifications_active_rounded,
+                      badgeCount: effectiveSummary.unread > 0 ? effectiveSummary.unread : effectiveSummary.total,
+                      gradient: const LinearGradient(
+                        colors: [Color(0xFFFFF4C5), Color(0xFFFFFDF0)],
+                      ),
                     onTap: () {
                       AppNavigator.pushNamed(context, RouteNames.notifications)
                           .then((_) {
@@ -207,7 +209,32 @@ class _HomeViewState extends State<HomeView> {
                   ),
                 ],
               ),
-              const SizedBox(height: 36),
+              if (session.isEmployee) ...[
+                const SizedBox(height: 16),
+                Row(
+                  children: [
+                    HomeActionCard(
+                      title: 'Đăng\nThông Báo',
+                      icon: Icons.campaign_rounded,
+                      gradient: const LinearGradient(
+                        colors: [Color(0xFFFFECEB), Color(0xFFFFF8F7)],
+                      ),
+                      onTap: () {
+                        AppNavigator.pushNamed(
+                          context,
+                          RouteNames.createNotification,
+                        ).then((_) {
+                          if (!mounted) return;
+                          _viewModel.loadCommand.execute();
+                        });
+                      },
+                    ),
+                    const SizedBox(width: 16),
+                    const Expanded(child: SizedBox()),
+                  ],
+                ),
+              ],
+              const SizedBox(height: 24),
               Container(
                 padding: const EdgeInsets.symmetric(
                   horizontal: 18,
@@ -260,71 +287,23 @@ class _CenterHospitalMark extends StatelessWidget {
   Widget build(BuildContext context) {
     return Column(
       children: [
-        Stack(
-          alignment: Alignment.center,
-          children: [
-            Column(
-              children: [
-                Container(
-                  width: 46,
-                  height: 56,
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFF29AA0),
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Container(
-                  width: 46,
-                  height: 56,
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF9ED0F3),
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                ),
-              ],
-            ),
-            const Positioned.fill(child: _WaveBand()),
-          ],
+        Image.asset(
+          'assets/images/logo.png',
+          width: 120,
+          height: 120,
+          fit: BoxFit.contain,
         ),
         const SizedBox(height: 16),
         const Text(
-          'MIỀN ĐÔNG 7C',
+          'BỆNH VIỆN QUÂN Y MIỀN ĐÔNG ',
           style: TextStyle(
-            color: Color(0xFF8EC7F1),
+            color: Color(0xFF2563EB),
             fontSize: 22,
             fontWeight: FontWeight.w800,
             letterSpacing: 0.5,
           ),
         ),
       ],
-    );
-  }
-}
-
-class _WaveBand extends StatelessWidget {
-  const _WaveBand();
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: List.generate(4, (index) {
-        return Transform.translate(
-          offset: Offset(index.isOdd ? -12 : 12, 0),
-          child: Container(
-            margin: const EdgeInsets.symmetric(vertical: 4),
-            width: 146,
-            height: 6,
-            decoration: BoxDecoration(
-              color: index.isEven
-                  ? const Color(0xFF9ED0F3)
-                  : const Color(0xFFF29AA0),
-              borderRadius: BorderRadius.circular(999),
-            ),
-          ),
-        );
-      }),
     );
   }
 }

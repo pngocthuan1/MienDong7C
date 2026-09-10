@@ -46,6 +46,12 @@ class _AppPasswordFieldState extends State<AppPasswordField> {
         floatingLabelBehavior: FloatingLabelBehavior.never,
         hintText: widget.hintText,
         prefixIcon: Icon(widget.prefixIcon),
+        errorMaxLines: 5,
+        errorStyle: const TextStyle(
+          color: Color(0xFFEF4444),
+          fontSize: 12.5,
+          height: 1.35,
+        ),
         suffixIcon: IconButton(
           onPressed: () {
             setState(() {

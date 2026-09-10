@@ -197,8 +197,9 @@ class _NotificationViewState extends State<NotificationView> {
                 'Bệnh viện Quân Dân Y Miền Đông\nỨng dụng chăm sóc sức khỏe và đăng ký khám bệnh trực tuyến.',
               );
             },
-            onLogoutTap: () {
-              AppLocator.sessionStore.clear();
+            onLogoutTap: () async {
+              await AppLocator.authRepository.logout();
+              if (!context.mounted) return;
               AppNavigator.resetToNamed(context, RouteNames.login);
             },
           ),
@@ -399,6 +400,7 @@ class _NotificationViewState extends State<NotificationView> {
                               _NotificationItemRow(
                                 item: item,
                                 onTap: () => _openNotification(item),
+                                onToggleImportant: () => _viewModel.toggleImportant(item.id),
                               ),
                               if (itemIndex < dayItems.length - 1)
                                 const Divider(
@@ -545,10 +547,12 @@ class _NotificationItemRow extends StatelessWidget {
   const _NotificationItemRow({
     required this.item,
     required this.onTap,
+    required this.onToggleImportant,
   });
 
   final NotificationItemEntity item;
   final VoidCallback onTap;
+  final VoidCallback onToggleImportant;
 
   @override
   Widget build(BuildContext context) {
@@ -567,14 +571,31 @@ class _NotificationItemRow extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Title: Số X | Tên người gửi
-            Text(
-              'Số ${item.number} | ${item.senderName}',
-              style: TextStyle(
-                color: titleColor,
-                fontWeight: FontWeight.w900,
-                fontSize: 16,
-              ),
+            // Title: Số X | Tên người gửi + Star Icon
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    'Số ${item.number} | ${item.senderName}',
+                    style: TextStyle(
+                      color: titleColor,
+                      fontWeight: FontWeight.w900,
+                      fontSize: 16,
+                    ),
+                  ),
+                ),
+                GestureDetector(
+                  onTap: onToggleImportant,
+                  child: Padding(
+                    padding: const EdgeInsets.all(4.0),
+                    child: Icon(
+                      item.isImportant ? Icons.star_rounded : Icons.star_outline_rounded,
+                      color: item.isImportant ? const Color(0xFFF59E0B) : const Color(0xFFCBD5E1),
+                      size: 22,
+                    ),
+                  ),
+                ),
+              ],
             ),
             const SizedBox(height: 4),
             // Subtitle: Nơi gửi: ...

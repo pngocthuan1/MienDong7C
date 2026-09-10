@@ -47,7 +47,7 @@ class NotificationViewModel extends BasePortalViewModel {
 
   void setFilter(NotificationFilter filter) {
     selectedFilter = filter;
-    notifyListeners();
+    notifyIfMounted();
   }
 
   bool _mutating = false;
@@ -129,9 +129,11 @@ class NotificationViewModel extends BasePortalViewModel {
   Future<Result<String>> toggleImportant(String notificationId) async {
     return _runMutation(
       () async {
-        final result = await portalRepository.toggleImportant(role, notificationId);
+        final result = await portalRepository.toggleNotificationImportant(role, notificationId);
         return result.when(
-          ok: (_) => const Ok('Đã cập nhật trạng thái quan trọng.'),
+          ok: (isImportant) => Ok (isImportant
+              ? 'Đã đánh dấu thông báo là quan trọng.'
+              : 'Đã bỏ đánh dấu thông báo là quan trọng.'),
           error: (ex, msg) => Error(ex, msg),
         );
       },
@@ -143,9 +145,19 @@ class NotificationViewModel extends BasePortalViewModel {
     Future<Result<String>> Function() action, {
     String? keepSelectedId,
   }) async {
+    // Chặn double-tap / mutation chồng lệnh: nếu đang có 1 thao tác khác
+    // (xóa, đánh dấu, mở thông báo...) chạy dở, không cho phép chạy thêm
+    // — tránh gửi 2 request song song lên server và tránh _mutating bị
+    // 2 luồng ghi đè lẫn nhau (luồng A set false trong khi luồng B vẫn
+    // đang chạy, khiến UI hiển thị sai trạng thái loading).
+    if (_mutating) {
+      const msg = 'Đang xử lý thao tác trước đó, vui lòng đợi.';
+      return Error(Exception(msg), msg);
+    }
+
     return runSafely(() async {
       _mutating = true;
-      notifyListeners();
+      notifyIfMounted();
 
       try {
         final result = await action();
@@ -155,7 +167,7 @@ class NotificationViewModel extends BasePortalViewModel {
         return result;
       } finally {
         _mutating = false;
-        notifyListeners();
+        notifyIfMounted();
       }
     });
   }
@@ -176,12 +188,34 @@ class NotificationViewModel extends BasePortalViewModel {
     final notificationsResult = await portalRepository.loadNotifications(role);
     notificationsResult.when(
       ok: (data) {
-        items = data;
+        final sortedList = List<NotificationItemEntity>.from(data);
+        final now = DateTime.now();
+        sortedList.sort((a, b) {
+          final isAToday = a.createdAt.year == now.year &&
+              a.createdAt.month == now.month &&
+              a.createdAt.day == now.day;
+          final isBToday = b.createdAt.year == now.year &&
+              b.createdAt.month == now.month &&
+              b.createdAt.day == now.day;
+
+          if (isAToday && !isBToday) return -1;
+          if (!isAToday && isBToday) return 1;
+          return b.createdAt.compareTo(a.createdAt);
+        });
+
+        items = sortedList;
+        summary = NotificationSummaryEntity(
+          total: sortedList.length,
+          unread: sortedList.where((e) => !e.isRead).length,
+          important: sortedList.where((e) => e.isImportant).length,
+          lastUpdatedLabel: sortedList.isNotEmpty ? sortedList.first.timeLabel : '',
+        );
+        AppSessionStore.instance.updateNotificationSummary(summary);
         _selectedNotificationId = _resolveSelectedId(
           keepSelectedId ?? _selectedNotificationId,
         );
         clearMessage();
-        notifyListeners();
+        notifyIfMounted();
       },
       error: (_, message) {
         setMessage(message);

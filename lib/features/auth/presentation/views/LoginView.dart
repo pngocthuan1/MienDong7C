@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:local_auth/local_auth.dart';
 import 'package:benhvien7c/app/router/RouteNames.dart';
 import 'package:benhvien7c/core/dio/AppLocator.dart';
@@ -27,22 +28,24 @@ class LoginView extends StatefulWidget {
   State<LoginView> createState() => _LoginViewState();
 }
 
-class _LoginViewState extends State<LoginView> {
+class _LoginViewState extends State<LoginView> with WidgetsBindingObserver {
   final _formKey = GlobalKey<FormState>();
   late final LoginViewModel _viewModel;
   String? _captchaToken;
-  bool _isBotSimulation = false;
   bool _isFaceIdAvailable = false;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _viewModel = LoginViewModel(
       AppLocator.authRepository,
       AppLocator.secureStorage,
     );
     _viewModel.loginCommand.addListener(_onLoginChanged);
     _checkFaceIdAvailable();
+    _viewModel.initNetworkCheck();
+    _viewModel.startListeningNetworkChanges();
   }
 
   Future<void> _checkFaceIdAvailable() async {
@@ -58,7 +61,16 @@ class _LoginViewState extends State<LoginView> {
   }
 
   @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      debugPrint('[LoginView] App resumed -> Auto re-checking network!');
+      _viewModel.initNetworkCheck();
+    }
+  }
+
+  @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _viewModel.loginCommand.removeListener(_onLoginChanged);
     _viewModel.dispose();
     super.dispose();
@@ -289,19 +301,10 @@ class _LoginViewState extends State<LoginView> {
                 viewModel: _viewModel,
                 onSubmit: _submit,
                 captchaToken: _captchaToken,
-                simulateBot: _isBotSimulation,
                 onCaptchaVerified: (token) {
                   _viewModel.captchaToken = token;
                   setState(() {
                     _captchaToken = token;
-                  });
-                },
-                onBotToggled: (val) {
-                  setState(() {
-                    _isBotSimulation = val;
-                    if (val) {
-                      _captchaToken = null;
-                    }
                   });
                 },
                 onBiometricPressed: _onBiometricLoginPressed,
@@ -315,37 +318,12 @@ class _LoginViewState extends State<LoginView> {
   }
 }
 
-class _LoginIntro extends StatelessWidget {
-  const _LoginIntro();
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      children: [
-        Text(
-          'Đăng nhập bệnh viện Miền Đông 7C',
-          textAlign: TextAlign.center,
-          style: AppTextStyles.pageTitle.copyWith(fontSize: 24),
-        ),
-        const SizedBox(height: 10),
-        const Text(
-          'Đăng nhập để tiếp tục sử dụng các chức năng của bệnh viện.',
-          textAlign: TextAlign.center,
-          style: AppTextStyles.pageSubtitle,
-        ),
-      ],
-    );
-  }
-}
-
 class _LoginForm extends StatelessWidget {
   const _LoginForm({
     required this.viewModel,
     required this.onSubmit,
     required this.captchaToken,
-    required this.simulateBot,
     required this.onCaptchaVerified,
-    required this.onBotToggled,
     required this.onBiometricPressed,
     required this.isFaceIdAvailable,
   });
@@ -353,30 +331,27 @@ class _LoginForm extends StatelessWidget {
   final LoginViewModel viewModel;
   final Future<void> Function() onSubmit;
   final String? captchaToken;
-  final bool simulateBot;
   final ValueChanged<String> onCaptchaVerified;
-  final ValueChanged<bool> onBotToggled;
   final VoidCallback onBiometricPressed;
   final bool isFaceIdAvailable;
-
 
   @override
   Widget build(BuildContext context) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const _LoginIntro(),
-        const SizedBox(height: AppSizes.sectionSpacing),
         const _SectionTitle(
           icon: Icons.lock_person_rounded,
           title: 'Thông tin đăng nhập',
         ),
         const SizedBox(height: 12),
-        AuthRoleSwitcher(
-          selectedRole: viewModel.selectedRole,
-          onChanged: viewModel.updateRole,
-        ),
-        const SizedBox(height: 12),
+        if (viewModel.allowEmployeeRole) ...[
+          AuthRoleSwitcher(
+            selectedRole: viewModel.selectedRole,
+            onChanged: viewModel.updateRole,
+          ),
+          const SizedBox(height: 12),
+        ],
         AppTextField(
           controller: viewModel.phoneController,
           label: viewModel.selectedRole == UserRole.employee
@@ -385,7 +360,12 @@ class _LoginForm extends StatelessWidget {
           hintText: viewModel.selectedRole == UserRole.employee
               ? 'Nhập mã tài khoản HIS (VD: hunglng)'
               : 'Nhập số điện thoại đăng ký',
-          keyboardType: TextInputType.text,
+          keyboardType: viewModel.selectedRole == UserRole.customer
+              ? TextInputType.phone
+              : TextInputType.text,
+          inputFormatters: viewModel.selectedRole == UserRole.customer
+              ? [FilteringTextInputFormatter.digitsOnly]
+              : null,
           prefixIcon: viewModel.selectedRole == UserRole.employee
               ? Icons.badge_outlined
               : Icons.phone_outlined,
@@ -402,9 +382,7 @@ class _LoginForm extends StatelessWidget {
           textInputAction: TextInputAction.done,
           onChanged: viewModel.updatePasswordError,
         ),
-        const SizedBox(height: AppSizes.itemSpacing),
-
-        const SizedBox(height: 6),
+        const SizedBox(height: 0),
         Align(
           alignment: Alignment.centerRight,
           child: TextButton.icon(
@@ -422,39 +400,7 @@ class _LoginForm extends StatelessWidget {
         Center(
           child: CloudflareTurnstile(
             siteKey: Environment.turnstileSiteKey,
-            simulateBot: simulateBot,
             onVerified: onCaptchaVerified,
-          ),
-        ),
-        const SizedBox(height: 10),
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 4),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              const Row(
-                children: [
-                  Icon(Icons.bug_report_outlined, size: 16, color: Color(0xFFE05252)),
-                  SizedBox(width: 6),
-                  Text(
-                    'Giả lập hành vi Bot (Spam)',
-                    style: TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w600,
-                      color: Color(0xFF475569),
-                    ),
-                  ),
-                ],
-              ),
-              SizedBox(
-                height: 24,
-                child: Switch(
-                  value: simulateBot,
-                  activeThumbColor: const Color(0xFFE05252),
-                  onChanged: onBotToggled,
-                ),
-              ),
-            ],
           ),
         ),
         const SizedBox(height: AppSizes.itemSpacing),

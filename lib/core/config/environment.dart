@@ -127,4 +127,8 @@ class Environment {
   // Cloudflare Turnstile Configuration
   static const String turnstileSiteKey = '0x4AAAAAADvG0YDfYPtUpuix';
   static const String turnstileSecretKey = '0x4AAAAAADvG0dUTX_o58eUFpR14_5NXTYw';
+
+  // Đường dẫn Điều khoản dịch vụ & Chính sách bảo mật (Có thể gán link tùy chỉnh tại đây)
+  static String termsOfServiceUrl = 'https://quandanymiendong.vn/dieu-khoan-su-dung';
+  static String privacyPolicyUrl = 'https://quandanymiendong.vn/chinh-sach-bao-mat';
 }

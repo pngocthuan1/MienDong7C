@@ -9,6 +9,7 @@ class HomeViewModel extends BasePortalViewModel {
   HomeViewModel(PortalRepository repository, AppSessionStore sessionStore)
     : super(repository, sessionStore) {
     loadCommand = Command0<NotificationSummaryEntity>(_loadSummary);
+    loadCommand.execute();
   }
 
   late final Command0<NotificationSummaryEntity> loadCommand;
@@ -18,17 +19,21 @@ class HomeViewModel extends BasePortalViewModel {
     important: 0,
   );
 
+
   Future<Result<NotificationSummaryEntity>> _loadSummary() async {
     return runSafely(() async {
       final result = await portalRepository.loadNotificationSummary(role);
       result.when(
         ok: (data) {
+          if(isDisposed) return;
           summary = data;
           clearMessage();
           notifyListeners();
         },
         error: (_, message) {
+          if(isDisposed) return;
           setMessage(message);
+          notifyListeners();
         },
       );
       return result;

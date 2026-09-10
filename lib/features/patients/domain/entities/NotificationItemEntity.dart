@@ -1,3 +1,6 @@
+import 'dart:convert';
+import 'package:benhvien7c/core/utils/UserLookupHelper.dart';
+
 class NotificationItemEntity {
   NotificationItemEntity({
     required this.id,
@@ -35,7 +38,7 @@ class NotificationItemEntity {
   final int number;
   final DateTime createdAt;
   bool isRead;
-  final bool isImportant;
+  bool isImportant;
   final String? attachmentName;
   final String? attachmentPath;
   bool isDownloaded;
@@ -189,6 +192,36 @@ class NotificationItemEntity {
       attachPath = 'https://api.miendong7c.vn/api/File/Download?fileId=$rawId&fileName=$attachName&groupId=hospi$mm$yy';
     }
 
+    List<String>? recipientList;
+    final rawNoiNhan = json['NoiNhan'];
+    if (rawNoiNhan != null) {
+      if (rawNoiNhan is List) {
+        recipientList = rawNoiNhan.map((e) => UserLookupHelper.lookupName(e.toString())).toList();
+      } else if (rawNoiNhan is String && rawNoiNhan.trim().isNotEmpty) {
+        final str = rawNoiNhan.trim();
+        if (str.startsWith('[')) {
+          try {
+            final decoded = jsonDecode(str);
+            if (decoded is List) {
+              recipientList = decoded.map((e) {
+                if (e is Map<String, dynamic>) {
+                  final raw = e['MaVaTen']?.toString() ?? e['Ten']?.toString() ?? e['UserId']?.toString() ?? e.toString();
+                  return UserLookupHelper.lookupName(raw);
+                }
+                return UserLookupHelper.lookupName(e.toString());
+              }).toList();
+            }
+          } catch (_) {}
+        }
+        if (recipientList == null || recipientList.isEmpty) {
+          final parts = str.split(';').map((s) => s.trim()).where((s) => s.isNotEmpty).toList();
+          if (parts.isNotEmpty) {
+            recipientList = parts.map((p) => UserLookupHelper.lookupName(p)).toList();
+          }
+        }
+      }
+    }
+
     return NotificationItemEntity(
       id: rawId,
       title: (json['TieuDe'] as String?)?.isNotEmpty == true
@@ -199,14 +232,17 @@ class NotificationItemEntity {
       category: 'Thông báo nội bộ',
       timeLabel: '${parsedDate.day.toString().padLeft(2, '0')}/${parsedDate.month.toString().padLeft(2, '0')}/${parsedDate.year}',
       senderName: json['NguoiGui'] as String? ?? 'Hệ thống',
-      senderDepartment: json['NoiGui'] as String? ?? 'Hệ thống thông báo nội bộ',
+      senderDepartment: (json['NoiGui'] != null && json['NoiGui'].toString().trim().isNotEmpty && json['NoiGui'].toString() != '1' && json['NoiGui'].toString() != 'Khoa Khám Bệnh')
+          ? json['NoiGui'].toString()
+          : 'Hệ thống thông báo nội bộ',
       number: int.tryParse(json['Ma']?.toString() ?? rawId) ?? 0,
       createdAt: parsedDate,
-      isRead: (json['TrangThai'] as int? ?? 0) == 1,
+      isRead: (json['TrangThai'] as int? ?? 0) != 1,
       isImportant: false,
       attachmentName: attachName,
       attachmentPath: attachPath,
       isDownloaded: false,
+      recipientNames: recipientList,
     );
   }
 }

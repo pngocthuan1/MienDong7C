@@ -446,8 +446,9 @@ class _AppointmentBookingViewState extends State<AppointmentBookingView> {
               onAboutTap: () {
                 AppNavigator.safePop(context);
               },
-              onLogoutTap: () {
-                AppLocator.sessionStore.clear();
+              onLogoutTap: () async {
+                await AppLocator.authRepository.logout();
+                if (!context.mounted) return;
                 AppNavigator.resetToNamed(context, RouteNames.login);
               },
             ),

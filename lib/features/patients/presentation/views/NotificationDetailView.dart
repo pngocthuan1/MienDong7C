@@ -49,6 +49,22 @@ class _NotificationDetailViewState extends State<NotificationDetailView> {
     if (_isSender) {
       _viewModel.loadReadStatusCommand.execute(_item.id);
     }
+    _prefetchAttachmentFile(_item);
+  }
+
+  void _prefetchAttachmentFile(NotificationItemEntity item) async {
+    final fileUrl = item.attachmentPath;
+    final fileName = item.attachmentName;
+    if (fileUrl == null || fileUrl.isEmpty || fileName == null || fileName.isEmpty) return;
+    if (!fileUrl.startsWith('http://') && !fileUrl.startsWith('https://')) return;
+
+    try {
+      final tempDir = await getTemporaryDirectory();
+      final targetFile = File('${tempDir.path}/$fileName');
+      if (!targetFile.existsSync() || targetFile.lengthSync() == 0) {
+        await AppLocator.dioClient.dio.download(fileUrl, targetFile.path);
+      }
+    } catch (_) {}
   }
 
   @override
@@ -90,9 +106,12 @@ class _NotificationDetailViewState extends State<NotificationDetailView> {
   }
 
   Future<void> _showDownloadDialog(NotificationItemEntity item) async {
-    final nameWithoutExtension = item.attachmentName != null
-        ? item.attachmentName!.replaceAll(RegExp(r'\.docx$|\.doc$'), '')
-        : 'tai-lieu';
+    final fullFileName = item.attachmentName ?? 'tai-lieu.pdf';
+    final hasExtension = fullFileName.contains('.');
+    final ext = hasExtension ? fullFileName.split('.').last : 'pdf';
+    final nameWithoutExtension = hasExtension
+        ? fullFileName.substring(0, fullFileName.lastIndexOf('.'))
+        : fullFileName;
     final controller = TextEditingController(text: nameWithoutExtension);
 
     await showDialog<void>(
@@ -129,7 +148,7 @@ class _NotificationDetailViewState extends State<NotificationDetailView> {
               TextField(
                 controller: controller,
                 decoration: InputDecoration(
-                  suffixText: '.docx',
+                  suffixText: '.$ext',
                   contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(8),
@@ -138,7 +157,7 @@ class _NotificationDetailViewState extends State<NotificationDetailView> {
               ),
               const SizedBox(height: 12),
               const Text(
-                '* Hệ thống sẽ hiển thị hộp thoại lưu tệp của hệ điều hành để bạn tùy ý chọn thư mục lưu trữ và hoàn thành tải xuống.',
+                '* Tệp sẽ được tải về thiết bị của bạn với đúng định dạng gốc.',
                 style: TextStyle(
                   fontSize: 12,
                   fontStyle: FontStyle.italic,
@@ -157,9 +176,12 @@ class _NotificationDetailViewState extends State<NotificationDetailView> {
             ),
             ElevatedButton(
               onPressed: () async {
-                final customName = '${controller.text.trim()}.docx';
+                final customName = '${controller.text.trim()}.$ext';
                 Navigator.of(dialogContext).pop();
                 
+                final targetPath = item.attachmentPath ?? '';
+                await _openExternalAppIntent(targetPath, customName);
+
                 final result = await _viewModel.downloadAttachment(item.id, customName);
                 result.when(
                   ok: (message) {
@@ -1155,7 +1177,6 @@ class _DocxTextNode extends _DocxNode {
   final bool isHeader;
   _DocxTextNode(this.text, {this.isHeader = false});
 }
-
 class _DocxTableNode extends _DocxNode {
   final List<List<String>> rows;
   _DocxTableNode(this.rows);
@@ -1181,7 +1202,7 @@ class _InAppDocxDetailModalState extends State<_InAppDocxDetailModal> {
   List<_DocxNode> _nodes = [];
   WebViewController? _webViewController;
   bool _useWebView = false;
-  double _zoomScale = 1.0;
+  bool _triedOfficeViewer = false;
 
   @override
   void initState() {
@@ -1189,13 +1210,23 @@ class _InAppDocxDetailModalState extends State<_InAppDocxDetailModal> {
     if (widget.filePath.startsWith('http://') || widget.filePath.startsWith('https://')) {
       _useWebView = true;
       final encodedUrl = Uri.encodeComponent(widget.filePath);
+      final officeViewerUrl = 'https://view.officeapps.live.com/op/embed.aspx?src=$encodedUrl';
       final googleDocsUrl = 'https://docs.google.com/gview?embedded=true&url=$encodedUrl';
+      _triedOfficeViewer = true;
+
       _webViewController = WebViewController()
         ..setJavaScriptMode(JavaScriptMode.unrestricted)
         ..setNavigationDelegate(
           NavigationDelegate(
             onPageFinished: (_) {
               if (mounted) {
+                _webViewController?.runJavaScript('''
+                  (function() {
+                    var style = document.createElement('style');
+                    style.innerHTML = '* { -webkit-font-smoothing: antialiased !important; -moz-osx-font-smoothing: grayscale !important; text-rendering: optimizeLegibility !important; } img { image-rendering: -webkit-optimize-contrast !important; }';
+                    document.head.appendChild(style);
+                  })();
+                ''');
                 setState(() {
                   _isLoading = false;
                 });
@@ -1215,78 +1246,6 @@ class _InAppDocxDetailModalState extends State<_InAppDocxDetailModal> {
     } else {
       _parseDocxFile();
     }
-  }
-
-  void _adjustZoom(double delta) {
-    setState(() {
-      _zoomScale = (_zoomScale + delta).clamp(0.5, 3.0);
-      _webViewController?.runJavaScript(
-        'document.body.style.zoom = "$_zoomScale"; document.body.style.transform = "scale($_zoomScale)"; document.body.style.transformOrigin = "0 0";',
-      );
-    });
-  }
-
-  void _resetZoom() {
-    setState(() {
-      _zoomScale = 1.0;
-      _webViewController?.runJavaScript(
-        'document.body.style.zoom = "1.0"; document.body.style.transform = "scale(1.0)";',
-      );
-    });
-  }
-
-  Widget _buildFloatingZoomBar() {
-    return Positioned(
-      bottom: 24,
-      left: 0,
-      right: 0,
-      child: Center(
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
-          decoration: BoxDecoration(
-            color: const Color(0xFF1E1E1E).withValues(alpha: 0.92),
-            borderRadius: BorderRadius.circular(24),
-            boxShadow: const [
-              BoxShadow(color: Colors.black38, blurRadius: 12, offset: Offset(0, 4)),
-            ],
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                '${(_zoomScale * 100).toInt()}%',
-                style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13),
-              ),
-              const SizedBox(width: 10),
-              InkWell(
-                onTap: () => _adjustZoom(-0.2),
-                child: const Padding(
-                  padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                  child: Icon(Icons.remove_rounded, color: Colors.white, size: 20),
-                ),
-              ),
-              InkWell(
-                onTap: () => _adjustZoom(0.2),
-                child: const Padding(
-                  padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                  child: Icon(Icons.add_rounded, color: Colors.white, size: 20),
-                ),
-              ),
-              const SizedBox(width: 6),
-              Container(width: 1, height: 16, color: Colors.white30),
-              const SizedBox(width: 6),
-              InkWell(
-                onTap: _resetZoom,
-                child: const Padding(
-                  padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                  child: Text('Reset', style: TextStyle(color: Color(0xFF60A5FA), fontWeight: FontWeight.bold, fontSize: 13)),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
   }
 
   Future<void> _parseDocxFile() async {
@@ -1533,7 +1492,6 @@ class _InAppDocxDetailModalState extends State<_InAppDocxDetailModal> {
                 ),
               ),
             ),
-            if (_useWebView && !_isLoading) _buildFloatingZoomBar(),
           ],
         ),
       ),
@@ -1573,6 +1531,15 @@ class _InAppPdfDetailModalState extends State<_InAppPdfDetailModal> {
       if (widget.filePath.startsWith('http://') || widget.filePath.startsWith('https://')) {
         final tempDir = await getTemporaryDirectory();
         final tempFile = File('${tempDir.path}/${widget.fileName}');
+        if (tempFile.existsSync() && tempFile.lengthSync() > 0) {
+          if (mounted) {
+            setState(() {
+              _localPdfPath = tempFile.path;
+              _isLoading = false;
+            });
+          }
+          return;
+        }
         await AppLocator.dioClient.dio.download(widget.filePath, tempFile.path);
         if (mounted) {
           setState(() {
@@ -1876,7 +1843,35 @@ class _InAppImageDetailModalState extends State<_InAppImageDetailModal> {
                       ? InteractiveViewer(
                           minScale: 0.5,
                           maxScale: 4.0,
-                          child: isNetwork ? Image.network(path) : Image.file(File(path)),
+                          child: isNetwork
+                              ? Image.network(
+                                  path,
+                                  filterQuality: FilterQuality.high,
+                                  errorBuilder: (context, error, stackTrace) {
+                                    return Container(
+                                      padding: const EdgeInsets.all(24),
+                                      child: Column(
+                                        mainAxisAlignment: MainAxisAlignment.center,
+                                        children: [
+                                          const Icon(Icons.cloud_off_rounded, color: Color(0xFFEF4444), size: 64),
+                                          const SizedBox(height: 16),
+                                          Text(
+                                            widget.fileName,
+                                            style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
+                                            textAlign: TextAlign.center,
+                                          ),
+                                          const SizedBox(height: 8),
+                                          const Text(
+                                            'Server C# trả về lỗi 500 (chưa cấu hình thư mục lưu tệp FileShareFolder).',
+                                            style: TextStyle(color: Colors.white70, fontSize: 13),
+                                            textAlign: TextAlign.center,
+                                          ),
+                                        ],
+                                      ),
+                                    );
+                                  },
+                                )
+                              : Image.file(File(path), filterQuality: FilterQuality.high),
                         )
                       : Container(
                           padding: const EdgeInsets.all(24),

@@ -107,8 +107,9 @@ class _UserManagementViewState extends State<UserManagementView> {
             onAboutTap: () {
               AppNavigator.safePop(context);
             },
-            onLogoutTap: () {
-              AppLocator.sessionStore.clear();
+            onLogoutTap: () async {
+              await AppLocator.authRepository.logout();
+              if (!context.mounted) return;
               AppNavigator.resetToNamed(context, RouteNames.login);
             },
           ),

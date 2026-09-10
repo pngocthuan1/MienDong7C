@@ -5,6 +5,7 @@ class Command0<T> extends ChangeNotifier {
   final Future<Result<T>> Function() _action;
   bool _running = false;
   Result<T>? _result;
+  bool _disposed = false;
 
   Command0(this._action);
 
@@ -12,24 +13,44 @@ class Command0<T> extends ChangeNotifier {
   Result<T>? get result => _result;
 
   Future<void> execute() async {
-    if (_running) return;
+    if (_running || _disposed) return;
     _running = true;
     _result = null;
-    notifyListeners();
+    _notify();
 
     try {
       _result = await _action();
-    } catch (_) {
-      // Result covers errors
+    } catch (e, stackTrace) {
+      // Phòng hờ nếu _action() (thường là runSafely() từ BaseViewModel)
+      // vẫn để lọt exception ra ngoài phạm vi try/catch của nó — ví dụ
+      // lỗi bên trong callback result.when(...). Log lại thay vì nuốt
+      // im lặng, để không rơi vào trạng thái _result == null vĩnh viễn.
+      debugPrint('[Command0] Unhandled error during execute(): $e');
+      debugPrintStack(stackTrace: stackTrace);
+      _result = Error<T>(e is Exception ? e : Exception(e.toString()), e.toString());
     } finally {
       _running = false;
-      notifyListeners();
+      _notify();
     }
   }
 
   void clearResult() {
     _result = null;
+    _notify();
+  }
+
+  // Gọi notifyListeners() có kiểm tra disposed trước, tránh crash
+  // "used after being disposed" nếu ViewModel cha gọi dispose() trong
+  // lúc execute() vẫn đang chờ await _action().
+  void _notify() {
+    if (_disposed) return;
     notifyListeners();
+  }
+
+  @override
+  void dispose() {
+    _disposed = true;
+    super.dispose();
   }
 }
 
@@ -37,6 +58,7 @@ class Command1<T, P> extends ChangeNotifier {
   final Future<Result<T>> Function(P) _action;
   bool _running = false;
   Result<T>? _result;
+  bool _disposed = false;
 
   Command1(this._action);
 
@@ -55,22 +77,36 @@ class Command1<T, P> extends ChangeNotifier {
   }
 
   Future<void> execute(P param) async {
-    if (_running) return;
+    if (_running || _disposed) return;
     _running = true;
     _result = null;
-    notifyListeners();
+    _notify();
 
     try {
       _result = await _action(param);
-    } catch (_) {
+    } catch (e, stackTrace) {
+      debugPrint('[Command1] Unhandled error during execute(): $e');
+      debugPrintStack(stackTrace: stackTrace);
+      _result = Error<T>(e is Exception ? e : Exception(e.toString()), e.toString());
     } finally {
       _running = false;
-      notifyListeners();
+      _notify();
     }
   }
 
   void clearResult() {
     _result = null;
+    _notify();
+  }
+
+  void _notify() {
+    if (_disposed) return;
     notifyListeners();
+  }
+
+  @override
+  void dispose() {
+    _disposed = true;
+    super.dispose();
   }
 }

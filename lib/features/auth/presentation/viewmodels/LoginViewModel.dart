@@ -1,3 +1,4 @@
+
 import 'package:flutter/material.dart';
 import 'package:benhvien7c/core/config/environment.dart';
 import 'package:benhvien7c/core/network/ApiException.dart';
@@ -13,9 +14,11 @@ import 'package:benhvien7c/features/auth/domain/entities/UserRole.dart';
 
 import 'package:benhvien7c/core/dio/AppLocator.dart';
 import 'package:benhvien7c/core/services/TurnstileVerifyService.dart';
-import 'package:benhvien7c/core/commands/result.dart';
-import 'package:benhvien7c/features/patients/domain/entities/PatientProfileDraftEntity.dart';
 import 'package:benhvien7c/features/auth/domain/entities/UserProfileEntity.dart';
+import 'dart:async';
+import 'package:connectivity_plus/connectivity_plus.dart';
+import 'package:benhvien7c/core/network/NetworkInfoService.dart';
+import 'package:benhvien7c/features/auth/presentation/services/NetworkAuthService.dart';
 
 /// Lớp phụ trợ Command hỗ trợ quản lý trạng thái tải (loading) và kết quả thực thi
 class Command<T> extends ChangeNotifier {
@@ -36,7 +39,12 @@ class Command<T> extends ChangeNotifier {
 
     try {
       _result = await _action();
-    } catch (_) {
+    } catch (e, stackTrace) {
+      debugPrint('[Command] Unhandled error during execute(): $e');
+      debugPrintStack(stackTrace: stackTrace);
+      _result = ApiFailure(
+        UnknownException('Đã xảy ra lỗi không xác định. Vui lòng thử lại.'),
+      );
       // ApiResult đã bọc sẵn lỗi trong repository
     } finally {
       _running = false;
@@ -73,7 +81,43 @@ class LoginViewModel extends ChangeNotifier {
   UserRole _selectedRole = UserRole.customer;
   UserRole get selectedRole => _selectedRole;
 
+  bool isCheckingNetwork = false;
+  bool allowEmployeeRole = false;
+  StreamSubscription<List<ConnectivityResult>>? _connectivitySubscription;
+
+  void startListeningNetworkChanges() {
+    _connectivitySubscription?.cancel();
+    _connectivitySubscription = Connectivity().onConnectivityChanged.listen((results) {
+      debugPrint('[LoginViewModel] Network connectivity changed: $results -> Auto re-checking network!');
+      initNetworkCheck();
+    });
+  }
+  final NetworkInfoService _networkInfoService = NetworkInfoService();
+  late final NetworkAuthService _networkAuthService = NetworkAuthService(AppLocator.dioClient);
+
   LoginViewModel(this._authRepository, this._secureStorage);
+
+  Future<void> initNetworkCheck() async {
+    isCheckingNetwork = true;
+    notifyListeners();
+    try {
+      final info = await _networkInfoService.collectNetworkInfo();
+      debugPrint('[LoginViewModel] Wi-Fi SSID fetched: "${info.ssid}"');
+      final authResult = await _networkAuthService.checkInternalNetwork(info);
+      debugPrint('[LoginViewModel] CheckInternalNetwork allowEmployeeRole: ${authResult.allowEmployeeRole}');
+      allowEmployeeRole = authResult.allowEmployeeRole;
+      if (!allowEmployeeRole) {
+        _selectedRole = UserRole.customer;
+      }
+    } catch (e) {
+      debugPrint('[LoginViewModel] Error in initNetworkCheck: $e');
+      allowEmployeeRole = false;
+      _selectedRole = UserRole.customer;
+    } finally {
+      isCheckingNetwork = false;
+      notifyListeners();
+    }
+  }
 
   void updateRole(UserRole role) {
     if (_selectedRole == role) return;
@@ -89,7 +133,10 @@ class LoginViewModel extends ChangeNotifier {
   }
 
   String? checkPassword(String? value) {
-    return Validators.validatePassword(value);
+    if (value == null || value.isEmpty) {
+      return 'Vui lòng nhập mật khẩu';
+    }
+    return null;
   }
 
   void updatePhoneError(String? value) {
@@ -111,6 +158,19 @@ class LoginViewModel extends ChangeNotifier {
   late final loginCommand = Command<AuthSessionEntity>(() async {
     _message = null;
     notifyListeners();
+
+    // Nếu chọn vai trò Nhân viên -> Re-check mạng ngay thời điểm bấm Đăng nhập!
+    if (_selectedRole == UserRole.employee) {
+      final info = await _networkInfoService.collectNetworkInfo();
+      final authResult = await _networkAuthService.checkInternalNetwork(info);
+      if (!authResult.allowEmployeeRole) {
+        allowEmployeeRole = false;
+        _selectedRole = UserRole.customer;
+        _message = 'Tài khoản Nhân viên chỉ được phép đăng nhập khi kết nối Mạng Nội bộ Bệnh viện hoặc VPN!';
+        notifyListeners();
+        return ApiFailure(ForbiddenException('Chỉ được phép đăng nhập tài khoản Nhân viên từ Mạng Nội bộ Bệnh viện hoặc VPN.'));
+      }
+    }
 
     final phoneVal = phoneController.text.trim();
     final passwordVal = passwordController.text;
@@ -158,19 +218,15 @@ class LoginViewModel extends ChangeNotifier {
     var savedName = prefs.getString('full_name_$cleanPhone') ?? prefs.getString('saved_full_name');
 
     final boundRoleKey = cleanPhone.isNotEmpty ? cleanPhone : phoneVal.trim().toLowerCase();
-    final registeredPhones = (prefs.getStringList('registered_phone_numbers') ?? ['0822380103', '0902377251', '0987654321'])
-        .map((e) => e.replaceAll(RegExp(r'\D'), '')).toSet();
-
-    final isRegisteredMobileCustomer = (cleanPhone.isNotEmpty && registeredPhones.contains(cleanPhone)) ||
-        prefs.getString('account_role_$boundRoleKey') == 'customer';
+    final isRegisteredMobileCustomer = prefs.getString('account_role_$boundRoleKey') == 'customer';
 
     if (_selectedRole == UserRole.employee) {
       if (isRegisteredMobileCustomer) {
-        _message = 'Tài khoản "$phoneVal" là tài khoản Bệnh nhân / Khách hàng đăng ký trên app. Không thể đăng nhập vai trò Bác sĩ / Nhân viên!';
+        _message = 'Đăng nhập thất bại. Vui lòng kiểm tra lại thông tin đăng nhập!';
         notifyListeners();
         return ApiFailure(
           ForbiddenException(
-            'Tài khoản Khách hàng không có quyền đăng nhập vai trò Bác sĩ / Nhân viên.',
+            'Đăng nhập thất bại.',
             statusCode: 403,
           ),
         );
@@ -186,54 +242,56 @@ class LoginViewModel extends ChangeNotifier {
           userRole = UserRole.employee;
           await prefs.setString('account_role_$boundRoleKey', 'employee');
         } else {
-          _message = 'Tài khoản không có quyền đăng nhập với vai trò Bác sĩ / Nhân viên. Vui lòng chọn vai trò Bệnh nhân / Khách hàng!';
+          _message = 'Đăng nhập thất bại. Vui lòng kiểm tra lại thông tin đăng nhập!';
           notifyListeners();
           return ApiFailure(
-            ForbiddenException(
-              'Tài khoản không có quyền đăng nhập với vai trò Bác sĩ / Nhân viên.',
-              statusCode: 403,
-            ),
+            ForbiddenException('Đăng nhập thất bại.', statusCode: 403),
           );
         }
       } else {
-        _message = 'Tài khoản hoặc mật khẩu Bác sĩ / Nhân viên không chính xác!';
+        _message = 'Đăng nhập thất bại. Vui lòng kiểm tra lại thông tin đăng nhập!';
         notifyListeners();
         return ApiFailure(
-          ForbiddenException(
-            'Đăng nhập Bác sĩ / Nhân viên thất bại.',
-            statusCode: 403,
-          ),
+          ForbiddenException('Đăng nhập thất bại.', statusCode: 403),
         );
       }
     } else {
       // Đăng nhập vai trò Bệnh nhân / Khách hàng (UserRole.customer)
-      final isEmployeeUsername = RegExp(r'[a-zA-Z]').hasMatch(phoneVal.trim()) ||
+      // inconsistency nếu server trả về khác nhau giữa các lần gọi).
+      final looksLikeEmployeeUsername = RegExp(r'[a-zA-Z]').hasMatch(phoneVal.trim()) ||
           prefs.getString('account_role_$boundRoleKey') == 'employee';
 
-      if (isEmployeeUsername) {
-        final hisCheck = await _authRepository.loginHis(phoneVal, passwordVal);
-        if (hisCheck is ApiSuccess<UserProfileEntity>) {
-          await prefs.setString('account_role_$boundRoleKey', 'employee');
-          _message = 'Tài khoản "$phoneVal" là tài khoản Bác sĩ / Nhân viên cấp sẵn. Vui lòng chuyển sang vai trò Bác sĩ / Nhân viên để đăng nhập!';
-          notifyListeners();
-          return ApiFailure(
-            ForbiddenException(
-              'Tài khoản Bác sĩ / Nhân viên phải chọn vai trò Bác sĩ / Nhân viên.',
-              statusCode: 403,
-            ),
-          );
-        }
-      }
-
-      // 1. Ưu tiên lấy Họ và tên chính thức từ Server HIS (ví dụ: Phạm Ngọc Thuân cho 0707587641)
+      UserProfileEntity? hisProfile;
       try {
         final hisCheck = await _authRepository.loginHis(phoneVal, passwordVal);
-        if (hisCheck is ApiSuccess<UserProfileEntity> && hisCheck.data.hoTenHis.trim().isNotEmpty) {
-          userFullName = hisCheck.data.hoTenHis.trim();
+        if (hisCheck is ApiSuccess<UserProfileEntity>) {
+          hisProfile = hisCheck.data;
         }
-      } catch (_) {}
+      } catch (e) {
+        // Không chặn luồng login customer nếu server HIS lỗi/không phản hồi,
+        // nhưng vẫn log lại để theo dõi thay vì nuốt im lặng.
+        debugPrint('[LoginViewModel] loginHis lookup failed: $e');
+      }
 
-      // 2. Nếu server không trả về HoTenHis, lấy tên đã đăng ký riêng của SĐT này (không dùng chung saved_full_name toàn cục)
+      // Nếu username có dạng chữ (giống tài khoản nhân viên) và server HIS
+      // xác nhận đăng nhập thành công -> đây thực chất là tài khoản nhân viên,
+      // không cho đăng nhập với vai trò Khách hàng.
+      if (looksLikeEmployeeUsername && hisProfile != null) {
+        await prefs.setString('account_role_$boundRoleKey', 'employee');
+        _message = 'Đăng nhập thất bại. Vui lòng kiểm tra lại thông tin đăng nhập!';
+        notifyListeners();
+        return ApiFailure(
+          ForbiddenException('Đăng nhập thất bại.', statusCode: 403),
+        );
+      }
+
+      // Ưu tiên lấy Họ và tên chính thức từ Server HIS (ví dụ: Phạm Ngọc Thuân cho 0707587641)
+      if (hisProfile != null && hisProfile.hoTenHis.trim().isNotEmpty) {
+        userFullName = hisProfile.hoTenHis.trim();
+      }
+
+      // Nếu server không trả về HoTenHis, lấy tên đã đăng ký riêng của SĐT này
+      // (không dùng chung saved_full_name toàn cục)
       if (userFullName == 'Khách Hàng' || userFullName.isEmpty) {
         final perAccountName = cleanPhone.isNotEmpty ? prefs.getString('full_name_$cleanPhone') : null;
         if (perAccountName != null && perAccountName.trim().isNotEmpty && perAccountName.trim() != phoneVal.trim()) {
@@ -273,6 +331,7 @@ class LoginViewModel extends ChangeNotifier {
 
   @override
   void dispose() {
+    _connectivitySubscription?.cancel();
     phoneController.dispose();
     passwordController.dispose();
     loginCommand.dispose();

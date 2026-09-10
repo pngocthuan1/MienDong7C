@@ -23,20 +23,23 @@ class AppointmentBookingViewModel extends BasePortalViewModel {
   TicketDateFilterMode _dateFilterMode = TicketDateFilterMode.all;
   TicketDateFilterMode get dateFilterMode => _dateFilterMode;
 
+  bool _isMutating = false;
+  bool get isMutating => _isMutating;
+
   void setSearchQuery(String query) {
     _searchQuery = query.trim().toLowerCase();
-    notifyListeners();
+    notifyIfMounted();
   }
 
   void setDateFilterMode(TicketDateFilterMode mode) {
     _dateFilterMode = mode;
-    notifyListeners();
+    notifyIfMounted();
   }
 
   void clearFilters() {
     _searchQuery = '';
     _dateFilterMode = TicketDateFilterMode.all;
-    notifyListeners();
+    notifyIfMounted();
   }
 
   bool _matchesFilter(MedicalTicketEntity ticket) {
@@ -56,35 +59,29 @@ class AppointmentBookingViewModel extends BasePortalViewModel {
     }
 
     // 2. Date Filter
-    if (_dateFilterMode != TicketDateFilterMode.all && ticket.selectedDate != null) {
-      try {
-        final parts = ticket.selectedDate!.split('/');
-        if (parts.length == 3) {
-          final ticketDate = DateTime(
-            int.parse(parts[2]),
-            int.parse(parts[1]),
-            int.parse(parts[0]),
-          );
-          final now = DateTime.now();
-          final today = DateTime(now.year, now.month, now.day);
+    if (_dateFilterMode != TicketDateFilterMode.all) {
+      final ticketDate = ticket.parsedTicketDate;
+      if (ticketDate == null) return false;
 
-          if (_dateFilterMode == TicketDateFilterMode.today) {
-            if (ticketDate.year != today.year || ticketDate.month != today.month || ticketDate.day != today.day) {
-              return false;
-            }
-          } else if (_dateFilterMode == TicketDateFilterMode.thisWeek) {
-            final startOfWeek = today.subtract(Duration(days: today.weekday - 1));
-            final endOfWeek = startOfWeek.add(const Duration(days: 6, hours: 23, minutes: 59));
-            if (ticketDate.isBefore(startOfWeek) || ticketDate.isAfter(endOfWeek)) {
-              return false;
-            }
-          } else if (_dateFilterMode == TicketDateFilterMode.thisMonth) {
-            if (ticketDate.year != today.year || ticketDate.month != today.month) {
-              return false;
-            }
-          }
+      final now = DateTime.now();
+      final today = DateTime(now.year, now.month, now.day);
+      final tDateOnly = DateTime(ticketDate.year, ticketDate.month, ticketDate.day);
+
+      if (_dateFilterMode == TicketDateFilterMode.today) {
+        if (tDateOnly.year != today.year || tDateOnly.month != today.month || tDateOnly.day != today.day) {
+          return false;
         }
-      } catch (_) {}
+      } else if (_dateFilterMode == TicketDateFilterMode.thisWeek) {
+        final monday = today.subtract(Duration(days: today.weekday - 1));
+        final sunday = monday.add(const Duration(days: 6, hours: 23, minutes: 59, seconds: 59));
+        if (tDateOnly.isBefore(monday) || tDateOnly.isAfter(sunday)) {
+          return false;
+        }
+      } else if (_dateFilterMode == TicketDateFilterMode.thisMonth) {
+        if (tDateOnly.year != today.year || tDateOnly.month != today.month) {
+          return false;
+        }
+      }
     }
 
     return true;
@@ -105,11 +102,12 @@ class AppointmentBookingViewModel extends BasePortalViewModel {
   Future<Result<List<MedicalTicketEntity>>> _loadTickets() async {
     return runSafely(() async {
       final result = await portalRepository.loadMedicalTickets(role);
+      if(isDisposed) return result;
       result.when(
         ok: (tickets) {
+          if(isDisposed) return result;
           allTickets = tickets;
           clearMessage();
-          notifyListeners();
         },
         error: (_, message) {
           setMessage(message);
@@ -120,13 +118,34 @@ class AppointmentBookingViewModel extends BasePortalViewModel {
   }
 
   Future<void> softDeleteTicket(String id) async {
-    await portalRepository.softDeleteMedicalTicket(id);
-    loadTicketsCommand.execute();
+     if (_isMutating) return;
+    _isMutating = true;
+    notifyIfMounted();
+    try {
+      await portalRepository.softDeleteMedicalTicket(id);
+      await loadTicketsCommand.execute();
+
+    } catch (e) {
+      setMessage('Xóa lịch hẹn thất bại. Vui lòng thử lại.');
+    } finally {
+      _isMutating = false;
+      notifyIfMounted();
+    }
   }
 
   Future<void> restoreTicket(String id) async {
-    await portalRepository.restoreMedicalTicket(id);
-    loadTicketsCommand.execute();
+    if (_isMutating) return;
+    _isMutating = true;
+    notifyIfMounted();
+    try {
+      await portalRepository.restoreMedicalTicket(id);
+      await loadTicketsCommand.execute();
+    } catch (e) {
+      setMessage('Khôi phục lịch hẹn thất bại. Vui lòng thử lại.');
+    } finally {
+      _isMutating = false;
+      notifyIfMounted();
+    }
   }
 
   @override

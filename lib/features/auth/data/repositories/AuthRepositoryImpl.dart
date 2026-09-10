@@ -69,7 +69,7 @@ class AuthRepositoryImpl implements AuthRepository {
       return ApiFailure(e);
     } catch (e) {
       return ApiFailure(
-        UnauthorizedException('Đã xảy ra lỗi khi lấy hồ sơ HIS: $e'),
+       UnknownException('Đã xảy ra lỗi khi lấy hồ sơ HIS: $e'),
       );
     }
   }
@@ -81,10 +81,26 @@ class AuthRepositoryImpl implements AuthRepository {
     try {
       final prefs = await SharedPreferences.getInstance();
       await prefs.remove('saved_phone');
+      await prefs.remove('saved_his_username');
+      await prefs.remove('saved_role');
+      await prefs.remove('saved_full_name');
+      await prefs.remove('saved_session');
     } catch (_) {}
   }
 
   // --- OTP & Account APIs Implementation ---
+
+  @override
+  Future<ApiResult<bool>> checkExistAccount(String phone) async {
+    try {
+      final exists = await _remoteDataSource.checkExistAccount(phone);
+      return ApiSuccess(exists);
+    } on ApiException catch (e) {
+      return ApiFailure(e);
+    } catch (e) {
+      return ApiFailure(UnknownException('Lỗi kiểm tra tài khoản tồn tại: $e'));
+    }
+  }
 
   @override
   Future<ApiResult<String>> generateRandomKey() async {
