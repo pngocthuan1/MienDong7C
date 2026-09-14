@@ -33,6 +33,24 @@ class CccdData {
     }
     return birthDate.trim();
   }
+
+  String get formattedBirthDate {
+    final clean = birthDate.trim();
+    if (clean.contains('/')) return clean;
+    if (clean.length == 8 && RegExp(r'^\d{8}$').hasMatch(clean)) {
+      return '${clean.substring(0, 2)}/${clean.substring(2, 4)}/${clean.substring(4)}';
+    }
+    return clean;
+  }
+
+  String get formattedIssueDate {
+    final clean = issueDate.trim();
+    if (clean.contains('/')) return clean;
+    if (clean.length == 8 && RegExp(r'^\d{8}$').hasMatch(clean)) {
+      return '${clean.substring(0, 2)}/${clean.substring(2, 4)}/${clean.substring(4)}';
+    }
+    return clean;
+  }
 }
 
 class CccdParserHelper {

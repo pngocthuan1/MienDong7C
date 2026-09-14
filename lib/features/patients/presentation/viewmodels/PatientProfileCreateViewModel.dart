@@ -300,6 +300,7 @@ class PatientProfileCreateViewModel extends BasePortalViewModel {
       otherGender = profile.gender;
       otherPhoneController.text = profile.phoneNumber;
       identifierController.text = (profile.identifier != 'N/A') ? profile.identifier : '';
+      cccdIssueDateController.text = profile.cccdIssueDate ?? '';
       provinceController.text = profile.province ?? '';
       wardController.text = profile.ward ?? '';
       if (profile.clinic != null && profile.clinic!.isNotEmpty) {
@@ -312,6 +313,7 @@ class PatientProfileCreateViewModel extends BasePortalViewModel {
       otherPhoneError = null;
     } else {
       identifierController.text = (profile.identifier != 'N/A') ? profile.identifier : '';
+      cccdIssueDateController.text = profile.cccdIssueDate ?? '';
       fullNameController.text = profile.fullName;
       dobController.text = profile.dateOfBirth ?? '';
       birthYearController.text = profile.birthYear;
@@ -336,6 +338,7 @@ class PatientProfileCreateViewModel extends BasePortalViewModel {
     selectedProfileIdentifier = null;
     isExistingProfile = false;
     identifierController.clear();
+    cccdIssueDateController.clear();
     fullNameController.text = session.user.fullName;
     dobController.clear();
     birthYearController.clear();
@@ -352,36 +355,49 @@ class PatientProfileCreateViewModel extends BasePortalViewModel {
   }
 
   // Pre-fill fields from scanned CCCD QR code
-  void fillFromCccd(CccdData data) {
-    String formattedIssueDate = data.issueDate;
-    if (data.issueDate.length == 8 && RegExp(r'^\d{8}$').hasMatch(data.issueDate)) {
-      formattedIssueDate = '${data.issueDate.substring(0, 2)}/${data.issueDate.substring(2, 4)}/${data.issueDate.substring(4)}';
-    }
+  ParsedAddressResult fillFromCccd(CccdData data) {
+    final parsedAddress = AddressHelper.instance.parseCccdAddress(data.address);
 
     if (registerForSomeoneElse) {
       otherFullNameController.text = data.fullName;
+      otherDobController.text = data.formattedBirthDate;
       otherBirthYearController.text = data.birthYear;
       otherGender = data.gender == 'Nữ' ? 'Nữ' : 'Nam';
       identifierController.text = data.cccdNumber;
-      if (formattedIssueDate.isNotEmpty) {
-        otherCccdIssueDateController.text = formattedIssueDate;
+      if (data.formattedIssueDate.isNotEmpty) {
+        otherCccdIssueDateController.text = data.formattedIssueDate;
+      }
+      if (parsedAddress.province != null) {
+        selectProvince(parsedAddress.province!.name);
+        if (parsedAddress.ward != null) {
+          selectWard(parsedAddress.ward!.name);
+        }
       }
       
       updateOtherFullNameError(data.fullName);
       updateOtherBirthYearError(data.birthYear);
     } else {
       fullNameController.text = data.fullName;
+      dobController.text = data.formattedBirthDate;
       birthYearController.text = data.birthYear;
       _gender = data.gender == 'Nữ' ? 'Nữ' : 'Nam';
       identifierController.text = data.cccdNumber;
-      if (formattedIssueDate.isNotEmpty) {
-        cccdIssueDateController.text = formattedIssueDate;
+      if (data.formattedIssueDate.isNotEmpty) {
+        cccdIssueDateController.text = data.formattedIssueDate;
+      }
+      if (parsedAddress.province != null) {
+        selectProvince(parsedAddress.province!.name);
+        if (parsedAddress.ward != null) {
+          selectWard(parsedAddress.ward!.name);
+        }
       }
       
       updateFullNameError(data.fullName);
       updateBirthYearError(data.birthYear);
     }
+    refreshFormState();
     notifyListeners();
+    return parsedAddress;
   }
 
   MedicalTicketEntity? _initialTicket;
@@ -480,6 +496,7 @@ class PatientProfileCreateViewModel extends BasePortalViewModel {
           if (draft.birthYear.isNotEmpty) birthYearController.text = draft.birthYear;
           if (draft.phoneNumber.isNotEmpty) phoneController.text = draft.phoneNumber;
           if (draft.identifier.isNotEmpty) identifierController.text = draft.identifier;
+          if (draft.cccdIssueDate != null && draft.cccdIssueDate!.isNotEmpty) cccdIssueDateController.text = draft.cccdIssueDate!;
           if (draft.gender.isNotEmpty) _gender = draft.gender;
           if (draft.province != null) provinceController.text = draft.province!;
           if (draft.ward != null) wardController.text = draft.ward!;
@@ -703,22 +720,6 @@ class PatientProfileCreateViewModel extends BasePortalViewModel {
           ward: draft.ward,
           clinic: selectedClinicName,
         );
-        if (saveProfile) {
-          final profileToSave = PatientProfileDraftEntity(
-            identifier: (draft.identifier.trim().isNotEmpty && draft.identifier != 'N/A')
-                ? draft.identifier.trim()
-                : ((ticket.patientCode.trim().isNotEmpty && ticket.patientCode != 'N/A') ? ticket.patientCode.trim() : 'N/A'),
-            fullName: draft.fullName,
-            dateOfBirth: draft.dateOfBirth,
-            birthYear: draft.birthYear,
-            gender: draft.gender,
-            phoneNumber: draft.phoneNumber,
-            province: draft.province,
-            ward: draft.ward,
-            clinic: draft.clinic,
-          );
-          await portalRepository.savePatientProfile(profileToSave);
-        }
         return Ok(ticket);
       }
 

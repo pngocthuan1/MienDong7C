@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/gestures.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'package:benhvien7c/core/theme/AppSizes.dart';
 import 'package:benhvien7c/core/config/environment.dart';
 import 'package:benhvien7c/core/dio/AppLocator.dart';
@@ -235,15 +237,31 @@ class _RegisterViewState extends State<RegisterView> {
                                 style: const TextStyle(
                                   fontWeight: FontWeight.bold,
                                   color: Color(0xFF1976D2),
+                                  decoration: TextDecoration.underline,
                                 ),
+                                recognizer: TapGestureRecognizer()
+                                  ..onTap = () async {
+                                    final uri = Uri.parse(Environment.termsOfServiceUrl);
+                                    if (await canLaunchUrl(uri)) {
+                                      await launchUrl(uri, mode: LaunchMode.externalApplication);
+                                    }
+                                  },
                               ),
                               const TextSpan(text: ' và '),
                               TextSpan(
-                                text: 'Chính sách bảo vệ dữ liệu cá nhân',
+                                text: 'Chính sách bảo mật',
                                 style: const TextStyle(
                                   fontWeight: FontWeight.bold,
                                   color: Color(0xFF1976D2),
+                                  decoration: TextDecoration.underline,
                                 ),
+                                recognizer: TapGestureRecognizer()
+                                  ..onTap = () async {
+                                    final uri = Uri.parse(Environment.privacyPolicyUrl);
+                                    if (await canLaunchUrl(uri)) {
+                                      await launchUrl(uri, mode: LaunchMode.externalApplication);
+                                    }
+                                  },
                               ),
                               const TextSpan(text: ' của Bệnh viện.'),
                             ],

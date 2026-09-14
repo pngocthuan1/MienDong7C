@@ -6,6 +6,7 @@ class PatientProfileDraftEntity {
     required this.gender,
     required this.phoneNumber,
     this.dateOfBirth,
+    this.cccdIssueDate,
     this.province,
     this.ward,
     this.clinic,
@@ -20,6 +21,7 @@ class PatientProfileDraftEntity {
   final String gender;
   final String phoneNumber;
   final String? dateOfBirth;
+  final String? cccdIssueDate;
   final String? province;
   final String? ward;
   final String? clinic;
@@ -35,6 +37,7 @@ class PatientProfileDraftEntity {
       'gender': gender,
       'phoneNumber': phoneNumber,
       'dateOfBirth': dateOfBirth,
+      'cccdIssueDate': cccdIssueDate,
       'province': province,
       'ward': ward,
       'clinic': clinic,
@@ -52,6 +55,7 @@ class PatientProfileDraftEntity {
       gender: json['gender'] as String? ?? '',
       phoneNumber: json['phoneNumber'] as String? ?? '',
       dateOfBirth: json['dateOfBirth'] as String?,
+      cccdIssueDate: json['cccdIssueDate'] as String?,
       province: json['province'] as String?,
       ward: json['ward'] as String?,
       clinic: json['clinic'] as String?,
@@ -68,6 +72,7 @@ class PatientProfileDraftEntity {
     String? gender,
     String? phoneNumber,
     String? dateOfBirth,
+    String? cccdIssueDate,
     String? province,
     String? ward,
     String? clinic,
@@ -82,6 +87,7 @@ class PatientProfileDraftEntity {
       gender: gender ?? this.gender,
       phoneNumber: phoneNumber ?? this.phoneNumber,
       dateOfBirth: dateOfBirth ?? this.dateOfBirth,
+      cccdIssueDate: cccdIssueDate ?? this.cccdIssueDate,
       province: province ?? this.province,
       ward: ward ?? this.ward,
       clinic: clinic ?? this.clinic,

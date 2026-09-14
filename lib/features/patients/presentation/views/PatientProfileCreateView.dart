@@ -200,20 +200,34 @@ class _PatientProfileCreateViewState extends State<PatientProfileCreateView> {
     );
   }
 
-  Future<void> _startCccdScanning(BuildContext context) async {
+  Future<void> _startCccdScanning() async {
     final result = await Navigator.of(context).push(
       MaterialPageRoute(
         builder: (context) => const CccdScannerView(),
       ),
     );
 
-    if (result is CccdData && mounted) {
-      _viewModel.fillFromCccd(result);
+    if (!mounted) return;
+
+    if (result is CccdData) {
+      final addressResult = _viewModel.fillFromCccd(result);
       ScaffoldMessenger.of(context).clearSnackBars();
+
+      String message = 'Đã nhập thông tin ${result.isBhyt ? "BHYT" : "CCCD"} của ${result.fullName}.';
+      Color bgColor = const Color(0xFF16A34A);
+
+      if (addressResult.isExactMatch && addressResult.province != null && addressResult.ward != null) {
+        message += '\nĐịa chỉ: ${addressResult.ward!.name}, ${addressResult.province!.name}';
+      } else if (addressResult.province != null) {
+        message += '\nĐã chọn: ${addressResult.province!.name}. Vui lòng chạm chọn Phường/Xã.';
+        bgColor = const Color(0xFFD97706);
+      }
+
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Đã nhập thông tin ${result.isBhyt ? "BHYT" : "CCCD"} của ${result.fullName}'),
-          backgroundColor: Colors.green,
+          content: Text(message, style: const TextStyle(fontWeight: FontWeight.w600)),
+          backgroundColor: bgColor,
+          duration: const Duration(seconds: 4),
         ),
       );
     }
@@ -585,15 +599,33 @@ class _PatientProfileCreateViewState extends State<PatientProfileCreateView> {
     );
   }
 
+  Widget _buildRequiredLabel(String text) {
+    return Text.rich(
+      TextSpan(
+        children: [
+          TextSpan(text: text),
+          const TextSpan(
+            text: ' *',
+            style: TextStyle(
+              color: Color(0xFFEF4444),
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildResponsivePair({
     required Widget child1,
     required Widget child2,
     double spacing = 12,
     double runSpacing = 14,
+    double breakpoint = 500,
   }) {
     return LayoutBuilder(
       builder: (context, constraints) {
-        if (constraints.maxWidth >= 500) {
+        if (constraints.maxWidth >= breakpoint) {
           return Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -679,7 +711,7 @@ class _PatientProfileCreateViewState extends State<PatientProfileCreateView> {
 
           ListenableBuilder(
             listenable: _viewModel.continueCommand,
-            builder: (context, __) {
+            builder: (context, _) {
               final isCaptchaVerified = _captchaToken != null;
               final canSubmit = _viewModel.canContinue && isCaptchaVerified;
               return SizedBox(
@@ -774,7 +806,7 @@ class _PatientProfileCreateViewState extends State<PatientProfileCreateView> {
                 icon: Icons.person_pin_rounded,
                 title: '1. Thông tin cá nhân & CCCD',
                 trailing: TextButton.icon(
-                  onPressed: () => _startCccdScanning(context),
+                  onPressed: _viewModel.isExistingProfile ? null : _startCccdScanning,
                   icon: const Icon(Icons.qr_code_scanner_rounded, size: 14, color: Color(0xFF0D6EFD)),
                   label: const Text('Quét CCCD / BHYT', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Color(0xFF0D6EFD))),
                   style: TextButton.styleFrom(
@@ -803,6 +835,8 @@ class _PatientProfileCreateViewState extends State<PatientProfileCreateView> {
                       decoration: InputDecoration(
                         labelText: 'Ngày cấp CCCD',
                         hintText: 'DD/MM/YYYY',
+                        filled: _viewModel.isExistingProfile,
+                        fillColor: _viewModel.isExistingProfile ? const Color(0xFFF1F5F9) : null,
                         prefixIcon: const Icon(Icons.event_available_outlined),
                         suffixIcon: IconButton(
                           icon: const Icon(Icons.calendar_today_rounded, size: 18),
@@ -830,60 +864,44 @@ class _PatientProfileCreateViewState extends State<PatientProfileCreateView> {
                   ),
                   const SizedBox(height: 14),
 
-                  // Hàng 3 (Luôn chia đôi 2 cột): Ngày sinh & Giới tính
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Expanded(
-                        child: TextFormField(
-                          controller: _viewModel.dobController,
-                          keyboardType: TextInputType.datetime,
-                          readOnly: _viewModel.isExistingProfile,
-                          decoration: InputDecoration(
-                            labelText: 'Ngày sinh *',
-                            hintText: 'DD/MM/YYYY',
-                            prefixIcon: const Icon(Icons.cake_outlined),
-                            suffixIcon: IconButton(
-                              icon: const Icon(Icons.calendar_today_rounded, size: 18),
-                              onPressed: _viewModel.isExistingProfile
-                                  ? null
-                                  : () => _selectDateOfBirth(_viewModel.dobController, isOther: false),
-                            ),
-                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                          ),
-                          validator: (v) => Validators.validateFullDate(v, isRequired: true, fieldName: 'Ngày sinh'),
+                  // Hàng 3 (Responsive: Chia đôi trên màn thường / Xếp dọc trên máy nhỏ < 380px): Ngày sinh & Giới tính
+                  _buildResponsivePair(
+                    breakpoint: 380,
+                    child1: TextFormField(
+                      controller: _viewModel.dobController,
+                      keyboardType: TextInputType.datetime,
+                      readOnly: _viewModel.isExistingProfile,
+                      decoration: InputDecoration(
+                        label: _buildRequiredLabel('Ngày sinh'),
+                        hintText: 'DD/MM/YYYY',
+                        filled: _viewModel.isExistingProfile,
+                        fillColor: _viewModel.isExistingProfile ? const Color(0xFFF1F5F9) : null,
+                        prefixIcon: const Icon(Icons.cake_outlined),
+                        suffixIcon: IconButton(
+                          icon: const Icon(Icons.calendar_today_rounded, size: 18),
+                          onPressed: _viewModel.isExistingProfile
+                              ? null
+                              : () => _selectDateOfBirth(_viewModel.dobController, isOther: false),
                         ),
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
                       ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: DropdownButtonFormField<String>(
-                          value: _viewModel.gender,
-                          decoration: InputDecoration(
-                            label: const Text.rich(
-                              TextSpan(
-                                children: [
-                                  TextSpan(text: 'Giới tính'),
-                                  TextSpan(
-                                    text: ' *',
-                                    style: TextStyle(
-                                      color: Color(0xFFEF4444),
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                            prefixIcon: const Icon(Icons.wc_rounded),
-                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                          ),
-                          items: const [
-                            DropdownMenuItem(value: 'Nam', child: Text('Nam')),
-                            DropdownMenuItem(value: 'Nữ', child: Text('Nữ')),
-                          ],
-                          onChanged: _viewModel.isExistingProfile ? null : _viewModel.updateGender,
-                        ),
+                      validator: (v) => Validators.validateFullDate(v, isRequired: true, fieldName: 'Ngày sinh'),
+                    ),
+                    child2: DropdownButtonFormField<String>(
+                      value: _viewModel.gender,
+                      decoration: InputDecoration(
+                        label: _buildRequiredLabel('Giới tính'),
+                        filled: _viewModel.isExistingProfile,
+                        fillColor: _viewModel.isExistingProfile ? const Color(0xFFF1F5F9) : null,
+                        prefixIcon: const Icon(Icons.wc_rounded),
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
                       ),
-                    ],
+                      items: const [
+                        DropdownMenuItem(value: 'Nam', child: Text('Nam')),
+                        DropdownMenuItem(value: 'Nữ', child: Text('Nữ')),
+                      ],
+                      onChanged: _viewModel.isExistingProfile ? null : _viewModel.updateGender,
+                    ),
                   ),
                   const SizedBox(height: 14),
 
@@ -902,11 +920,12 @@ class _PatientProfileCreateViewState extends State<PatientProfileCreateView> {
                     ),
                     child2: AppTextField(
                       controller: _viewModel.patientCodeController,
-                      label: 'Mã bệnh nhân',
-                      hintText: 'Nhập mã BN (Nếu có)',
+                      label: 'Mã bệnh nhân (Hệ thống tự cấp)',
+                      hintText: '(Tự động cấp khi khám)',
                       prefixIcon: Icons.fingerprint_rounded,
                       textInputAction: TextInputAction.done,
-                      readOnly: _viewModel.isExistingProfile,
+                      readOnly: true,
+                      readOnlyMessage: 'Mã bệnh nhân do hệ thống tự động cấp khi tới khám.',
                     ),
                   ),
                 ],
@@ -923,8 +942,10 @@ class _PatientProfileCreateViewState extends State<PatientProfileCreateView> {
                       readOnly: true,
                       onTap: _viewModel.isExistingProfile ? null : _selectProvince,
                       decoration: InputDecoration(
-                        labelText: 'Tỉnh / Thành phố *',
+                        label: _buildRequiredLabel('Tỉnh / Thành phố'),
                         hintText: 'Chọn Tỉnh / Thành phố',
+                        filled: _viewModel.isExistingProfile,
+                        fillColor: _viewModel.isExistingProfile ? const Color(0xFFF1F5F9) : null,
                         prefixIcon: const Icon(Icons.location_city_rounded),
                         suffixIcon: const Icon(Icons.arrow_drop_down),
                         border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
@@ -936,8 +957,10 @@ class _PatientProfileCreateViewState extends State<PatientProfileCreateView> {
                       readOnly: true,
                       onTap: _viewModel.isExistingProfile ? null : _selectWard,
                       decoration: InputDecoration(
-                        labelText: 'Phường / Xã *',
+                        label: _buildRequiredLabel('Phường / Xã'),
                         hintText: 'Chọn Phường / Xã',
+                        filled: _viewModel.isExistingProfile,
+                        fillColor: _viewModel.isExistingProfile ? const Color(0xFFF1F5F9) : null,
                         prefixIcon: const Icon(Icons.map_rounded),
                         suffixIcon: const Icon(Icons.arrow_drop_down),
                         border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
@@ -953,77 +976,71 @@ class _PatientProfileCreateViewState extends State<PatientProfileCreateView> {
                 icon: Icons.calendar_month_rounded,
                 title: '3. Chọn lịch & Phòng khám',
                 children: [
-                  // Hàng (Luôn chia đôi 2 cột): Ngày khám & Giờ khám
-                  Row(
-                    children: [
-                      Expanded(
-                        child: GestureDetector(
-                          onTap: _showDateTimePickerBottomSheet,
-                          child: Container(
-                            width: double.infinity,
-                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-                            decoration: BoxDecoration(
-                              color: const Color(0xFFF7F9FC),
-                              borderRadius: BorderRadius.circular(12),
-                              border: Border.all(color: const Color(0xFFE4E9F2)),
+                  // Hàng (Responsive: Chia đôi trên màn thường / Xếp dọc trên máy nhỏ < 380px): Ngày khám & Giờ khám
+                  _buildResponsivePair(
+                    breakpoint: 380,
+                    child1: GestureDetector(
+                      onTap: _showDateTimePickerBottomSheet,
+                      child: Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFF7F9FC),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: const Color(0xFFE4E9F2)),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text.rich(
+                              TextSpan(
+                                children: [
+                                  TextSpan(text: 'Ngày khám', style: TextStyle(fontSize: 11, color: Colors.grey)),
+                                  TextSpan(text: ' *', style: TextStyle(fontSize: 11, color: Color(0xFFEF4444), fontWeight: FontWeight.bold)),
+                                ],
+                              ),
                             ),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                const Text.rich(
-                                  TextSpan(
-                                    children: [
-                                      TextSpan(text: 'Ngày khám', style: TextStyle(fontSize: 11, color: Colors.grey)),
-                                      TextSpan(text: ' *', style: TextStyle(fontSize: 11, color: Color(0xFFEF4444), fontWeight: FontWeight.bold)),
-                                    ],
-                                  ),
-                                ),
-                                const SizedBox(height: 6),
-                                Text(
-                                  _viewModel.selectedDate == null
-                                      ? 'Chọn ngày'
-                                      : DateFormat('dd/MM/yyyy').format(_viewModel.selectedDate!),
-                                  style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
-                                ),
-                              ],
+                            const SizedBox(height: 6),
+                            Text(
+                              _viewModel.selectedDate == null
+                                  ? 'Chọn ngày'
+                                  : DateFormat('dd/MM/yyyy').format(_viewModel.selectedDate!),
+                              style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
                             ),
-                          ),
+                          ],
                         ),
                       ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: GestureDetector(
-                          onTap: _showDateTimePickerBottomSheet,
-                          child: Container(
-                            width: double.infinity,
-                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-                            decoration: BoxDecoration(
-                              color: const Color(0xFFF7F9FC),
-                              borderRadius: BorderRadius.circular(12),
-                              border: Border.all(color: const Color(0xFFE4E9F2)),
+                    ),
+                    child2: GestureDetector(
+                      onTap: _showDateTimePickerBottomSheet,
+                      child: Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFF7F9FC),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: const Color(0xFFE4E9F2)),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text.rich(
+                              TextSpan(
+                                children: [
+                                  TextSpan(text: 'Giờ khám', style: TextStyle(fontSize: 11, color: Colors.grey)),
+                                  TextSpan(text: ' *', style: TextStyle(fontSize: 11, color: Color(0xFFEF4444), fontWeight: FontWeight.bold)),
+                                ],
+                              ),
                             ),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                const Text.rich(
-                                  TextSpan(
-                                    children: [
-                                      TextSpan(text: 'Giờ khám', style: TextStyle(fontSize: 11, color: Colors.grey)),
-                                      TextSpan(text: ' *', style: TextStyle(fontSize: 11, color: Color(0xFFEF4444), fontWeight: FontWeight.bold)),
-                                    ],
-                                  ),
-                                ),
-                                const SizedBox(height: 6),
-                                Text(
-                                  _viewModel.selectedTime ?? 'Chọn giờ',
-                                  style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
-                                ),
-                              ],
+                            const SizedBox(height: 6),
+                            Text(
+                              _viewModel.selectedTime ?? 'Chọn giờ',
+                              style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
                             ),
-                          ),
+                          ],
                         ),
                       ),
-                    ],
+                    ),
                   ),
                   const SizedBox(height: 14),
                   GestureDetector(
@@ -1043,7 +1060,14 @@ class _PatientProfileCreateViewState extends State<PatientProfileCreateView> {
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                const Text('Phòng khám *', style: TextStyle(fontSize: 11, color: Colors.grey)),
+                                const Text.rich(
+                                  TextSpan(
+                                    children: [
+                                      TextSpan(text: 'Phòng khám', style: TextStyle(fontSize: 11, color: Colors.grey)),
+                                      TextSpan(text: ' *', style: TextStyle(fontSize: 11, color: Color(0xFFEF4444), fontWeight: FontWeight.bold)),
+                                    ],
+                                  ),
+                                ),
                                 const SizedBox(height: 4),
                                 Text(
                                   _viewModel.clinicController.text.isNotEmpty
@@ -1066,27 +1090,6 @@ class _PatientProfileCreateViewState extends State<PatientProfileCreateView> {
                     hintText: 'Mô tả ngắn gọn triệu chứng (không bắt buộc)',
                     prefixIcon: Icons.medical_services_outlined,
                     textInputAction: TextInputAction.done,
-                  ),
-                ],
-              ),
-
-              // Card 4: Tùy chọn đăng ký
-              _buildCardSection(
-                icon: Icons.tune_rounded,
-                title: '4. Tùy chọn đăng ký',
-                children: [
-                  CheckboxListTile(
-                    value: _viewModel.saveProfile,
-                    onChanged: (val) {
-                      setState(() {
-                        _viewModel.saveProfile = val ?? true;
-                      });
-                    },
-                    title: const Text('Lưu hồ sơ này', style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
-                    subtitle: const Text('Để dùng lại nhanh cho lần đăng ký sau.', style: TextStyle(fontSize: 11)),
-                    controlAffinity: ListTileControlAffinity.leading,
-                    contentPadding: EdgeInsets.zero,
-                    activeColor: const Color(0xFF0D6EFD),
                   ),
                 ],
               ),

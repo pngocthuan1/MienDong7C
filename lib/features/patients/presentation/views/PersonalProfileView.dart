@@ -10,6 +10,8 @@ import 'package:benhvien7c/core/widgets/AppResponsiveContainer.dart';
 import 'package:benhvien7c/core/widgets/SearchablePickerModal.dart';
 import 'package:benhvien7c/core/utils/AddressHelper.dart';
 import 'package:benhvien7c/core/utils/Validators.dart';
+import 'package:benhvien7c/core/utils/CccdParserHelper.dart';
+import 'package:benhvien7c/features/patients/presentation/views/CccdScannerView.dart';
 import 'package:benhvien7c/features/patients/domain/entities/PatientProfileDraftEntity.dart';
 
 class PersonalProfileView extends StatefulWidget {
@@ -26,13 +28,13 @@ class _PersonalProfileViewState extends State<PersonalProfileView> {
   final _birthYearController = TextEditingController();
   final _phoneController = TextEditingController();
   final _identifierController = TextEditingController();
+  final _cccdIssueDateController = TextEditingController();
   final _provinceController = TextEditingController();
   final _wardController = TextEditingController();
 
   String _gender = 'Nam';
   bool _isLoading = true;
   List<ProvinceModel> _provinces = [];
-  String? _selectedProvinceCode;
 
   @override
   void initState() {
@@ -53,6 +55,7 @@ class _PersonalProfileViewState extends State<PersonalProfileView> {
     _birthYearController.dispose();
     _phoneController.dispose();
     _identifierController.dispose();
+    _cccdIssueDateController.dispose();
     _provinceController.dispose();
     _wardController.dispose();
     super.dispose();
@@ -72,16 +75,9 @@ class _PersonalProfileViewState extends State<PersonalProfileView> {
         _birthYearController.text = draft.birthYear;
         _phoneController.text = draft.phoneNumber.isNotEmpty ? draft.phoneNumber : (session?.user.phoneNumber ?? '');
         _identifierController.text = draft.identifier;
+        _cccdIssueDateController.text = draft.cccdIssueDate ?? '';
         _provinceController.text = draft.province ?? '';
         _wardController.text = draft.ward ?? '';
-
-        if (_provinceController.text.isNotEmpty && _provinces.isNotEmpty) {
-          final matched = _provinces.firstWhere(
-            (p) => p.name == _provinceController.text || p.fullName == _provinceController.text,
-            orElse: () => _provinces.first,
-          );
-          _selectedProvinceCode = matched.code;
-        }
 
         if (draft.gender.isNotEmpty) {
           _gender = draft.gender;
@@ -137,6 +133,40 @@ class _PersonalProfileViewState extends State<PersonalProfileView> {
     }
   }
 
+  void _selectCccdIssueDate() async {
+    final now = DateTime.now();
+    DateTime initialDate = now;
+    if (_cccdIssueDateController.text.contains('/')) {
+      final parts = _cccdIssueDateController.text.split('/');
+      if (parts.length == 3) {
+        final d = int.tryParse(parts[0]);
+        final m = int.tryParse(parts[1]);
+        final y = int.tryParse(parts[2]);
+        if (d != null && m != null && y != null) {
+          initialDate = DateTime(y, m, d);
+        }
+      }
+    }
+
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: initialDate,
+      firstDate: DateTime(1960),
+      lastDate: now,
+      locale: const Locale('vi', 'VN'),
+      helpText: 'CHỌN NGÀY CẤP CCCD',
+      confirmText: 'CHỌN',
+      cancelText: 'HỦY',
+    );
+
+    if (picked != null) {
+      final formatted = DateFormat('dd/MM/yyyy').format(picked);
+      setState(() {
+        _cccdIssueDateController.text = formatted;
+      });
+    }
+  }
+
   void _selectProvince() async {
     final items = _provinces
         .map((p) => PickerItem<String>(
@@ -155,8 +185,6 @@ class _PersonalProfileViewState extends State<PersonalProfileView> {
     if (selected != null && selected != _provinceController.text) {
       setState(() {
         _provinceController.text = selected;
-        final matched = _provinces.firstWhere((p) => p.name == selected, orElse: () => _provinces.first);
-        _selectedProvinceCode = matched.code;
         _wardController.clear();
       });
     }
@@ -185,6 +213,58 @@ class _PersonalProfileViewState extends State<PersonalProfileView> {
     }
   }
 
+  Future<void> _startCccdScanning() async {
+    final result = await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (context) => const CccdScannerView(),
+      ),
+    );
+
+    if (!mounted) return;
+
+    if (result is CccdData) {
+      final addressResult = AddressHelper.instance.parseCccdAddress(result.address);
+
+      setState(() {
+        _fullNameController.text = result.fullName;
+        _identifierController.text = result.cccdNumber;
+        _dobController.text = result.formattedBirthDate;
+        _birthYearController.text = result.birthYear;
+        _gender = result.gender == 'Nữ' ? 'Nữ' : 'Nam';
+        if (result.formattedIssueDate.isNotEmpty) {
+          _cccdIssueDateController.text = result.formattedIssueDate;
+        }
+        if (addressResult.province != null) {
+          _provinceController.text = addressResult.province!.name;
+          if (addressResult.ward != null) {
+            _wardController.text = addressResult.ward!.name;
+          } else {
+            _wardController.clear();
+          }
+        }
+      });
+
+      ScaffoldMessenger.of(context).clearSnackBars();
+      String message = 'Đã nhập thông tin ${result.isBhyt ? "BHYT" : "CCCD"} của ${result.fullName}.';
+      Color bgColor = const Color(0xFF16A34A);
+
+      if (addressResult.isExactMatch && addressResult.province != null && addressResult.ward != null) {
+        message += '\nĐịa chỉ: ${addressResult.ward!.name}, ${addressResult.province!.name}';
+      } else if (addressResult.province != null) {
+        message += '\nĐã chọn: ${addressResult.province!.name}. Vui lòng chạm chọn Phường/Xã.';
+        bgColor = const Color(0xFFD97706);
+      }
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(message, style: const TextStyle(fontWeight: FontWeight.w600)),
+          backgroundColor: bgColor,
+          duration: const Duration(seconds: 4),
+        ),
+      );
+    }
+  }
+
   Future<void> _saveProfileLocally() async {
     if (!_formKey.currentState!.validate()) {
       return;
@@ -207,6 +287,7 @@ class _PersonalProfileViewState extends State<PersonalProfileView> {
       gender: _gender,
       phoneNumber: _phoneController.text.trim(),
       identifier: _identifierController.text.trim(),
+      cccdIssueDate: _cccdIssueDateController.text.trim(),
       province: _provinceController.text.trim(),
       ward: _wardController.text.trim(),
     );
@@ -293,6 +374,23 @@ class _PersonalProfileViewState extends State<PersonalProfileView> {
           ],
         );
       },
+    );
+  }
+
+  Widget _buildRequiredLabel(String text) {
+    return Text.rich(
+      TextSpan(
+        children: [
+          TextSpan(text: text),
+          const TextSpan(
+            text: ' *',
+            style: TextStyle(
+              color: Color(0xFFEF4444),
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -399,14 +497,29 @@ class _PersonalProfileViewState extends State<PersonalProfileView> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Text(
-                        'KÊ KHAI THÔNG TIN CÁ NHÂN',
-                        style: TextStyle(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w800,
-                          color: AppColors.primaryDark,
-                          letterSpacing: 0.5,
-                        ),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          const Text(
+                            'KÊ KHAI THÔNG TIN CÁ NHÂN',
+                            style: TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w800,
+                              color: AppColors.primaryDark,
+                              letterSpacing: 0.5,
+                            ),
+                          ),
+                          TextButton.icon(
+                            onPressed: _startCccdScanning,
+                            icon: const Icon(Icons.qr_code_scanner_rounded, size: 14, color: Color(0xFF0D6EFD)),
+                            label: const Text('Quét CCCD / BHYT', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Color(0xFF0D6EFD))),
+                            style: TextButton.styleFrom(
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                              minimumSize: Size.zero,
+                              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                            ),
+                          ),
+                        ],
                       ),
                       const SizedBox(height: 14),
 
@@ -414,7 +527,7 @@ class _PersonalProfileViewState extends State<PersonalProfileView> {
                       TextFormField(
                         controller: _fullNameController,
                         decoration: InputDecoration(
-                          labelText: 'Họ và tên *',
+                          label: _buildRequiredLabel('Họ và tên'),
                           prefixIcon: const Icon(Icons.person_outline_rounded),
                           border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
                         ),
@@ -422,74 +535,90 @@ class _PersonalProfileViewState extends State<PersonalProfileView> {
                       ),
                       const SizedBox(height: 14),
 
-                      // Ngày sinh (DD/MM/YYYY + DatePicker) & Giới tính Row (Luôn chia đôi 2 cột)
-                      Row(
-                        children: [
-                          Expanded(
-                            flex: 5,
-                            child: TextFormField(
-                              controller: _dobController,
-                              keyboardType: TextInputType.datetime,
-                              decoration: InputDecoration(
-                                labelText: 'Ngày sinh *',
-                                hintText: 'DD/MM/YYYY',
-                                prefixIcon: const Icon(Icons.cake_outlined),
-                                suffixIcon: IconButton(
-                                  icon: const Icon(Icons.calendar_today_rounded, size: 18),
-                                  onPressed: _selectDateOfBirth,
+                      // Ngày sinh & Giới tính (Responsive: Chia đôi trên màn thường / Xếp dọc trên máy nhỏ < 380px)
+                      LayoutBuilder(
+                        builder: (context, constraints) {
+                          final isCompact = constraints.maxWidth < 380;
+                          final dobWidget = TextFormField(
+                            controller: _dobController,
+                            keyboardType: TextInputType.datetime,
+                            decoration: InputDecoration(
+                              label: _buildRequiredLabel('Ngày sinh'),
+                              hintText: 'DD/MM/YYYY',
+                              prefixIcon: const Icon(Icons.cake_outlined),
+                              suffixIcon: IconButton(
+                                icon: const Icon(Icons.calendar_today_rounded, size: 18),
+                                onPressed: _selectDateOfBirth,
+                              ),
+                              border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                            ),
+                            validator: (v) => Validators.validateFullDate(v, isRequired: true, fieldName: 'Ngày sinh'),
+                          );
+
+                          final genderWidget = Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                            decoration: BoxDecoration(
+                              border: Border.all(color: Colors.grey.shade400),
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                _buildRequiredLabel('Giới tính'),
+                                const SizedBox(height: 4),
+                                Row(
+                                  mainAxisAlignment: MainAxisAlignment.spaceAround,
+                                  children: [
+                                    Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Radio<String>(
+                                          value: 'Nam',
+                                          groupValue: _gender,
+                                          onChanged: (val) => setState(() => _gender = val!),
+                                          visualDensity: VisualDensity.compact,
+                                        ),
+                                        const Text('Nam', style: TextStyle(fontSize: 13)),
+                                      ],
+                                    ),
+                                    Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Radio<String>(
+                                          value: 'Nữ',
+                                          groupValue: _gender,
+                                          onChanged: (val) => setState(() => _gender = val!),
+                                          visualDensity: VisualDensity.compact,
+                                        ),
+                                        const Text('Nữ', style: TextStyle(fontSize: 13)),
+                                      ],
+                                    ),
+                                  ],
                                 ),
-                                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                              ),
-                              validator: (v) => Validators.validateFullDate(v, isRequired: true, fieldName: 'Ngày sinh'),
+                              ],
                             ),
-                          ),
-                          const SizedBox(width: 10),
-                          Expanded(
-                            flex: 4,
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
-                              decoration: BoxDecoration(
-                                border: Border.all(color: Colors.grey.shade400),
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  const Text('Giới tính *', style: TextStyle(fontSize: 11, color: Colors.grey)),
-                                  Row(
-                                    mainAxisAlignment: MainAxisAlignment.spaceAround,
-                                    children: [
-                                      Row(
-                                        mainAxisSize: MainAxisSize.min,
-                                        children: [
-                                          Radio<String>(
-                                            value: 'Nam',
-                                            groupValue: _gender,
-                                            onChanged: (val) => setState(() => _gender = val!),
-                                            visualDensity: VisualDensity.compact,
-                                          ),
-                                          const Text('Nam', style: TextStyle(fontSize: 12)),
-                                        ],
-                                      ),
-                                      Row(
-                                        mainAxisSize: MainAxisSize.min,
-                                        children: [
-                                          Radio<String>(
-                                            value: 'Nữ',
-                                            groupValue: _gender,
-                                            onChanged: (val) => setState(() => _gender = val!),
-                                            visualDensity: VisualDensity.compact,
-                                          ),
-                                          const Text('Nữ', style: TextStyle(fontSize: 12)),
-                                        ],
-                                      ),
-                                    ],
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                        ],
+                          );
+
+                          if (isCompact) {
+                            return Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                dobWidget,
+                                const SizedBox(height: 14),
+                                genderWidget,
+                              ],
+                            );
+                          } else {
+                            return Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Expanded(flex: 5, child: dobWidget),
+                                const SizedBox(width: 10),
+                                Expanded(flex: 4, child: genderWidget),
+                              ],
+                            );
+                          }
+                        },
                       ),
                       const SizedBox(height: 14),
 
@@ -499,7 +628,7 @@ class _PersonalProfileViewState extends State<PersonalProfileView> {
                         readOnly: true,
                         onTap: _selectProvince,
                         decoration: InputDecoration(
-                          labelText: 'Tỉnh / Thành phố *',
+                          label: _buildRequiredLabel('Tỉnh / Thành phố'),
                           hintText: 'Chọn Tỉnh / Thành phố',
                           prefixIcon: const Icon(Icons.location_city_rounded),
                           suffixIcon: const Icon(Icons.arrow_drop_down),
@@ -515,7 +644,7 @@ class _PersonalProfileViewState extends State<PersonalProfileView> {
                         readOnly: true,
                         onTap: _selectWard,
                         decoration: InputDecoration(
-                          labelText: 'Phường / Xã *',
+                          label: _buildRequiredLabel('Phường / Xã'),
                           hintText: 'Chọn Phường / Xã',
                           prefixIcon: const Icon(Icons.map_rounded),
                           suffixIcon: const Icon(Icons.arrow_drop_down),
@@ -529,12 +658,30 @@ class _PersonalProfileViewState extends State<PersonalProfileView> {
                       TextFormField(
                         controller: _identifierController,
                         decoration: InputDecoration(
-                          labelText: 'Số CCCD *',
+                          label: _buildRequiredLabel('Số CCCD'),
                           hintText: 'Nhập 12 số CCCD',
                           prefixIcon: const Icon(Icons.badge_outlined),
                           border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
                         ),
                         validator: (v) => Validators.validateCccdOrTempCode(v, isOptional: false),
+                      ),
+                      const SizedBox(height: 14),
+
+                      // Ngày cấp CCCD (Ô riêng dài, Tùy chọn)
+                      TextFormField(
+                        controller: _cccdIssueDateController,
+                        keyboardType: TextInputType.datetime,
+                        decoration: InputDecoration(
+                          labelText: 'Ngày cấp CCCD',
+                          hintText: 'DD/MM/YYYY',
+                          prefixIcon: const Icon(Icons.event_available_outlined),
+                          suffixIcon: IconButton(
+                            icon: const Icon(Icons.calendar_today_rounded, size: 18),
+                            onPressed: _selectCccdIssueDate,
+                          ),
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                        ),
+                        validator: (v) => Validators.validateFullDate(v, isRequired: false, fieldName: 'Ngày cấp CCCD'),
                       ),
                       const SizedBox(height: 14),
 

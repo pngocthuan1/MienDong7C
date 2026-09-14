@@ -16,6 +16,7 @@ import 'package:benhvien7c/core/theme/AppTheme.dart';
 import 'package:benhvien7c/features/auth/data/datasources/AuthRemoteDataSource.dart';
 import 'package:benhvien7c/features/auth/data/repositories/AuthRepositoryImpl.dart';
 import 'package:benhvien7c/features/auth/presentation/providers/AuthProviders.dart';
+import 'package:benhvien7c/features/auth/presentation/views/SplashView.dart';
 import 'package:benhvien7c/features/auth/presentation/views/LoginView.dart';
 import 'package:benhvien7c/features/auth/presentation/views/RegisterView.dart';
 import 'package:benhvien7c/features/auth/presentation/views/ForgotPasswordView.dart';
@@ -181,7 +182,7 @@ void main() async {
     debugPrint('Lỗi phục hồi session: $e');
   }
 
-  final String initialRoute = appSessionStore.currentUser != null ? RouteNames.home : RouteNames.login;
+  final String initialRoute = RouteNames.splash;
 
   runApp(
     ProviderScope(
@@ -218,6 +219,7 @@ class MyApp extends StatelessWidget {
       locale: const Locale('vi', 'VN'), // Đặt mặc định tiếng Việt cho toàn hệ thống
       initialRoute: initialRoute,
       routes: {
+        RouteNames.splash: (context) => const SplashView(),
         RouteNames.login: (context) => const LoginView(),
         RouteNames.home: (context) => const HomeView(),
         RouteNames.forgotPassword: (context) => const ForgotPasswordView(),

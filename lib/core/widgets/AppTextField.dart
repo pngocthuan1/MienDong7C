@@ -15,6 +15,7 @@ class AppTextField extends StatelessWidget {
     this.textInputAction,
     this.onChanged,
     this.readOnly = false,
+    this.readOnlyMessage,
     this.autovalidateMode,
   });
 
@@ -29,6 +30,7 @@ class AppTextField extends StatelessWidget {
   final TextInputAction? textInputAction;
   final ValueChanged<String>? onChanged;
   final bool readOnly;
+  final String? readOnlyMessage;
   final AutovalidateMode? autovalidateMode;
 
   Widget _buildLabelWidget(String text) {
@@ -68,14 +70,17 @@ class AppTextField extends StatelessWidget {
       readOnly: readOnly,
       onTap: () {
         if (readOnly) {
-          ScaffoldMessenger.of(context).clearSnackBars();
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Không thể thay đổi hoặc xóa thông tin định danh của hồ sơ đã lưu.'),
-              backgroundColor: Colors.amber,
-              duration: Duration(seconds: 2),
-            ),
-          );
+          final message = readOnlyMessage ?? 'Không thể thay đổi hoặc xóa thông tin định danh của hồ sơ đã lưu.';
+          if (message.isNotEmpty) {
+            ScaffoldMessenger.of(context).clearSnackBars();
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(message),
+                backgroundColor: const Color(0xFFD97706),
+                duration: const Duration(seconds: 2),
+              ),
+            );
+          }
         }
       },
       decoration: InputDecoration(

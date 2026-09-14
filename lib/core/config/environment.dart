@@ -138,5 +138,5 @@ class Environment {
 
   // Đường dẫn Điều khoản dịch vụ & Chính sách bảo mật (Có thể gán link tùy chỉnh tại đây)
   static String termsOfServiceUrl = 'https://quandanymiendong.vn/dieu-khoan-su-dung';
-  static String privacyPolicyUrl = 'https://quandanymiendong.vn/chinh-sach-bao-mat';
+  static String privacyPolicyUrl = 'https://www.quandanymiendong.vn/chinh-sach-bao-mat/';
 }

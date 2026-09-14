@@ -87,6 +87,7 @@ flutter:
   assets:
     - assets/images/logo.png
     - lib/address/vn_address_tree.json
+    - lib/address/final_address_data.json
 
   # An image asset can refer to one or more resolution-specific "variants", see
   # https://flutter.dev/to/resolution-aware-images
