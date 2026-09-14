@@ -81,11 +81,13 @@ class ParsedAddressResult {
   final ProvinceModel? province;
   final WardModel? ward;
   final bool isExactMatch;
+  final bool isLegacyAddress;
 
   const ParsedAddressResult({
     this.province,
     this.ward,
     this.isExactMatch = false,
+    this.isLegacyAddress = false,
   });
 }
 
@@ -93,10 +95,28 @@ class AddressHelper {
   AddressHelper._();
   static final AddressHelper instance = AddressHelper._();
 
+  static bool isIssuedBeforeJuly2024(String? issueDate) {
+    if (issueDate == null || issueDate.trim().isEmpty) return false;
+    final clean = issueDate.trim();
+    int? month, year;
+    if (clean.contains('/')) {
+      final parts = clean.split('/');
+      if (parts.length >= 3) {
+        month = int.tryParse(parts[1]);
+        year = int.tryParse(parts[2]);
+      }
+    } else if (clean.length == 8 && RegExp(r'^\d{8}$').hasMatch(clean)) {
+      month = int.tryParse(clean.substring(2, 4));
+      year = int.tryParse(clean.substring(4, 8));
+    }
+    if (year != null) {
+      if (year < 2024) return true;
+      if (year == 2024 && month != null && month < 7) return true;
+    }
+    return false;
+  }
+
   List<ProvinceModel> _provinces = [];
-  Map<String, dynamic> _oldProvinces = {};
-  Map<String, dynamic> _oldToNewProvince = {};
-  Map<String, dynamic> _oldToNewWardSimple = {};
   bool _isLoaded = false;
 
   bool get isLoaded => _isLoaded;
@@ -119,9 +139,6 @@ class AddressHelper {
         _provinces = rawTree
             .map((e) => ProvinceModel.fromJson(e as Map<String, dynamic>))
             .toList();
-        _oldProvinces = decoded['oldProvinces'] as Map<String, dynamic>? ?? {};
-        _oldToNewProvince = decoded['oldToNewProvince'] as Map<String, dynamic>? ?? {};
-        _oldToNewWardSimple = decoded['oldToNewWardSimple'] as Map<String, dynamic>? ?? {};
       } else if (decoded is List<dynamic>) {
         _provinces = decoded
             .map((e) => ProvinceModel.fromJson(e as Map<String, dynamic>))
@@ -165,9 +182,23 @@ class AddressHelper {
   }
 
   /// Bóc tách thông minh chuỗi địa chỉ trên CCCD thành Tỉnh và Phường/Xã
-  ParsedAddressResult parseCccdAddress(String rawAddress) {
+  /// Nếu là CCCD cũ hoặc địa chỉ thuộc đơn vị hành chính cũ chưa sáp nhập:
+  /// Để trống cả Tỉnh và Phường/Xã để người dùng tự chọn từ danh mục (isLegacyAddress = true, province = null, ward = null).
+  /// Nếu là Căn cước mới và khớp trực tiếp với cây hành chính mới:
+  /// Tự động điền Tỉnh và Phường/Xã (isLegacyAddress = false, province != null, ward != null).
+  ParsedAddressResult parseCccdAddress(String rawAddress, {String? issueDate}) {
     if (rawAddress.trim().isEmpty) {
       return const ParsedAddressResult();
+    }
+
+    // 1. Kiểm tra ngày cấp thẻ: Nếu thẻ cấp trước 01/07/2024 -> Thẻ CCCD cũ chưa sáp nhập
+    if (isIssuedBeforeJuly2024(issueDate)) {
+      return const ParsedAddressResult(
+        province: null,
+        ward: null,
+        isExactMatch: false,
+        isLegacyAddress: true,
+      );
     }
 
     final parts = rawAddress
@@ -180,148 +211,93 @@ class AddressHelper {
       return const ParsedAddressResult();
     }
 
-    final rawProv = parts.last;
-    final rawDist = parts.length >= 2 ? parts[parts.length - 2] : '';
-    final rawWard = parts.length >= 3 ? parts[parts.length - 3] : '';
+    // 2. Kiểm tra dấu hiệu đơn vị hành chính cấp quận/huyện cũ (3 cấp hành chính)
+    final legacyDistKeywords = [
+      'quan ', 'quận ', 'huyen ', 'huyện ', 'thi xa ', 'thị xã ', 'tx ', 'tx. ',
+      'tp thu duc', 'thanh pho thu duc', 'thành phố thủ đức',
+      'tp thuan an', 'thanh pho thuan an', 'thành phố thuận an',
+      'tp di an', 'thanh pho di an', 'thành phố dĩ an',
+      'tp bien hoa', 'thanh pho bien hoa', 'thành phố biên hòa',
+    ];
 
-    // 1. Nhận diện Tỉnh cũ (old province)
-    String? matchedOldProvKey;
+    bool hasLegacyDist = false;
+    for (final part in parts) {
+      final lower = part.toLowerCase();
+      for (final kw in legacyDistKeywords) {
+        if (lower.startsWith(kw) || lower.contains(kw)) {
+          hasLegacyDist = true;
+          break;
+        }
+      }
+      if (hasLegacyDist) break;
+    }
+
+    if (hasLegacyDist) {
+      return const ParsedAddressResult(
+        province: null,
+        ward: null,
+        isExactMatch: false,
+        isLegacyAddress: true,
+      );
+    }
+
+    // 3. Khớp trực tiếp với cây hành chính mới (34 tỉnh, 3.321 xã)
+    ProvinceModel? targetProvince;
+    final rawProv = parts.last;
     final provSlug = _cleanSlug(rawProv);
 
-    for (final entry in _oldProvinces.entries) {
-      final key = entry.key;
-      final val = entry.value as Map<String, dynamic>? ?? {};
-      final nameSlug = _cleanSlug(val['name'] as String? ?? '');
-      final shortSlug = _cleanSlug(val['nameShort'] as String? ?? '');
-
-      if (key == provSlug || nameSlug == provSlug || shortSlug == provSlug) {
-        matchedOldProvKey = key;
+    for (final p in _provinces) {
+      final pSlug = _cleanSlug(p.name);
+      final pFullSlug = _cleanSlug(p.fullName);
+      if (provSlug == pSlug ||
+          provSlug == pFullSlug ||
+          provSlug.contains(pSlug) ||
+          pSlug.contains(provSlug)) {
+        targetProvince = p;
         break;
       }
+    }
 
-      final keywords = val['keywords'] as List<dynamic>? ?? [];
-      for (final kw in keywords) {
-        final kwSlug = _cleanSlug(kw.toString());
-        if (kwSlug == provSlug || provSlug.contains(kwSlug) || kwSlug.contains(provSlug)) {
-          matchedOldProvKey = key;
+    // Nếu không khớp trực tiếp tỉnh mới
+    if (targetProvince == null) {
+      return const ParsedAddressResult(
+        province: null,
+        ward: null,
+        isExactMatch: false,
+        isLegacyAddress: true,
+      );
+    }
+
+    // Tìm xã chuẩn mới trong targetProvince.wards
+    WardModel? targetWard;
+    for (final part in parts) {
+      final cSlug = _cleanSlug(part);
+      final cleanC = _stripPrefix(cSlug, ['phuong', 'xa', 'thitran', 'tt']);
+      for (final w in targetProvince.wards) {
+        final wSlug = _cleanSlug(w.name);
+        final wClean = _stripPrefix(wSlug, ['phuong', 'xa', 'thitran', 'tt']);
+        if (wSlug == cSlug || wClean == cleanC || (cleanC.length >= 3 && wSlug == cleanC)) {
+          targetWard = w;
           break;
         }
       }
-      if (matchedOldProvKey != null) break;
+      if (targetWard != null) break;
     }
 
-    // Nếu đoạn cuối không khớp, quét tìm keyword tỉnh trong toàn bộ chuỗi
-    if (matchedOldProvKey == null) {
-      final fullSlug = _cleanSlug(rawAddress);
-      for (final entry in _oldProvinces.entries) {
-        final key = entry.key;
-        final val = entry.value as Map<String, dynamic>? ?? {};
-        final keywords = val['keywords'] as List<dynamic>? ?? [];
-        for (final kw in keywords) {
-          final kwSlug = _cleanSlug(kw.toString());
-          if (kwSlug.length >= 4 && fullSlug.contains(kwSlug)) {
-            matchedOldProvKey = key;
-            break;
-          }
-        }
-        if (matchedOldProvKey != null) break;
-      }
-    }
-
-    // Xác định ProvinceModel chuẩn mới
-    ProvinceModel? targetProvince;
-    if (matchedOldProvKey != null) {
-      final newProvNorm = _oldToNewProvince[matchedOldProvKey] as String? ?? '';
-      for (final p in _provinces) {
-        if (_cleanSlug(p.name) == newProvNorm ||
-            _cleanSlug(p.slug) == newProvNorm ||
-            _cleanSlug(p.fullName).contains(newProvNorm) ||
-            newProvNorm.contains(_cleanSlug(p.name))) {
-          targetProvince = p;
-          break;
-        }
-      }
-    }
-
-    // 2. Nhận diện Phường/Xã bằng compound key trong oldToNewWardSimple
-    Map<String, dynamic>? matchedWardInfo;
-    if (matchedOldProvKey != null && rawDist.isNotEmpty && rawWard.isNotEmpty) {
-      final distSlug = _cleanSlug(rawDist);
-      final wardSlug = _cleanSlug(rawWard);
-
-      final cleanDist = _stripPrefix(distSlug, ['quan', 'huyen', 'thanhpho', 'thixa', 'tx', 'tp']);
-      final cleanWard = _stripPrefix(wardSlug, ['phuong', 'xa', 'thitran', 'tt']);
-
-      final candidates = <String>[
-        '${matchedOldProvKey}_${distSlug}_$wardSlug',
-      ];
-
-      for (final pd in ['quan', 'huyen', 'thanhpho', 'thixa', '']) {
-        for (final pw in ['phuong', 'xa', 'thitran', '']) {
-          candidates.add('${matchedOldProvKey}_$pd${cleanDist}_$pw$cleanWard');
-        }
-      }
-
-      for (final cand in candidates) {
-        if (_oldToNewWardSimple.containsKey(cand)) {
-          matchedWardInfo = _oldToNewWardSimple[cand] as Map<String, dynamic>?;
-          break;
-        }
-      }
-    }
-
-    // 3. Tìm WardModel trong targetProvince
-    WardModel? matchedWard;
-    if (matchedWardInfo != null) {
-      final targetSlug = matchedWardInfo['wardSlug'] as String? ?? '';
-      final targetFull = matchedWardInfo['wardFullName'] as String? ?? '';
-      final targetWardNorm = matchedWardInfo['wardNorm'] as String? ?? '';
-      final targetProvNorm = matchedWardInfo['provinceNorm'] as String? ?? '';
-
-      if (targetProvince == null && targetProvNorm.isNotEmpty) {
-        for (final p in _provinces) {
-          if (_cleanSlug(p.name) == targetProvNorm || _cleanSlug(p.slug) == targetProvNorm) {
-            targetProvince = p;
-            break;
-          }
-        }
-      }
-
-      if (targetProvince != null) {
-        for (final w in targetProvince.wards) {
-          if (w.slug == targetSlug ||
-              w.fullName == targetFull ||
-              _cleanSlug(w.name) == targetWardNorm) {
-            matchedWard = w;
-            break;
-          }
-        }
-      }
-    }
-
-    // 4. Fallback: Nếu compound key chưa ra, tìm kiếm đối chiếu trong targetProvince.wards
-    if (targetProvince != null && matchedWard == null) {
-      final candidateParts = [rawWard, rawDist];
-      for (final cand in candidateParts) {
-        if (cand.isEmpty) continue;
-        final cSlug = _cleanSlug(cand);
-        final cleanC = _stripPrefix(cSlug, ['phuong', 'xa', 'thitran', 'tt', 'quan', 'huyen']);
-        for (final w in targetProvince.wards) {
-          final wSlug = _cleanSlug(w.name);
-          final wClean = _stripPrefix(wSlug, ['phuong', 'xa', 'thitran', 'tt']);
-          if (wSlug == cSlug || wClean == cleanC || (cleanC.length >= 3 && wSlug.contains(cleanC))) {
-            matchedWard = w;
-            break;
-          }
-        }
-        if (matchedWard != null) break;
-      }
+    if (targetWard == null) {
+      return const ParsedAddressResult(
+        province: null,
+        ward: null,
+        isExactMatch: false,
+        isLegacyAddress: true,
+      );
     }
 
     return ParsedAddressResult(
       province: targetProvince,
-      ward: matchedWard,
-      isExactMatch: targetProvince != null && matchedWard != null,
+      ward: targetWard,
+      isExactMatch: true,
+      isLegacyAddress: false,
     );
   }
 }

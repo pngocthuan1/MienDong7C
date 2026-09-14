@@ -356,7 +356,10 @@ class PatientProfileCreateViewModel extends BasePortalViewModel {
 
   // Pre-fill fields from scanned CCCD QR code
   ParsedAddressResult fillFromCccd(CccdData data) {
-    final parsedAddress = AddressHelper.instance.parseCccdAddress(data.address);
+    final parsedAddress = AddressHelper.instance.parseCccdAddress(
+      data.address,
+      issueDate: data.issueDate,
+    );
 
     if (registerForSomeoneElse) {
       otherFullNameController.text = data.fullName;
@@ -372,6 +375,11 @@ class PatientProfileCreateViewModel extends BasePortalViewModel {
         if (parsedAddress.ward != null) {
           selectWard(parsedAddress.ward!.name);
         }
+      } else {
+        // Địa chỉ cũ chưa sáp nhập -> Để trống cả hai trường Tỉnh và Phường/Xã để người dùng tự chọn
+        provinceController.clear();
+        wardController.clear();
+        selectedProvinceCode = null;
       }
       
       updateOtherFullNameError(data.fullName);
@@ -390,6 +398,11 @@ class PatientProfileCreateViewModel extends BasePortalViewModel {
         if (parsedAddress.ward != null) {
           selectWard(parsedAddress.ward!.name);
         }
+      } else {
+        // Địa chỉ cũ chưa sáp nhập -> Để trống cả hai trường Tỉnh và Phường/Xã để người dùng tự chọn
+        provinceController.clear();
+        wardController.clear();
+        selectedProvinceCode = null;
       }
       
       updateFullNameError(data.fullName);

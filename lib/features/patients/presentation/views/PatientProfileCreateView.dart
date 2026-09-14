@@ -218,9 +218,9 @@ class _PatientProfileCreateViewState extends State<PatientProfileCreateView> {
 
       if (addressResult.isExactMatch && addressResult.province != null && addressResult.ward != null) {
         message += '\nĐịa chỉ: ${addressResult.ward!.name}, ${addressResult.province!.name}';
-      } else if (addressResult.province != null) {
-        message += '\nĐã chọn: ${addressResult.province!.name}. Vui lòng chạm chọn Phường/Xã.';
-        bgColor = const Color(0xFFD97706);
+      } else {
+        message += '\nDo địa chỉ trên thẻ thuộc đơn vị hành chính cũ, vui lòng chọn Tỉnh/TP và Phường/Xã mới bên dưới.';
+        bgColor = const Color(0xFF0D6EFD);
       }
 
       ScaffoldMessenger.of(context).showSnackBar(

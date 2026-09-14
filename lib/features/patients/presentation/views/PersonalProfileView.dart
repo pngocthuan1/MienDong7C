@@ -223,7 +223,10 @@ class _PersonalProfileViewState extends State<PersonalProfileView> {
     if (!mounted) return;
 
     if (result is CccdData) {
-      final addressResult = AddressHelper.instance.parseCccdAddress(result.address);
+      final addressResult = AddressHelper.instance.parseCccdAddress(
+        result.address,
+        issueDate: result.issueDate,
+      );
 
       setState(() {
         _fullNameController.text = result.fullName;
@@ -241,6 +244,10 @@ class _PersonalProfileViewState extends State<PersonalProfileView> {
           } else {
             _wardController.clear();
           }
+        } else {
+          // Địa chỉ cũ chưa sáp nhập -> Để trống cả hai trường để người dùng tự chọn
+          _provinceController.clear();
+          _wardController.clear();
         }
       });
 
@@ -250,9 +257,9 @@ class _PersonalProfileViewState extends State<PersonalProfileView> {
 
       if (addressResult.isExactMatch && addressResult.province != null && addressResult.ward != null) {
         message += '\nĐịa chỉ: ${addressResult.ward!.name}, ${addressResult.province!.name}';
-      } else if (addressResult.province != null) {
-        message += '\nĐã chọn: ${addressResult.province!.name}. Vui lòng chạm chọn Phường/Xã.';
-        bgColor = const Color(0xFFD97706);
+      } else {
+        message += '\nDo địa chỉ trên thẻ thuộc đơn vị hành chính cũ, vui lòng chọn Tỉnh/TP và Phường/Xã mới bên dưới.';
+        bgColor = const Color(0xFF0D6EFD);
       }
 
       ScaffoldMessenger.of(context).showSnackBar(

@@ -15,10 +15,51 @@ void main() {
       expect(AddressHelper.instance.provinces.length, greaterThanOrEqualTo(34));
     });
 
-    test('Parse CCCD Address: Hồ Chí Minh - Phường Bến Nghé, Quận 1', () {
+    test('Legacy CCCD Address (Old District & Ward) returns null for both province & ward', () {
+      // Địa chỉ cũ có Quận 1 và Phường Bến Nghé (trước sáp nhập): để trống cả Tỉnh và Xã
       const raw = 'Số 123 đường Lê Lợi, Phường Bến Nghé, Quận 1, Thành phố Hồ Chí Minh';
-      final result = AddressHelper.instance.parseCccdAddress(raw);
+      final result = AddressHelper.instance.parseCccdAddress(raw, issueDate: '25122021');
 
+      expect(result.isLegacyAddress, isTrue);
+      expect(result.province, isNull);
+      expect(result.ward, isNull);
+      expect(result.isExactMatch, isFalse);
+    });
+
+    test('Legacy CCCD Address (TP Thủ Đức) returns null for both province & ward', () {
+      const raw = 'Khu phố 3, Phường Linh Trung, Thành phố Thủ Đức, Thành phố Hồ Chí Minh';
+      final result = AddressHelper.instance.parseCccdAddress(raw, issueDate: '15012022');
+
+      expect(result.isLegacyAddress, isTrue);
+      expect(result.province, isNull);
+      expect(result.ward, isNull);
+      expect(result.isExactMatch, isFalse);
+    });
+
+    test('Legacy CCCD Address (Đồng Nai Long Thành) returns null for both province & ward', () {
+      const raw = 'Ấp 2, Xã An Phước, Huyện Long Thành, Tỉnh Đồng Nai';
+      final result = AddressHelper.instance.parseCccdAddress(raw, issueDate: '15012022');
+
+      expect(result.isLegacyAddress, isTrue);
+      expect(result.province, isNull);
+      expect(result.ward, isNull);
+    });
+
+    test('Legacy CCCD Address (Bình Dương Thuận An) returns null for both province & ward', () {
+      const raw = 'Khu phố 2, Phường An Phú, Thành phố Thuận An, Tỉnh Bình Dương';
+      final result = AddressHelper.instance.parseCccdAddress(raw, issueDate: '20102021');
+
+      expect(result.isLegacyAddress, isTrue);
+      expect(result.province, isNull);
+      expect(result.ward, isNull);
+    });
+
+    test('New Can Cuoc Address after reform: Hồ Chí Minh - Phường Sài Gòn is auto-filled', () {
+      // Địa chỉ mới chuẩn theo cây hành chính 2025: tự động điền Tỉnh và Xã
+      const raw = 'Số 10 Lê Lợi, Phường Sài Gòn, Thành phố Hồ Chí Minh';
+      final result = AddressHelper.instance.parseCccdAddress(raw, issueDate: '10072024');
+
+      expect(result.isLegacyAddress, isFalse);
       expect(result.province, isNotNull);
       expect(result.province!.name, 'Hồ Chí Minh');
       expect(result.ward, isNotNull);
@@ -26,43 +67,11 @@ void main() {
       expect(result.isExactMatch, isTrue);
     });
 
-    test('Parse CCCD Address: Hồ Chí Minh - Phường Linh Trung, TP Thủ Đức', () {
-      const raw = 'Khu phố 3, Phường Linh Trung, Thành phố Thủ Đức, Thành phố Hồ Chí Minh';
-      final result = AddressHelper.instance.parseCccdAddress(raw);
+    test('New Can Cuoc Address after reform: Hà Nội - Phường Cầu Giấy is auto-filled', () {
+      const raw = 'Số 10, Ngõ 50, Phường Cầu Giấy, Thành phố Hà Nội';
+      final result = AddressHelper.instance.parseCccdAddress(raw, issueDate: '15012025');
 
-      expect(result.province, isNotNull);
-      expect(result.province!.name, 'Hồ Chí Minh');
-      expect(result.ward, isNotNull);
-      expect(result.ward!.name, 'Linh Xuân');
-      expect(result.isExactMatch, isTrue);
-    });
-
-    test('Parse CCCD Address: Đồng Nai - Xã An Phước, Huyện Long Thành', () {
-      const raw = 'Ấp 2, Xã An Phước, Huyện Long Thành, Tỉnh Đồng Nai';
-      final result = AddressHelper.instance.parseCccdAddress(raw);
-
-      expect(result.province, isNotNull);
-      expect(result.province!.name, 'Đồng Nai');
-      expect(result.ward, isNotNull);
-      expect(result.ward!.name, 'An Phước');
-      expect(result.isExactMatch, isTrue);
-    });
-
-    test('Parse CCCD Address: Bình Dương - Phường An Phú, TP Thuận An (mapped to HCM An Phú)', () {
-      const raw = 'Khu phố 2, Phường An Phú, Thành phố Thuận An, Tỉnh Bình Dương';
-      final result = AddressHelper.instance.parseCccdAddress(raw);
-
-      expect(result.province, isNotNull);
-      expect(result.province!.name, 'Hồ Chí Minh');
-      expect(result.ward, isNotNull);
-      expect(result.ward!.name, 'An Phú');
-      expect(result.isExactMatch, isTrue);
-    });
-
-    test('Parse CCCD Address: Hà Nội - Phường Dịch Vọng Hậu, Quận Cầu Giấy', () {
-      const raw = 'Số 10, Ngõ 50, Phường Dịch Vọng Hậu, Quận Cầu Giấy, Hà Nội';
-      final result = AddressHelper.instance.parseCccdAddress(raw);
-
+      expect(result.isLegacyAddress, isFalse);
       expect(result.province, isNotNull);
       expect(result.province!.name, 'Hà Nội');
       expect(result.ward, isNotNull);
@@ -70,10 +79,11 @@ void main() {
       expect(result.isExactMatch, isTrue);
     });
 
-    test('Parse CCCD Address: Cần Thơ - Xã Mỹ Khánh sáp nhập vào Phường An Bình', () {
-      const raw = 'Xã Mỹ Khánh, Huyện Phong Điền, Thành phố Cần Thơ';
-      final result = AddressHelper.instance.parseCccdAddress(raw);
+    test('New Can Cuoc Address after reform: Cần Thơ - Phường An Bình is auto-filled', () {
+      const raw = 'Số 8, Phường An Bình, Thành phố Cần Thơ';
+      final result = AddressHelper.instance.parseCccdAddress(raw, issueDate: '02012026');
 
+      expect(result.isLegacyAddress, isFalse);
       expect(result.province, isNotNull);
       expect(result.province!.name, 'Cần Thơ');
       expect(result.ward, isNotNull);
@@ -177,8 +187,8 @@ void main() {
       expect(parsed2.isBhyt, isFalse);
     });
 
-    test('Parse New Can Cuoc (TT 16/2024 - 8 fields with 2025/2026 issue)', () {
-      const raw = '079090001234|NGUYỄN VĂN AN|Nam|15081990|Số 10 Lê Lợi, Phường Bến Nghé, Quận 1, TP Hồ Chí Minh|10072024|025812345||';
+    test('Parse New Can Cuoc with New Reform Address: auto-fills province & ward', () {
+      const raw = '079090001234|NGUYỄN VĂN AN|Nam|15081990|Số 10 Lê Lợi, Phường Sài Gòn, Thành phố Hồ Chí Minh|10072024|025812345||';
       final parsed = CccdParserHelper.parse(raw);
 
       expect(parsed, isNotNull);
@@ -187,19 +197,32 @@ void main() {
       expect(parsed.gender, 'Nam');
       expect(parsed.formattedBirthDate, '15/08/1990');
       expect(parsed.birthYear, '1990');
-      expect(parsed.address, 'Số 10 Lê Lợi, Phường Bến Nghé, Quận 1, TP Hồ Chí Minh');
+      expect(parsed.address, 'Số 10 Lê Lợi, Phường Sài Gòn, Thành phố Hồ Chí Minh');
       expect(parsed.formattedIssueDate, '10/07/2024');
       expect(parsed.oldIdNumber, '025812345');
       expect(parsed.isBhyt, isFalse);
 
-      // Verify address parsing works seamlessly on the extracted address
-      final addressResult = AddressHelper.instance.parseCccdAddress(parsed.address);
+      // Verify address parsing directly auto-fills new reform address
+      final addressResult = AddressHelper.instance.parseCccdAddress(parsed.address, issueDate: parsed.issueDate);
+      expect(addressResult.isLegacyAddress, isFalse);
       expect(addressResult.province?.name, 'Hồ Chí Minh');
       expect(addressResult.ward?.name, 'Sài Gòn');
     });
 
+    test('Parse Can Cuoc with Legacy Address leaves province & ward blank', () {
+      const raw = '079090001234|NGUYỄN VĂN AN|Nam|15081990|Số 10 Lê Lợi, Phường Bến Nghé, Quận 1, TP Hồ Chí Minh|10072024|025812345||';
+      final parsed = CccdParserHelper.parse(raw);
+
+      expect(parsed, isNotNull);
+      // Địa chỉ có Quận 1 cũ chưa sáp nhập -> để trống cả Tỉnh và Xã
+      final addressResult = AddressHelper.instance.parseCccdAddress(parsed!.address, issueDate: parsed.issueDate);
+      expect(addressResult.isLegacyAddress, isTrue);
+      expect(addressResult.province, isNull);
+      expect(addressResult.ward, isNull);
+    });
+
     test('Parse New Can Cuoc with DOB before Gender', () {
-      const raw = '079090001234|LÊ THỊ HOA|12032000|Nữ|Xã Mỹ Khánh, Huyện Phong Điền, Thành phố Cần Thơ|15082025||';
+      const raw = '079090001234|LÊ THỊ HOA|12032000|Nữ|Số 8, Phường An Bình, Thành phố Cần Thơ|15082025||';
       final parsed = CccdParserHelper.parse(raw);
 
       expect(parsed, isNotNull);
@@ -210,7 +233,8 @@ void main() {
       expect(parsed.formattedIssueDate, '15/08/2025');
       expect(parsed.isBhyt, isFalse);
 
-      final addressResult = AddressHelper.instance.parseCccdAddress(parsed.address);
+      final addressResult = AddressHelper.instance.parseCccdAddress(parsed.address, issueDate: parsed.issueDate);
+      expect(addressResult.isLegacyAddress, isFalse);
       expect(addressResult.province?.name, 'Cần Thơ');
       expect(addressResult.ward?.name, 'An Bình');
     });
