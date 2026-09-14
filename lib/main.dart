@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -128,14 +129,27 @@ void main() async {
 
       final savedPhone = sharedPreferences.getString('saved_phone') ?? '';
       final cleanPhone = savedPhone.replaceAll(RegExp(r'\D'), '');
-      final savedName = cleanPhone.isNotEmpty ? sharedPreferences.getString('full_name_$cleanPhone') : sharedPreferences.getString('saved_full_name');
-      final savedRoleStr = sharedPreferences.getString('saved_role');
+      String? savedName = cleanPhone.isNotEmpty ? sharedPreferences.getString('full_name_$cleanPhone') : sharedPreferences.getString('saved_full_name');
 
+      if (savedPhone.isNotEmpty) {
+        final jsonStr = sharedPreferences.getString('saved_my_personal_profile_$savedPhone');
+        if (jsonStr != null && jsonStr.isNotEmpty) {
+          try {
+            final draftMap = jsonDecode(jsonStr) as Map<String, dynamic>;
+            final draftName = draftMap['fullName'] as String?;
+            if (draftName != null && draftName.trim().isNotEmpty) {
+              savedName = draftName.trim();
+            }
+          } catch (_) {}
+        }
+      }
+
+      final savedRoleStr = sharedPreferences.getString('saved_role');
       final role = (savedRoleStr == 'employee') ? UserRole.employee : UserRole.customer;
 
       final displayName = (savedName != null && savedName.trim().isNotEmpty)
           ? savedName.trim()
-          : (role == UserRole.employee ? 'Nhân viên y tế' : 'Khách hàng');
+          : (role == UserRole.employee ? 'Nhân viên y tế' : (savedPhone.isNotEmpty ? 'Tài khoản $savedPhone' : 'Khách hàng'));
 
       appSessionStore.setSession(
         AuthSessionEntity(

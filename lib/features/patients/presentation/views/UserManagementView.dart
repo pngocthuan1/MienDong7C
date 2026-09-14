@@ -106,6 +106,7 @@ class _UserManagementViewState extends State<UserManagementView> {
             },
             onAboutTap: () {
               AppNavigator.safePop(context);
+              AppNavigator.pushNamed(context, RouteNames.aboutApp);
             },
             onLogoutTap: () async {
               await AppLocator.authRepository.logout();
@@ -311,7 +312,7 @@ class _TopSummaryPanel extends StatelessWidget {
               ),
               const SizedBox(height: 6),
               const Text(
-                'Màn hình sử dụng danh sách cuộn ảo, phù hợp khi hiển thị 1000 hồ sơ trên cùng một trang.',
+                'Theo dõi và quản lý dữ liệu bệnh nhân cũng như lịch sử khám bệnh.',
                 style: TextStyle(
                   color: AppColors.textSecondary,
                   height: 1.45,
@@ -436,7 +437,7 @@ class _HeaderLazyText extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return const Text(
-      'Danh sách 1000 dòng cuộn ảo',
+      'Danh sách hồ sơ bệnh nhân',
       style: TextStyle(color: AppColors.primary, fontWeight: FontWeight.w700),
     );
   }

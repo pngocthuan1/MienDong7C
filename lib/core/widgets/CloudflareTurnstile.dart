@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 import 'package:benhvien7c/core/config/Environment.dart';
@@ -44,13 +45,22 @@ class _CloudflareTurnstileState extends State<CloudflareTurnstile> {
 
   void _initTurnstile() {
     if (widget.simulateBot) {
-      setState(() {
-        _isLoading = false;
-        _isSuccess = false;
-        _isWebviewFailed = false;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          setState(() {
+            _isLoading = false;
+            _isSuccess = false;
+            _isWebviewFailed = false;
+          });
+          widget.onVerified('cf-token-bot-failed');
+          widget.onExpired?.call();
+        }
       });
-      widget.onVerified('cf-token-bot-failed');
-      widget.onExpired?.call();
+      return;
+    }
+
+    if (kIsWeb) {
+      _fallbackMock();
       return;
     }
 
@@ -166,14 +176,16 @@ class _CloudflareTurnstileState extends State<CloudflareTurnstile> {
   }
 
   void _fallbackMock() {
-    if (mounted) {
-      setState(() {
-        _isLoading = false;
-        _isSuccess = true;
-        _isWebviewFailed = true;
-      });
-      widget.onVerified('cf-token-mock-${DateTime.now().millisecondsSinceEpoch}');
-    }
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+          _isSuccess = true;
+          _isWebviewFailed = true;
+        });
+        widget.onVerified('cf-token-mock-${DateTime.now().millisecondsSinceEpoch}');
+      }
+    });
   }
 
   @override

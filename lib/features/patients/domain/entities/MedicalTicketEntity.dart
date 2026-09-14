@@ -22,6 +22,10 @@ class MedicalTicketEntity {
     this.selectedDate,
     this.selectedTime,
     this.dangKyGiup,
+    this.dateOfBirth,
+    this.province,
+    this.ward,
+    this.clinic,
     this.isDeleted = false,
     bool isPast = false,
   }) : _isPastExplicit = isPast;
@@ -48,6 +52,10 @@ class MedicalTicketEntity {
   final String? selectedDate;
   final String? selectedTime;
   final String? dangKyGiup;
+  final String? dateOfBirth;
+  final String? province;
+  final String? ward;
+  final String? clinic;
   final bool isDeleted;
   final bool _isPastExplicit;
 
@@ -109,6 +117,10 @@ class MedicalTicketEntity {
       'selectedDate': selectedDate,
       'selectedTime': selectedTime,
       'dangKyGiup': dangKyGiup,
+      'dateOfBirth': dateOfBirth,
+      'province': province,
+      'ward': ward,
+      'clinic': clinic,
       'isDeleted': isDeleted,
       'isPast': isPast,
     };
@@ -138,6 +150,10 @@ class MedicalTicketEntity {
       selectedDate: json['selectedDate'] as String?,
       selectedTime: json['selectedTime'] as String?,
       dangKyGiup: json['dangKyGiup'] as String?,
+      dateOfBirth: json['dateOfBirth'] as String?,
+      province: json['province'] as String?,
+      ward: json['ward'] as String?,
+      clinic: json['clinic'] as String?,
       isDeleted: json['isDeleted'] as bool? ?? false,
       isPast: json['isPast'] as bool? ?? false,
     );
@@ -166,6 +182,10 @@ class MedicalTicketEntity {
     String? selectedDate,
     String? selectedTime,
     String? dangKyGiup,
+    String? dateOfBirth,
+    String? province,
+    String? ward,
+    String? clinic,
     bool? isDeleted,
     bool? isPast,
   }) {
@@ -192,6 +212,10 @@ class MedicalTicketEntity {
       selectedDate: selectedDate ?? this.selectedDate,
       selectedTime: selectedTime ?? this.selectedTime,
       dangKyGiup: dangKyGiup ?? this.dangKyGiup,
+      dateOfBirth: dateOfBirth ?? this.dateOfBirth,
+      province: province ?? this.province,
+      ward: ward ?? this.ward,
+      clinic: clinic ?? this.clinic,
       isDeleted: isDeleted ?? this.isDeleted,
       isPast: isPast ?? this.isPast,
     );

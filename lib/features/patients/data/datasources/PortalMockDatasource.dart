@@ -42,9 +42,15 @@ class PortalMockDatasource {
   static final Map<String, Set<String>> _downloadedKeysPerUser = {};
 
   static bool _cacheInitialized = false;
+  static String? _cachedForPhone;
 
   Future<void> _initCacheIfNeeded() async {
-    if (_cacheInitialized) return;
+    final currentPhone = AppSessionStore.instance.currentUser?.phoneNumber
+            .replaceAll(RegExp(r'\D'), '') ??
+        'default';
+
+    if (_cacheInitialized && _cachedForPhone == currentPhone) return;
+
     try {
       final prefs = await SharedPreferences.getInstance();
       for (final role in UserRole.values) {
@@ -61,20 +67,22 @@ class PortalMockDatasource {
         }
       }
 
-      final user = AppSessionStore.instance.currentUser;
-      final phone = user?.phoneNumber.replaceAll(RegExp(r'\D'), '') ?? 'default';
-      
-      final savedDeleted = prefs.getStringList('list_delete_$phone');
+      final savedDeleted = prefs.getStringList('list_delete_$currentPhone');
       if (savedDeleted != null) {
-        _deletedKeysPerUser[phone] = savedDeleted.toSet();
+        _deletedKeysPerUser[currentPhone] = savedDeleted.toSet();
+      } else {
+        _deletedKeysPerUser[currentPhone] = {};
       }
 
-      final savedDownloaded = prefs.getStringList('list_downloaded_$phone');
+      final savedDownloaded = prefs.getStringList('list_downloaded_$currentPhone');
       if (savedDownloaded != null) {
-        _downloadedKeysPerUser[phone] = savedDownloaded.toSet();
+        _downloadedKeysPerUser[currentPhone] = savedDownloaded.toSet();
+      } else {
+        _downloadedKeysPerUser[currentPhone] = {};
       }
 
       _cacheInitialized = true;
+      _cachedForPhone = currentPhone;
     } catch (_) {}
   }
 
@@ -393,12 +401,6 @@ class PortalMockDatasource {
         );
       } catch (_) {}
     }
-
-    final notifications = _notificationStore[role];
-    if (notifications != null) {
-      notifications.removeWhere((item) => item.id == notificationId);
-      await _saveToCache(role);
-    }
   }
 
 
@@ -424,10 +426,10 @@ class PortalMockDatasource {
     return _buildTicket(
       role: role,
       patientName: patientName,
-      birthYear: '1997',
-      gender: 'Nữ',
-      phoneNumber: '0902333444',
-      identifier: '22134096',
+      birthYear: '',
+      gender: '',
+      phoneNumber: '',
+      identifier: '',
     );
   }
 

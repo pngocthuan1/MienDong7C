@@ -19,7 +19,7 @@ class PortalDrawer extends StatelessWidget {
     this.onChangePasswordTap,
     this.onPersonalProfileTap,
     this.onDeleteAccountTap,
-    required this.onAboutTap,
+    this.onAboutTap,
     required this.onLogoutTap,
     super.key,
     this.onUserManagementTap,
@@ -37,7 +37,7 @@ class PortalDrawer extends StatelessWidget {
   final VoidCallback? onChangePasswordTap;
   final VoidCallback? onPersonalProfileTap;
   final VoidCallback? onDeleteAccountTap;
-  final VoidCallback onAboutTap;
+  final VoidCallback? onAboutTap;
   final VoidCallback onLogoutTap;
   final Function(NotificationFilter filter)? onFilterTap;
 
@@ -202,7 +202,10 @@ class PortalDrawer extends StatelessWidget {
                 _DrawerTile(
                   icon: Icons.info_rounded,
                   label: 'Thông tin phần mềm',
-                  onTap: onAboutTap,
+                  onTap: onAboutTap ?? () {
+                    AppNavigator.safePop(context);
+                    AppNavigator.pushNamed(context, RouteNames.aboutApp);
+                  },
                 ),
                 const Divider(height: 1),
                 _DrawerTile(

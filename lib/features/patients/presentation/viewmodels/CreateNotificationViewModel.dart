@@ -112,13 +112,11 @@ class CreateNotificationViewModel extends BasePortalViewModel {
     super.repository,
     super.sessionStore,
   ) {
-    // TODO: 'Lê Nguyễn Gia Hưng' đang được dùng làm tên người gửi MẶC ĐỊNH
-    // khi session.user.fullName rỗng. Nếu đây không phải giá trị test còn
-    // sót lại, cân nhắc đổi thành thông điệp trung tính hơn (ví dụ: tên
-    // phòng ban gửi, hoặc chặn gửi thông báo nếu chưa xác định được người
-    // gửi) — tránh hiển thị nhầm tên 1 cá nhân cụ thể trong thông báo thật
-    // gửi tới toàn bộ nhân viên.
-    senderName = session.user.fullName.isNotEmpty ? session.user.fullName : 'Lê Nguyễn Gia Hưng';
+    senderName = session.user.fullName.trim().isNotEmpty
+        ? session.user.fullName.trim()
+        : (session.user.phoneNumber.trim().isNotEmpty
+            ? 'Tài khoản ${session.user.phoneNumber.trim()}'
+            : 'Nhân viên hệ thống');
     senderDepartment = 'Hệ thống thông báo nội bộ';
 
     expandedGroupIds.add('group_cntt');

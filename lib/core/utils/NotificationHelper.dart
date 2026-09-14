@@ -1,5 +1,6 @@
 import 'package:benhvien7c/core/theme/AppColors.dart';
 import 'package:benhvien7c/core/widgets/AppNotificationToast.dart';
+import 'package:benhvien7c/core/services/FirebaseTokenService.dart';
 import 'package:flutter/material.dart';
 
 class NotificationHelper {
@@ -146,5 +147,5 @@ class NotificationHelper {
     );
   }
 
-  static String? get fcmToken => 'fcm_token_demo_mock_device_7c_123456789';
+  static String? get fcmToken => FirebaseTokenService.instance.fcmToken;
 }

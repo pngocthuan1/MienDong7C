@@ -175,7 +175,7 @@ class _AppointmentBookingViewState extends State<AppointmentBookingView> {
                     const SizedBox(width: 8),
                     Expanded(
                       child: Text(
-                        '${ticket.patientName.toUpperCase()} - ${ticket.birthYear}',
+                        '${ticket.patientName.toUpperCase()} - ${(ticket.dateOfBirth != null && ticket.dateOfBirth!.isNotEmpty) ? ticket.dateOfBirth! : ticket.birthYear}',
                         style: const TextStyle(
                           fontSize: 17,
                           fontWeight: FontWeight.bold,
@@ -409,7 +409,7 @@ class _AppointmentBookingViewState extends State<AppointmentBookingView> {
         return DefaultTabController(
           length: 4,
           child: AppResponsiveContainer(
-            maxWidth: 800.0,
+            maxWidth: double.infinity,
             drawer: PortalDrawer(
               session: session,
               summary: summary,
@@ -445,6 +445,7 @@ class _AppointmentBookingViewState extends State<AppointmentBookingView> {
               },
               onAboutTap: () {
                 AppNavigator.safePop(context);
+                AppNavigator.pushNamed(context, RouteNames.aboutApp);
               },
               onLogoutTap: () async {
                 await AppLocator.authRepository.logout();

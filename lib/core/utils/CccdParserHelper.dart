@@ -99,38 +99,19 @@ class CccdParserHelper {
           issueDate: parts.length > 8 ? parts[8].trim() : '',
           isBhyt: true,
         );
-      } 
-      
-      if(parts.length < 5) return null;
+      }
 
-      if(isBhyt) {
-        // Định dạng 2: BHYT giấy truyền thống (5+ trường)
-        final rawGender = parts[3].trim();
-        final genderText = (rawGender == '2' || rawGender == 'Nữ') ? 'Nữ' : 'Nam';
-        return CccdData(
-       cccdNumber: firstField,
-          oldIdNumber: '',
-          fullName: decodeHexIfNeeded(parts[1]),
-          birthDate: parts[2].trim(),
-          gender: genderText,
-          address: decodeHexIfNeeded(parts[4]),
-          issueDate: parts.length > 8 ? parts[8].trim() : '',
-          isBhyt: true,
-        );
-      }
-      else {
-        // Định dạng 3: Thẻ Căn cước công dân (CCCD) Việt Nam
-        return CccdData(
-          cccdNumber: firstField,
-          oldIdNumber: parts[1].trim(),
-          fullName: decodeHexIfNeeded(parts[2]),
-          birthDate: parts[3].trim(),
-          gender: parts[4].trim(),
-          address: decodeHexIfNeeded(parts[5]),
-          issueDate: parts.length > 6 ? parts[6].trim() : '',
-          isBhyt: false,
-        );
-      }
+      // Định dạng 3: Thẻ Căn cước công dân (CCCD) Việt Nam
+      return CccdData(
+        cccdNumber: firstField,
+        oldIdNumber: parts[1].trim(),
+        fullName: decodeHexIfNeeded(parts[2]),
+        birthDate: parts[3].trim(),
+        gender: parts[4].trim(),
+        address: decodeHexIfNeeded(parts[5]),
+        issueDate: parts.length > 6 ? parts[6].trim() : '',
+        isBhyt: false,
+      );
     } catch (_) {
       return null;
     }

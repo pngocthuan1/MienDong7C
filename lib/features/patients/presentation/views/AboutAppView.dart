@@ -48,6 +48,7 @@ class _AboutAppViewState extends State<AboutAppView> {
   @override
   Widget build(BuildContext context) {
     return AppResponsiveContainer(
+      maxWidth: double.infinity,
       appBar: AppBar(
         backgroundColor: const Color(0xFF3B82F6),
         foregroundColor: Colors.white,

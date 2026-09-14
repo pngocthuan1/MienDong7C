@@ -1,4 +1,5 @@
 
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:benhvien7c/core/config/environment.dart';
 import 'package:benhvien7c/core/network/ApiException.dart';
@@ -215,7 +216,6 @@ class LoginViewModel extends ChangeNotifier {
 
     final prefs = await SharedPreferences.getInstance();
     final cleanPhone = phoneVal.replaceAll(RegExp(r'\D'), '');
-    var savedName = prefs.getString('full_name_$cleanPhone') ?? prefs.getString('saved_full_name');
 
     final boundRoleKey = cleanPhone.isNotEmpty ? cleanPhone : phoneVal.trim().toLowerCase();
     final isRegisteredMobileCustomer = prefs.getString('account_role_$boundRoleKey') == 'customer';
@@ -297,7 +297,19 @@ class LoginViewModel extends ChangeNotifier {
         if (perAccountName != null && perAccountName.trim().isNotEmpty && perAccountName.trim() != phoneVal.trim()) {
           userFullName = perAccountName.trim();
         } else {
-          userFullName = phoneVal.trim().isNotEmpty ? 'Tài khoản ${phoneVal.trim()}' : 'Khách hàng';
+          final jsonStr = prefs.getString('saved_my_personal_profile_$phoneVal');
+          String? profileName;
+          if (jsonStr != null && jsonStr.isNotEmpty) {
+            try {
+              final draftMap = jsonDecode(jsonStr) as Map<String, dynamic>;
+              profileName = draftMap['fullName'] as String?;
+            } catch (_) {}
+          }
+          if (profileName != null && profileName.trim().isNotEmpty) {
+            userFullName = profileName.trim();
+          } else {
+            userFullName = phoneVal.trim().isNotEmpty ? 'Tài khoản ${phoneVal.trim()}' : 'Khách hàng';
+          }
         }
       }
 
@@ -307,7 +319,7 @@ class LoginViewModel extends ChangeNotifier {
 
     _message = null;
     await _secureStorage.saveTokensRecord(session.accessToken, session.refreshToken);
-    await _secureStorage.saveExpiresRefreshToken(session.refreshTokenExpiry.millisecondsSinceEpoch.toString());
+    await _secureStorage.saveExpiresRefreshToken((session.refreshTokenExpiry?.millisecondsSinceEpoch ?? 0).toString());
 
     final prefsObj = await SharedPreferences.getInstance();
     prefsObj.setString('saved_phone', phoneVal);

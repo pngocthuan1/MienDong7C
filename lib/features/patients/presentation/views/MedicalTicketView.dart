@@ -239,11 +239,27 @@ class _MedicalTicketViewState extends State<MedicalTicketView> {
 
                       // Patient Details List (: value format)
                       _DetailRow(label: 'Ngày khám', value: ticket.scheduleText),
+                      if (ticket.clinic != null && ticket.clinic!.isNotEmpty)
+                        _DetailRow(label: 'Phòng khám', value: ticket.clinic!)
+                      else if (ticket.department != null && ticket.department!.isNotEmpty)
+                        _DetailRow(label: 'Phòng khám', value: ticket.department!),
                       _DetailRow(label: 'Họ tên', value: ticket.patientName),
-                      _DetailRow(label: 'Năm sinh', value: ticket.birthYear),
+                      _DetailRow(
+                        label: 'Ngày sinh',
+                        value: (ticket.dateOfBirth != null && ticket.dateOfBirth!.isNotEmpty)
+                            ? ticket.dateOfBirth!
+                            : ticket.birthYear,
+                      ),
                       _DetailRow(label: 'Giới tính', value: ticket.gender),
-                      _DetailRow(label: 'Điện thoại', value: ticket.phoneNumber ?? ''),
-                      _DetailRow(label: 'Triệu chứng', value: ticket.symptom ?? ''),
+                      if (ticket.phoneNumber != null && ticket.phoneNumber!.isNotEmpty)
+                        _DetailRow(label: 'Điện thoại', value: ticket.phoneNumber!),
+                      if ((ticket.ward != null && ticket.ward!.isNotEmpty) || (ticket.province != null && ticket.province!.isNotEmpty))
+                        _DetailRow(
+                          label: 'Địa chỉ',
+                          value: [ticket.ward, ticket.province].where((s) => s != null && s.isNotEmpty).join(', '),
+                        ),
+                      if (ticket.symptom != null && ticket.symptom!.isNotEmpty)
+                        _DetailRow(label: 'Triệu chứng', value: ticket.symptom!),
 
                       const SizedBox(height: 14),
                       const Divider(color: Color(0xFFE2E8F0), thickness: 1),

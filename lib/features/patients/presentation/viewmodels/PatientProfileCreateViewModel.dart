@@ -7,6 +7,7 @@ import 'package:benhvien7c/core/commands/result.dart';
 import 'package:benhvien7c/core/session/AppSessionStore.dart';
 import 'package:benhvien7c/core/utils/Validators.dart';
 import 'package:benhvien7c/core/utils/CccdParserHelper.dart';
+import 'package:benhvien7c/core/utils/AddressHelper.dart';
 import 'package:benhvien7c/features/patients/domain/entities/MedicalTicketEntity.dart';
 import 'package:benhvien7c/features/patients/domain/entities/PatientProfileDraftEntity.dart';
 import 'package:benhvien7c/features/patients/domain/repositories/PortalRepository.dart';
@@ -22,6 +23,7 @@ class PatientProfileCreateViewModel extends BasePortalViewModel {
     birthYearController.text = '';
     continueCommand = Command0<MedicalTicketEntity>(_continueFlow);
     loadProfilesCommand = Command0<List<PatientProfileDraftEntity>>(_loadProfiles);
+    _initAddressData();
     loadProfilesCommand.execute();
   }
 
@@ -29,19 +31,31 @@ class PatientProfileCreateViewModel extends BasePortalViewModel {
   String? selectedProfileIdentifier;
 
   final identifierController = TextEditingController();
+  final cccdIssueDateController = TextEditingController();
+  final patientCodeController = TextEditingController();
   final fullNameController = TextEditingController();
+  final dobController = TextEditingController();
   final birthYearController = TextEditingController();
   final phoneController = TextEditingController();
   final symptomController = TextEditingController();
+  final provinceController = TextEditingController();
+  final wardController = TextEditingController();
+  final clinicController = TextEditingController();
 
   // "Register for someone else" single text field
   final dangKyGiupController = TextEditingController();
   final otherFullNameController = TextEditingController();
+  final otherDobController = TextEditingController();
   final otherBirthYearController = TextEditingController();
   final otherPhoneController = TextEditingController();
+  final otherCccdIssueDateController = TextEditingController();
+  final otherPatientCodeController = TextEditingController();
   String otherGender = 'Nam';
   String? selectedRelationship = 'Khác';
   final List<String> relationships = ['Con', 'Bố/Mẹ', 'Vợ/Chồng', 'Anh/Chị/Em', 'Khác'];
+
+  List<ProvinceModel> provinces = [];
+  String? selectedProvinceCode;
 
   String _gender = 'Nam';
   String get gender => _gender;
@@ -68,6 +82,36 @@ class PatientProfileCreateViewModel extends BasePortalViewModel {
   // Profiles list
   List<PatientProfileDraftEntity> savedProfiles = [];
   String? deleteConfirmIdentifier; // For 2-click soft delete
+
+  Future<void> _initAddressData() async {
+    await AddressHelper.instance.init();
+    provinces = AddressHelper.instance.provinces;
+    notifyListeners();
+  }
+
+  void selectProvince(String name) {
+    provinceController.text = name;
+    if (provinces.isNotEmpty) {
+      final matched = provinces.firstWhere(
+        (p) => p.name == name || p.fullName == name,
+        orElse: () => provinces.first,
+      );
+      selectedProvinceCode = matched.code;
+    }
+    wardController.clear();
+    notifyListeners();
+  }
+
+  void selectWard(String name) {
+    wardController.text = name;
+    notifyListeners();
+  }
+
+  void selectClinic(String name) {
+    clinicController.text = name;
+    selectedDepartment = name;
+    notifyListeners();
+  }
 
   // Dropdowns lists
   final List<String> departments = [
@@ -148,7 +192,7 @@ class PatientProfileCreateViewModel extends BasePortalViewModel {
     if (identifierController.text.trim().isNotEmpty && (value == null || value.trim().isEmpty)) {
       return null;
     }
-    return Validators.validatePhoneNumber(value);
+    return Validators.validatePhoneNumber(value, isOptional: true);
   }
 
   // 2. Phone error update
@@ -193,7 +237,7 @@ class PatientProfileCreateViewModel extends BasePortalViewModel {
   // 1. Other Phone validation logic
   String? checkOtherPhone(String? value) {
     if (!registerForSomeoneElse) return null;
-    return Validators.validatePhoneNumber(value);
+    return Validators.validatePhoneNumber(value, isOptional: true);
   }
 
   // 2. Other Phone error update
@@ -214,6 +258,7 @@ class PatientProfileCreateViewModel extends BasePortalViewModel {
   void updateDepartment(String? value) {
     if (value == null || selectedDepartment == value) return;
     selectedDepartment = value;
+    clinicController.text = value;
     notifyListeners();
   }
 
@@ -250,10 +295,17 @@ class PatientProfileCreateViewModel extends BasePortalViewModel {
     
     if (registerForSomeoneElse) {
       otherFullNameController.text = profile.fullName;
+      otherDobController.text = profile.dateOfBirth ?? '';
       otherBirthYearController.text = profile.birthYear;
       otherGender = profile.gender;
       otherPhoneController.text = profile.phoneNumber;
       identifierController.text = (profile.identifier != 'N/A') ? profile.identifier : '';
+      provinceController.text = profile.province ?? '';
+      wardController.text = profile.ward ?? '';
+      if (profile.clinic != null && profile.clinic!.isNotEmpty) {
+        clinicController.text = profile.clinic!;
+        selectedDepartment = profile.clinic;
+      }
       
       otherFullNameError = null;
       otherBirthYearError = null;
@@ -261,9 +313,16 @@ class PatientProfileCreateViewModel extends BasePortalViewModel {
     } else {
       identifierController.text = (profile.identifier != 'N/A') ? profile.identifier : '';
       fullNameController.text = profile.fullName;
+      dobController.text = profile.dateOfBirth ?? '';
       birthYearController.text = profile.birthYear;
       _gender = profile.gender;
       phoneController.text = profile.phoneNumber;
+      provinceController.text = profile.province ?? '';
+      wardController.text = profile.ward ?? '';
+      if (profile.clinic != null && profile.clinic!.isNotEmpty) {
+        clinicController.text = profile.clinic!;
+        selectedDepartment = profile.clinic;
+      }
       
       fullNameError = null;
       birthYearError = null;
@@ -278,9 +337,13 @@ class PatientProfileCreateViewModel extends BasePortalViewModel {
     isExistingProfile = false;
     identifierController.clear();
     fullNameController.text = session.user.fullName;
+    dobController.clear();
     birthYearController.clear();
     _gender = 'Nam';
     phoneController.clear();
+    provinceController.clear();
+    wardController.clear();
+    clinicController.clear();
     dangKyGiupController.clear();
     fullNameError = null;
     birthYearError = null;
@@ -290,11 +353,19 @@ class PatientProfileCreateViewModel extends BasePortalViewModel {
 
   // Pre-fill fields from scanned CCCD QR code
   void fillFromCccd(CccdData data) {
+    String formattedIssueDate = data.issueDate;
+    if (data.issueDate.length == 8 && RegExp(r'^\d{8}$').hasMatch(data.issueDate)) {
+      formattedIssueDate = '${data.issueDate.substring(0, 2)}/${data.issueDate.substring(2, 4)}/${data.issueDate.substring(4)}';
+    }
+
     if (registerForSomeoneElse) {
       otherFullNameController.text = data.fullName;
       otherBirthYearController.text = data.birthYear;
       otherGender = data.gender == 'Nữ' ? 'Nữ' : 'Nam';
       identifierController.text = data.cccdNumber;
+      if (formattedIssueDate.isNotEmpty) {
+        otherCccdIssueDateController.text = formattedIssueDate;
+      }
       
       updateOtherFullNameError(data.fullName);
       updateOtherBirthYearError(data.birthYear);
@@ -303,6 +374,9 @@ class PatientProfileCreateViewModel extends BasePortalViewModel {
       birthYearController.text = data.birthYear;
       _gender = data.gender == 'Nữ' ? 'Nữ' : 'Nam';
       identifierController.text = data.cccdNumber;
+      if (formattedIssueDate.isNotEmpty) {
+        cccdIssueDateController.text = formattedIssueDate;
+      }
       
       updateFullNameError(data.fullName);
       updateBirthYearError(data.birthYear);
@@ -321,15 +395,24 @@ class PatientProfileCreateViewModel extends BasePortalViewModel {
     if (!isMainUser) {
       _registerForSomeoneElse = true;
       otherFullNameController.text = ticket.patientName;
+      otherDobController.text = ticket.dateOfBirth ?? '';
       otherBirthYearController.text = ticket.birthYear;
       otherGender = ticket.gender;
       otherPhoneController.text = ticket.phoneNumber ?? '';
     } else {
       _registerForSomeoneElse = false;
       fullNameController.text = ticket.patientName;
+      dobController.text = ticket.dateOfBirth ?? '';
       birthYearController.text = ticket.birthYear;
       _gender = ticket.gender;
       phoneController.text = ticket.phoneNumber ?? '';
+    }
+
+    if (ticket.province != null) provinceController.text = ticket.province!;
+    if (ticket.ward != null) wardController.text = ticket.ward!;
+    if (ticket.clinic != null) {
+      clinicController.text = ticket.clinic!;
+      selectedDepartment = ticket.clinic;
     }
 
     // Set card / BHYT / patient code identifier
@@ -341,10 +424,12 @@ class PatientProfileCreateViewModel extends BasePortalViewModel {
     }
 
     final deptVal = ticket.department ?? '';
-    selectedDepartment = departments.firstWhere(
-      (d) => d == deptVal || (deptVal.isNotEmpty && (d.startsWith(deptVal) || deptVal.startsWith(d.split(' ').first))),
-      orElse: () => departments.first,
-    );
+    if (deptVal.isNotEmpty) {
+      selectedDepartment = departments.firstWhere(
+        (d) => d == deptVal || (d.startsWith(deptVal) || deptVal.startsWith(d.split(' ').first)),
+        orElse: () => departments.first,
+      );
+    }
     symptomController.text = ticket.symptom ?? '';
     isExistingProfile = true;
     selectedProfileIdentifier = identifierController.text.isNotEmpty ? identifierController.text : ticket.patientCode;
@@ -391,10 +476,14 @@ class PatientProfileCreateViewModel extends BasePortalViewModel {
         if (jsonStr != null && jsonStr.isNotEmpty) {
           final draft = PatientProfileDraftEntity.fromJson(jsonDecode(jsonStr));
           if (draft.fullName.isNotEmpty) fullNameController.text = draft.fullName;
+          if (draft.dateOfBirth != null && draft.dateOfBirth!.isNotEmpty) dobController.text = draft.dateOfBirth!;
           if (draft.birthYear.isNotEmpty) birthYearController.text = draft.birthYear;
           if (draft.phoneNumber.isNotEmpty) phoneController.text = draft.phoneNumber;
           if (draft.identifier.isNotEmpty) identifierController.text = draft.identifier;
           if (draft.gender.isNotEmpty) _gender = draft.gender;
+          if (draft.province != null) provinceController.text = draft.province!;
+          if (draft.ward != null) wardController.text = draft.ward!;
+          if (draft.clinic != null) clinicController.text = draft.clinic!;
         }
       } catch (_) {}
 
@@ -476,7 +565,7 @@ class PatientProfileCreateViewModel extends BasePortalViewModel {
     if (target.isBefore(today)) return [];
     if (target.isAfter(today)) return timeSlots;
     
-    // Filter out passed slots for today
+    // Filter out passed slots for today (cutoff: slot start time + 15 minutes)
     return timeSlots.where((slot) {
       final startPart = slot.split('-')[0].trim().toLowerCase();
       int hr = 0;
@@ -486,8 +575,9 @@ class PatientProfileCreateViewModel extends BasePortalViewModel {
         hr = int.parse(parts[0]);
         min = parts[1].isEmpty ? 0 : int.parse(parts[1]);
       }
-      final slotTime = DateTime(now.year, now.month, now.day, hr, min);
-      return slotTime.isAfter(now);
+      final slotStartTime = DateTime(now.year, now.month, now.day, hr, min);
+      final cutoffTime = slotStartTime.add(const Duration(minutes: 15));
+      return !now.isAfter(cutoffTime);
     }).toList();
   }
 
@@ -531,9 +621,11 @@ class PatientProfileCreateViewModel extends BasePortalViewModel {
 
     return runSafely(() async {
       final String inputName = fullNameController.text.trim();
+      final String inputDob = dobController.text.trim();
       final String inputBirthYear = birthYearController.text.trim();
       final String inputPhone = phoneController.text.trim();
       final String inputOtherName = otherFullNameController.text.trim();
+      final String inputOtherDob = otherDobController.text.trim();
       final String inputOtherBirthYear = otherBirthYearController.text.trim();
       final String inputOtherPhone = otherPhoneController.text.trim();
 
@@ -541,9 +633,20 @@ class PatientProfileCreateViewModel extends BasePortalViewModel {
           ? (inputOtherName.isNotEmpty ? inputOtherName : (inputName.isNotEmpty ? inputName : 'Người thân'))
           : (inputName.isNotEmpty ? inputName : session.user.fullName);
 
-      final String finalBirthYear = registerForSomeoneElse
+      final String finalDob = registerForSomeoneElse
+          ? (inputOtherDob.isNotEmpty ? inputOtherDob : inputDob)
+          : inputDob;
+
+      String finalBirthYear = registerForSomeoneElse
           ? (inputOtherBirthYear.isNotEmpty ? inputOtherBirthYear : (inputBirthYear.isNotEmpty ? inputBirthYear : '2005'))
           : (inputBirthYear.isNotEmpty ? inputBirthYear : '2005');
+
+      if (finalDob.contains('/')) {
+        final parts = finalDob.split('/');
+        if (parts.length == 3 && parts[2].length == 4) {
+          finalBirthYear = parts[2];
+        }
+      }
 
       final String finalGender = registerForSomeoneElse
           ? (inputOtherName.isNotEmpty ? otherGender : _gender)
@@ -553,12 +656,20 @@ class PatientProfileCreateViewModel extends BasePortalViewModel {
           ? (inputOtherPhone.isNotEmpty ? inputOtherPhone : inputPhone)
           : inputPhone;
 
+      final selectedClinicName = clinicController.text.trim().isNotEmpty
+          ? clinicController.text.trim()
+          : selectedDepartment;
+
       final draft = PatientProfileDraftEntity(
         identifier: identifierController.text.trim(),
         fullName: finalFullName,
+        dateOfBirth: finalDob.isNotEmpty ? finalDob : null,
         birthYear: finalBirthYear,
         gender: finalGender,
         phoneNumber: finalPhone,
+        province: provinceController.text.trim().isNotEmpty ? provinceController.text.trim() : null,
+        ward: wardController.text.trim().isNotEmpty ? wardController.text.trim() : null,
+        clinic: selectedClinicName,
         dangKyGiup: registerForSomeoneElse ? dangKyGiupController.text.trim() : null,
       );
 
@@ -579,26 +690,36 @@ class PatientProfileCreateViewModel extends BasePortalViewModel {
       final result = await portalRepository.createMedicalTicket(
         role,
         draft,
-        department: selectedDepartment,
+        department: selectedClinicName,
         selectedDate: dateStr,
         selectedTime: selectedTime,
         symptom: symptomController.text.trim(),
       );
 
       if (result is Ok<MedicalTicketEntity>) {
-        final ticket = result.data;
+        final ticket = result.data.copyWith(
+          dateOfBirth: finalDob,
+          province: draft.province,
+          ward: draft.ward,
+          clinic: selectedClinicName,
+        );
         if (saveProfile) {
           final profileToSave = PatientProfileDraftEntity(
             identifier: (draft.identifier.trim().isNotEmpty && draft.identifier != 'N/A')
                 ? draft.identifier.trim()
                 : ((ticket.patientCode.trim().isNotEmpty && ticket.patientCode != 'N/A') ? ticket.patientCode.trim() : 'N/A'),
             fullName: draft.fullName,
+            dateOfBirth: draft.dateOfBirth,
             birthYear: draft.birthYear,
             gender: draft.gender,
             phoneNumber: draft.phoneNumber,
+            province: draft.province,
+            ward: draft.ward,
+            clinic: draft.clinic,
           );
           await portalRepository.savePatientProfile(profileToSave);
         }
+        return Ok(ticket);
       }
 
       result.when(
@@ -618,10 +739,15 @@ class PatientProfileCreateViewModel extends BasePortalViewModel {
     dangKyGiupController.dispose();
     identifierController.dispose();
     fullNameController.dispose();
+    dobController.dispose();
     birthYearController.dispose();
     phoneController.dispose();
+    provinceController.dispose();
+    wardController.dispose();
+    clinicController.dispose();
     symptomController.dispose();
     otherFullNameController.dispose();
+    otherDobController.dispose();
     otherBirthYearController.dispose();
     otherPhoneController.dispose();
     continueCommand.dispose();

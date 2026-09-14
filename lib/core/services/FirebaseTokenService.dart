@@ -20,6 +20,11 @@ class FirebaseTokenService {
       // 1. Tự động lấy thông tin thiết bị thực tế (Model + OS Version)
       await _fetchDeviceInfo();
 
+      if (kIsWeb) {
+        _fcmToken = 'fcm_token_web_dev';
+        return;
+      }
+
       // 2. Khởi tạo Firebase dựa trên file google-services.json & GoogleService-Info.plist
       await Firebase.initializeApp();
 
@@ -59,6 +64,10 @@ class FirebaseTokenService {
 
   Future<void> _fetchDeviceInfo() async {
     try {
+      if (kIsWeb) {
+        _deviceInfoString = 'Flutter Web App (Chrome)';
+        return;
+      }
       final deviceInfoPlugin = DeviceInfoPlugin();
       if (Platform.isAndroid) {
         final androidInfo = await deviceInfoPlugin.androidInfo;

@@ -822,12 +822,6 @@ class _NotificationDetailViewState extends State<NotificationDetailView> {
   String _resolveUserId(String? phoneNumber) {
     if (phoneNumber == null) return '';
     final cleanPhone = phoneNumber.replaceAll(RegExp(r'\D'), '');
-    if (cleanPhone == '0822380103' || cleanPhone == '822380103') {
-      return 'USR006'; // Lê Nguyễn Gia Hưng (Bác sĩ)
-    }
-    if (cleanPhone == '0902377251' || cleanPhone == '902377251') {
-      return 'USR001'; // Nguyễn Văn Nam (Khách hàng)
-    }
     return cleanPhone.length >= 6
         ? 'USR_${cleanPhone.substring(cleanPhone.length - 6)}'
         : 'USR_$cleanPhone';

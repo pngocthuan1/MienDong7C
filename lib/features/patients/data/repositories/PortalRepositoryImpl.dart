@@ -37,7 +37,7 @@ class PortalRepositoryImpl implements PortalRepository {
     if (activeUser != null && activeUser.phoneNumber.trim().isNotEmpty) {
       return activeUser.phoneNumber.trim();
     }
-    return 'hunglng';
+    return '';
   }
 
   @override
@@ -102,7 +102,6 @@ class PortalRepositoryImpl implements PortalRepository {
         countLocal: 0,
       );
 
-      final badgeNumber = (res['BadgeNumer'] as num?)?.toInt() ?? 0;
       final rawList = res['ListThongBao'] as List<dynamic>? ?? [];
 
       final serverItems = rawList.map((e) {
@@ -334,7 +333,7 @@ class PortalRepositoryImpl implements PortalRepository {
         details: content,
         category: 'Thông báo nội bộ',
         timeLabel: timeStr,
-        senderName: senderName.isNotEmpty ? senderName : 'Lê Nguyễn Gia Hưng',
+        senderName: senderName.isNotEmpty ? senderName : 'Nhân viên hệ thống',
         senderDepartment: senderDepartment.isNotEmpty ? senderDepartment : 'Hệ thống thông báo nội bộ',
         number: now.millisecondsSinceEpoch % 1000,
         createdAt: now,

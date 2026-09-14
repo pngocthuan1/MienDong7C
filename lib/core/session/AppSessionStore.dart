@@ -35,8 +35,13 @@ class AppSessionStore extends ChangeNotifier {
   bool get isEmployee => _currentUser?.role == UserRole.employee;
 
   void setSession(AuthSessionEntity session, UserProfileSession user) {
-    _session = session;
     _currentUser = user;
+    _session = AuthSessionEntity(
+      accessToken: session.accessToken,
+      refreshToken: session.refreshToken,
+      refreshTokenExpiry: session.refreshTokenExpiry,
+      user: user,
+    );
     notifyListeners();
   }
 
@@ -52,6 +57,14 @@ class AppSessionStore extends ChangeNotifier {
         phoneNumber: _currentUser!.phoneNumber,
         role: _currentUser!.role,
       );
+      if (_session != null) {
+        _session = AuthSessionEntity(
+          accessToken: _session!.accessToken,
+          refreshToken: _session!.refreshToken,
+          refreshTokenExpiry: _session!.refreshTokenExpiry,
+          user: _currentUser!,
+        );
+      }
       notifyListeners();
     }
   }

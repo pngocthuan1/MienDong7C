@@ -3,6 +3,7 @@ import 'package:benhvien7c/core/widgets/AppResponsiveContainer.dart';
 import 'package:benhvien7c/core/navigation/AppNavigator.dart';
 import 'package:benhvien7c/features/patients/domain/entities/PatientProfileDraftEntity.dart';
 import 'package:benhvien7c/core/dio/AppLocator.dart';
+import 'package:benhvien7c/core/utils/StringUtils.dart';
 
 class PatientProfileSelectView extends StatefulWidget {
   const PatientProfileSelectView({super.key});
@@ -56,11 +57,14 @@ class _PatientProfileSelectViewState extends State<PatientProfileSelectView> {
     if (_searchQuery.trim().isEmpty) {
       _filteredProfiles = List.from(_profiles);
     } else {
-      final q = _searchQuery.trim().toLowerCase();
+      final qRaw = _searchQuery.trim().toLowerCase();
+      final qNoSign = removeVietnameseDiacritics(qRaw);
       _filteredProfiles = _profiles.where((p) {
-        return p.fullName.toLowerCase().contains(q) ||
-            p.phoneNumber.contains(q) ||
-            p.identifier.toLowerCase().contains(q);
+        final nameNoSign = removeVietnameseDiacritics(p.fullName).toLowerCase();
+        final idNoSign = removeVietnameseDiacritics(p.identifier).toLowerCase();
+        return nameNoSign.contains(qNoSign) ||
+            p.phoneNumber.contains(qRaw) ||
+            idNoSign.contains(qNoSign);
       }).toList();
     }
   }
@@ -94,6 +98,7 @@ class _PatientProfileSelectViewState extends State<PatientProfileSelectView> {
   @override
   Widget build(BuildContext context) {
     return AppResponsiveContainer(
+      maxWidth: double.infinity,
       appBar: AppBar(
         backgroundColor: const Color(0xFF0D6EFD),
         foregroundColor: Colors.white,

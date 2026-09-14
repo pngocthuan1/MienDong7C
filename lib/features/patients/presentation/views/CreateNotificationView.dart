@@ -3482,7 +3482,7 @@ class _InAppMediaGallerySheetState extends State<_InAppMediaGallerySheet> {
                   items.add(_MediaGridItem(
                     id: entity.path,
                     path: entity.path,
-                    fileName: entity.path.split(Platform.pathSeparator).last,
+                    fileName: entity.path.split(RegExp(r'[/\\]')).last,
                     isVideo: isVid,
                     durationText: isVid ? '00:28' : null,
                     sizeBytes: stat.size > 0 ? stat.size : (isVid ? 1500 * 1024 : 350 * 1024),

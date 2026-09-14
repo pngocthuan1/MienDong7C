@@ -97,6 +97,7 @@ class _TypeFourDemoViewState extends State<TypeFourDemoView> {
             },
             onAboutTap: () {
               AppNavigator.safePop(context);
+              AppNavigator.pushNamed(context, RouteNames.aboutApp);
             },
             onLogoutTap: () async {
               await AppLocator.authRepository.logout();

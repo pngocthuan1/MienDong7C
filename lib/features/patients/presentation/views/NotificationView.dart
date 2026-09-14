@@ -192,10 +192,7 @@ class _NotificationViewState extends State<NotificationView> {
             },
             onAboutTap: () {
               AppNavigator.safePop(context);
-              _showInfoDialog(
-                'Thông tin phần mềm',
-                'Bệnh viện Quân Dân Y Miền Đông\nỨng dụng chăm sóc sức khỏe và đăng ký khám bệnh trực tuyến.',
-              );
+              AppNavigator.pushNamed(context, RouteNames.aboutApp);
             },
             onLogoutTap: () async {
               await AppLocator.authRepository.logout();

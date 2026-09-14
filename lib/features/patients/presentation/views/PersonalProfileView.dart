@@ -1,11 +1,15 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:benhvien7c/app/router/RouteNames.dart';
 import 'package:benhvien7c/core/dio/AppLocator.dart';
 import 'package:benhvien7c/core/navigation/AppNavigator.dart';
 import 'package:benhvien7c/core/theme/AppColors.dart';
 import 'package:benhvien7c/core/widgets/AppResponsiveContainer.dart';
+import 'package:benhvien7c/core/widgets/SearchablePickerModal.dart';
+import 'package:benhvien7c/core/utils/AddressHelper.dart';
+import 'package:benhvien7c/core/utils/Validators.dart';
 import 'package:benhvien7c/features/patients/domain/entities/PatientProfileDraftEntity.dart';
 
 class PersonalProfileView extends StatefulWidget {
@@ -16,25 +20,41 @@ class PersonalProfileView extends StatefulWidget {
 }
 
 class _PersonalProfileViewState extends State<PersonalProfileView> {
+  final _formKey = GlobalKey<FormState>();
   final _fullNameController = TextEditingController();
+  final _dobController = TextEditingController();
   final _birthYearController = TextEditingController();
   final _phoneController = TextEditingController();
   final _identifierController = TextEditingController();
+  final _provinceController = TextEditingController();
+  final _wardController = TextEditingController();
+
   String _gender = 'Nam';
   bool _isLoading = true;
+  List<ProvinceModel> _provinces = [];
+  String? _selectedProvinceCode;
 
   @override
   void initState() {
     super.initState();
-    _loadProfileData();
+    _initData();
+  }
+
+  Future<void> _initData() async {
+    await AddressHelper.instance.init();
+    _provinces = AddressHelper.instance.provinces;
+    await _loadProfileData();
   }
 
   @override
   void dispose() {
     _fullNameController.dispose();
+    _dobController.dispose();
     _birthYearController.dispose();
     _phoneController.dispose();
     _identifierController.dispose();
+    _provinceController.dispose();
+    _wardController.dispose();
     super.dispose();
   }
 
@@ -47,18 +67,33 @@ class _PersonalProfileViewState extends State<PersonalProfileView> {
       final jsonStr = prefs.getString('saved_my_personal_profile_$username');
       if (jsonStr != null && jsonStr.isNotEmpty) {
         final draft = PatientProfileDraftEntity.fromJson(jsonDecode(jsonStr));
-        _fullNameController.text = draft.fullName;
+        _fullNameController.text = draft.fullName.isNotEmpty ? draft.fullName : (session?.user.fullName ?? '');
+        _dobController.text = draft.dateOfBirth ?? '';
         _birthYearController.text = draft.birthYear;
-        _phoneController.text = draft.phoneNumber;
+        _phoneController.text = draft.phoneNumber.isNotEmpty ? draft.phoneNumber : (session?.user.phoneNumber ?? '');
         _identifierController.text = draft.identifier;
+        _provinceController.text = draft.province ?? '';
+        _wardController.text = draft.ward ?? '';
+
+        if (_provinceController.text.isNotEmpty && _provinces.isNotEmpty) {
+          final matched = _provinces.firstWhere(
+            (p) => p.name == _provinceController.text || p.fullName == _provinceController.text,
+            orElse: () => _provinces.first,
+          );
+          _selectedProvinceCode = matched.code;
+        }
+
         if (draft.gender.isNotEmpty) {
           _gender = draft.gender;
         }
       } else if (session != null) {
         _fullNameController.text = session.user.fullName;
         _phoneController.text = session.user.phoneNumber;
+        _dobController.text = '';
         _birthYearController.text = '';
         _identifierController.text = '';
+        _provinceController.text = '';
+        _wardController.text = '';
       }
     } catch (_) {
       if (session != null) {
@@ -72,21 +107,122 @@ class _PersonalProfileViewState extends State<PersonalProfileView> {
     }
   }
 
+  Future<void> _selectDateOfBirth() async {
+    DateTime initial = DateTime.now().subtract(const Duration(days: 365 * 25));
+    if (_dobController.text.contains('/')) {
+      final parts = _dobController.text.split('/');
+      if (parts.length == 3) {
+        final d = int.tryParse(parts[0]);
+        final m = int.tryParse(parts[1]);
+        final y = int.tryParse(parts[2]);
+        if (d != null && m != null && y != null) {
+          initial = DateTime(y, m, d);
+        }
+      }
+    }
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: initial,
+      firstDate: DateTime(1900),
+      lastDate: DateTime.now(),
+      locale: const Locale('vi', 'VN'),
+    );
+
+    if (picked != null) {
+      final formatted = DateFormat('dd/MM/yyyy').format(picked);
+      setState(() {
+        _dobController.text = formatted;
+        _birthYearController.text = picked.year.toString();
+      });
+    }
+  }
+
+  void _selectProvince() async {
+    final items = _provinces
+        .map((p) => PickerItem<String>(
+              title: p.name,
+              subtitle: p.fullName,
+              searchKey: p.searchKey,
+              value: p.name,
+            ))
+        .toList();
+    final selected = await SearchablePickerModal.show<String>(
+      context: context,
+      title: 'Chọn Tỉnh / Thành phố',
+      items: items,
+      selectedItem: _provinceController.text,
+    );
+    if (selected != null && selected != _provinceController.text) {
+      setState(() {
+        _provinceController.text = selected;
+        final matched = _provinces.firstWhere((p) => p.name == selected, orElse: () => _provinces.first);
+        _selectedProvinceCode = matched.code;
+        _wardController.clear();
+      });
+    }
+  }
+
+  void _selectWard() async {
+    final wards = AddressHelper.instance.getWardsForProvince(_provinceController.text);
+    final items = wards
+        .map((w) => PickerItem<String>(
+              title: w.name,
+              subtitle: w.fullName,
+              searchKey: w.searchKey,
+              value: w.name,
+            ))
+        .toList();
+    final selected = await SearchablePickerModal.show<String>(
+      context: context,
+      title: 'Chọn Phường / Xã',
+      items: items,
+      selectedItem: _wardController.text,
+    );
+    if (selected != null) {
+      setState(() {
+        _wardController.text = selected;
+      });
+    }
+  }
+
   Future<void> _saveProfileLocally() async {
+    if (!_formKey.currentState!.validate()) {
+      return;
+    }
+
     final session = AppLocator.sessionStore.session;
     final username = session?.user.phoneNumber ?? 'default';
 
+    // Infer birth year from DOB if needed
+    String year = _birthYearController.text.trim();
+    if (year.isEmpty && _dobController.text.contains('/')) {
+      final parts = _dobController.text.split('/');
+      if (parts.length == 3) year = parts[2];
+    }
+
     final draft = PatientProfileDraftEntity(
       fullName: _fullNameController.text.trim(),
-      birthYear: _birthYearController.text.trim(),
+      dateOfBirth: _dobController.text.trim(),
+      birthYear: year,
       gender: _gender,
       phoneNumber: _phoneController.text.trim(),
       identifier: _identifierController.text.trim(),
+      province: _provinceController.text.trim(),
+      ward: _wardController.text.trim(),
     );
 
     try {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString('saved_my_personal_profile_$username', jsonEncode(draft.toJson()));
+
+      if (draft.fullName.isNotEmpty) {
+        AppLocator.sessionStore.updateFullName(draft.fullName);
+        await prefs.setString('saved_full_name', draft.fullName);
+        final cleanPhone = draft.phoneNumber.replaceAll(RegExp(r'\D'), '');
+        if (cleanPhone.isNotEmpty) {
+          await prefs.setString('full_name_$cleanPhone', draft.fullName);
+        }
+      }
 
       if (mounted) {
         ScaffoldMessenger.of(context).clearSnackBars();
@@ -167,6 +303,7 @@ class _PersonalProfileViewState extends State<PersonalProfileView> {
     final hisUser = session?.user.phoneNumber ?? 'Chưa xác định';
 
     return AppResponsiveContainer(
+      maxWidth: double.infinity,
       appBar: AppBar(
         backgroundColor: const Color(0xFF4B90E2),
         foregroundColor: Colors.white,
@@ -257,134 +394,184 @@ class _PersonalProfileViewState extends State<PersonalProfileView> {
                 const SizedBox(height: 24),
 
                 // Form Fields
-                const Text(
-                  'KÊ KHAI THÔNG TIN CÁ NHÂN',
-                  style: TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w800,
-                    color: AppColors.primaryDark,
-                    letterSpacing: 0.5,
-                  ),
-                ),
-                const SizedBox(height: 14),
+                Form(
+                  key: _formKey,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'KÊ KHAI THÔNG TIN CÁ NHÂN',
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w800,
+                          color: AppColors.primaryDark,
+                          letterSpacing: 0.5,
+                        ),
+                      ),
+                      const SizedBox(height: 14),
 
-                // Họ và tên
-                TextField(
-                  controller: _fullNameController,
-                  decoration: InputDecoration(
-                    labelText: 'Họ và tên *',
-                    prefixIcon: const Icon(Icons.person_outline_rounded),
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                  ),
-                ),
-                const SizedBox(height: 14),
-
-                // Năm sinh & Giới tính Row
-                Row(
-                  children: [
-                    Expanded(
-                      flex: 4,
-                      child: TextField(
-                        controller: _birthYearController,
-                        keyboardType: TextInputType.number,
+                      // Họ và tên
+                      TextFormField(
+                        controller: _fullNameController,
                         decoration: InputDecoration(
-                          labelText: 'Năm sinh *',
-                          hintText: 'Ví dụ: 1997',
-                          prefixIcon: const Icon(Icons.cake_outlined),
+                          labelText: 'Họ và tên *',
+                          prefixIcon: const Icon(Icons.person_outline_rounded),
                           border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
                         ),
+                        validator: (v) => Validators.validateRequired(v, fieldName: 'Họ và tên'),
                       ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      flex: 5,
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                        decoration: BoxDecoration(
-                          border: Border.all(color: Colors.grey.shade400),
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const Text('Giới tính', style: TextStyle(fontSize: 11, color: Colors.grey)),
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceAround,
-                              children: [
-                                Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    Radio<String>(
-                                      value: 'Nam',
-                                      groupValue: _gender,
-                                      onChanged: (val) => setState(() => _gender = val!),
-                                      visualDensity: VisualDensity.compact,
-                                    ),
-                                    const Text('Nam', style: TextStyle(fontSize: 13)),
-                                  ],
+                      const SizedBox(height: 14),
+
+                      // Ngày sinh (DD/MM/YYYY + DatePicker) & Giới tính Row (Luôn chia đôi 2 cột)
+                      Row(
+                        children: [
+                          Expanded(
+                            flex: 5,
+                            child: TextFormField(
+                              controller: _dobController,
+                              keyboardType: TextInputType.datetime,
+                              decoration: InputDecoration(
+                                labelText: 'Ngày sinh *',
+                                hintText: 'DD/MM/YYYY',
+                                prefixIcon: const Icon(Icons.cake_outlined),
+                                suffixIcon: IconButton(
+                                  icon: const Icon(Icons.calendar_today_rounded, size: 18),
+                                  onPressed: _selectDateOfBirth,
                                 ),
-                                Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    Radio<String>(
-                                      value: 'Nữ',
-                                      groupValue: _gender,
-                                      onChanged: (val) => setState(() => _gender = val!),
-                                      visualDensity: VisualDensity.compact,
-                                    ),
-                                    const Text('Nữ', style: TextStyle(fontSize: 13)),
-                                  ],
-                                ),
-                              ],
+                                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                              ),
+                              validator: (v) => Validators.validateFullDate(v, isRequired: true, fieldName: 'Ngày sinh'),
                             ),
-                          ],
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            flex: 4,
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+                              decoration: BoxDecoration(
+                                border: Border.all(color: Colors.grey.shade400),
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  const Text('Giới tính *', style: TextStyle(fontSize: 11, color: Colors.grey)),
+                                  Row(
+                                    mainAxisAlignment: MainAxisAlignment.spaceAround,
+                                    children: [
+                                      Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          Radio<String>(
+                                            value: 'Nam',
+                                            groupValue: _gender,
+                                            onChanged: (val) => setState(() => _gender = val!),
+                                            visualDensity: VisualDensity.compact,
+                                          ),
+                                          const Text('Nam', style: TextStyle(fontSize: 12)),
+                                        ],
+                                      ),
+                                      Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          Radio<String>(
+                                            value: 'Nữ',
+                                            groupValue: _gender,
+                                            onChanged: (val) => setState(() => _gender = val!),
+                                            visualDensity: VisualDensity.compact,
+                                          ),
+                                          const Text('Nữ', style: TextStyle(fontSize: 12)),
+                                        ],
+                                      ),
+                                    ],
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 14),
+
+                      // Tỉnh / Thành phố (Ô riêng dài)
+                      TextFormField(
+                        controller: _provinceController,
+                        readOnly: true,
+                        onTap: _selectProvince,
+                        decoration: InputDecoration(
+                          labelText: 'Tỉnh / Thành phố *',
+                          hintText: 'Chọn Tỉnh / Thành phố',
+                          prefixIcon: const Icon(Icons.location_city_rounded),
+                          suffixIcon: const Icon(Icons.arrow_drop_down),
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                        ),
+                        validator: (v) => Validators.validateRequired(v, fieldName: 'Tỉnh / Thành phố'),
+                      ),
+                      const SizedBox(height: 14),
+
+                      // Phường / Xã (Ô riêng dài)
+                      TextFormField(
+                        controller: _wardController,
+                        readOnly: true,
+                        onTap: _selectWard,
+                        decoration: InputDecoration(
+                          labelText: 'Phường / Xã *',
+                          hintText: 'Chọn Phường / Xã',
+                          prefixIcon: const Icon(Icons.map_rounded),
+                          suffixIcon: const Icon(Icons.arrow_drop_down),
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                        ),
+                        validator: (v) => Validators.validateRequired(v, fieldName: 'Phường / Xã'),
+                      ),
+                      const SizedBox(height: 14),
+
+                      // Số CCCD (Ô riêng dài)
+                      TextFormField(
+                        controller: _identifierController,
+                        decoration: InputDecoration(
+                          labelText: 'Số CCCD *',
+                          hintText: 'Nhập 12 số CCCD',
+                          prefixIcon: const Icon(Icons.badge_outlined),
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                        ),
+                        validator: (v) => Validators.validateCccdOrTempCode(v, isOptional: false),
+                      ),
+                      const SizedBox(height: 14),
+
+                      // Số điện thoại (Optional)
+                      TextFormField(
+                        controller: _phoneController,
+                        keyboardType: TextInputType.phone,
+                        decoration: InputDecoration(
+                          labelText: 'Số điện thoại liên hệ (Tùy chọn)',
+                          hintText: 'Mặc định theo số điện thoại tài khoản',
+                          prefixIcon: const Icon(Icons.phone_android_rounded),
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                        ),
+                        validator: (v) => Validators.validatePhoneNumber(v, isOptional: true),
+                      ),
+                      const SizedBox(height: 24),
+
+                      // Save Button
+                      SizedBox(
+                        width: double.infinity,
+                        height: 50,
+                        child: ElevatedButton.icon(
+                          onPressed: _saveProfileLocally,
+                          icon: const Icon(Icons.check_circle_rounded),
+                          label: const Text(
+                            'Lưu thông tin cá nhân',
+                            style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                          ),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFF2563EB),
+                            foregroundColor: Colors.white,
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                            elevation: 2,
+                          ),
                         ),
                       ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 14),
-
-                // Số điện thoại
-                TextField(
-                  controller: _phoneController,
-                  keyboardType: TextInputType.phone,
-                  decoration: InputDecoration(
-                    labelText: 'Số điện thoại liên hệ *',
-                    prefixIcon: const Icon(Icons.phone_android_rounded),
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                  ),
-                ),
-                const SizedBox(height: 14),
-
-                // Mã BHYT / CCCD
-                TextField(
-                  controller: _identifierController,
-                  decoration: InputDecoration(
-                    labelText: 'Mã thẻ BHYT / Số CCCD (nếu có)',
-                    prefixIcon: const Icon(Icons.badge_outlined),
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                  ),
-                ),
-                const SizedBox(height: 24),
-
-                // Save Button
-                SizedBox(
-                  width: double.infinity,
-                  height: 50,
-                  child: ElevatedButton.icon(
-                    onPressed: _saveProfileLocally,
-                    icon: const Icon(Icons.check_circle_rounded),
-                    label: const Text(
-                      'Lưu thông tin cá nhân',
-                      style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                    ),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF2563EB),
-                      foregroundColor: Colors.white,
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                      elevation: 2,
-                    ),
+                    ],
                   ),
                 ),
                 const SizedBox(height: 36),

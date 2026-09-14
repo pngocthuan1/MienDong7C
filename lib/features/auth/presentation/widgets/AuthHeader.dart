@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:benhvien7c/core/constants/AppStrings.dart';
 import 'package:benhvien7c/core/theme/AppColors.dart';
 import 'package:benhvien7c/core/theme/AppSizes.dart';
 import 'package:benhvien7c/core/theme/AppTextStyles.dart';
@@ -67,10 +66,10 @@ class AuthHeader extends StatelessWidget {
               ),
             ),
             const SizedBox(width: 16),
-            Expanded(
+            const Expanded(
               child: Text(
-                AppStrings.hospitalTagline,
-                style: const TextStyle(
+                'Thân thiện - Chu đáo - Tin cậy',
+                style: TextStyle(
                   color: AppColors.textSecondary,
                   fontSize: 13,
                   fontWeight: FontWeight.w600,

@@ -90,6 +90,7 @@ class _HomeViewState extends State<HomeView> {
             }
           },
           child: AppResponsiveContainer(
+            maxWidth: double.infinity,
             appBar: AppBar(
               backgroundColor: const Color(0xFF4B90E2),
               foregroundColor: Colors.white,
@@ -295,7 +296,8 @@ class _CenterHospitalMark extends StatelessWidget {
         ),
         const SizedBox(height: 16),
         const Text(
-          'BỆNH VIỆN QUÂN Y MIỀN ĐÔNG ',
+          'BỆNH VIỆN QUÂN Y MIỀN ĐÔNG',
+          textAlign: TextAlign.center,
           style: TextStyle(
             color: Color(0xFF2563EB),
             fontSize: 22,

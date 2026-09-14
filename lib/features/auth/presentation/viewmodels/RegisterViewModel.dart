@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'package:benhvien7c/core/network/ApiException.dart';
 import 'package:benhvien7c/core/network/ApiResult.dart';
 import 'package:benhvien7c/core/utils/Validators.dart';
@@ -156,7 +155,6 @@ class RegisterViewModel extends ChangeNotifier {
   Future<ApiResult<String>> _register() async {
     _message = null;
     final phone = phoneController.text.trim();
-    final cleanPhone = phone.replaceAll(RegExp(r'\D'), '');
 
     // 1. Kiểm tra trên Server C# xem Số điện thoại đã có tài khoản hay chưa -> CHẶN NGAY TẠI MÀN HÌNH ĐĂNG KÝ
     final checkResult = await _authRepository.checkExistAccount(phone);

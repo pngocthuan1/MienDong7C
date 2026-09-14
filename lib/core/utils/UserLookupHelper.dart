@@ -57,14 +57,6 @@ class UserLookupHelper {
       return _groupMap[lower]!;
     }
 
-    if (lower == 'it_loc') return 'Lê Quốc Lộc';
-    if (lower == 'hunglng') return 'Lê Nguyễn Gia Hưng';
-    if (lower == 'thuanpn') return 'Phạm Ngọc Thuân';
-    if (lower == 'trangbth') return 'Bùi Thị Huyền Trang';
-    if (lower == '10') return 'Tổ BHYT';
-    if (lower == '1' || lower == '2' || lower == 'khoa khám bệnh') return 'Hệ thống thông báo nội bộ';
-    if (lower == '5') return 'Phòng CNTT';
-
     return clean;
   }
 }

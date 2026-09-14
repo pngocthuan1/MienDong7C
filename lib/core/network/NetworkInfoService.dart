@@ -1,4 +1,5 @@
 import 'dart:io' show Platform;
+import 'package:flutter/foundation.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:network_info_plus/network_info_plus.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
@@ -14,6 +15,9 @@ class NetworkInfoService {
     // Check if device is connected to VPN
     final isVpn = await _checkIsVpn();
 
+    final isAndroid = !kIsWeb && Platform.isAndroid;
+    final platformName = kIsWeb ? 'web' : (isAndroid ? 'android' : 'ios');
+
     // If not connected to Wi-Fi, return early without prompting location permissions
     if (connectionType != ConnectionType.wifi) {
       return NetworkInfoResult(
@@ -21,7 +25,7 @@ class NetworkInfoService {
         locationServiceEnabled: false,
         connectionType: connectionType,
         isVpn: isVpn,
-        platform: Platform.isAndroid ? 'android' : 'ios',
+        platform: platformName,
       );
     }
 
@@ -62,7 +66,7 @@ class NetworkInfoService {
 
     // Gateway IP: Reliable on Android. On iOS, public APIs do not provide a reliable gateway IP,
     // so we explicitly leave it null on iOS.
-    if (Platform.isAndroid) {
+    if (isAndroid) {
       try {
         gatewayIp = await _networkInfo.getWifiGatewayIP();
       } catch (_) {}
@@ -81,7 +85,7 @@ class NetworkInfoService {
       isVpn: isVpn,
       latitude: null,
       longitude: null,
-      platform: Platform.isAndroid ? 'android' : 'ios',
+      platform: platformName,
     );
   }
 
