@@ -1,3 +1,5 @@
+import 'dart:async';
+import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:benhvien7c/core/commands/command.dart';
@@ -64,6 +66,7 @@ class NotificationAttachmentModel {
   final bool isImage;
   final String extension;
   final bool isCompressed;
+  final bool fileExists;
 
   const NotificationAttachmentModel({
     required this.id,
@@ -73,6 +76,7 @@ class NotificationAttachmentModel {
     required this.isImage,
     required this.extension,
     this.isCompressed = false,
+    this.fileExists = true,
   });
 
   String get formattedSize {
@@ -226,6 +230,7 @@ class CreateNotificationViewModel extends BasePortalViewModel {
     final autoRenamedFileName = '$formattedNotificationNumber.$formattedExt';
 
     final id = 'REAL_${DateTime.now().millisecondsSinceEpoch}_${attachments.length}';
+    final bool fileExists = File(filePath).existsSync();
     attachments.add(NotificationAttachmentModel(
       id: id,
       fileName: autoRenamedFileName,
@@ -234,6 +239,7 @@ class CreateNotificationViewModel extends BasePortalViewModel {
       isImage: isImg,
       extension: ext,
       isCompressed: isImg && sizeBytes < 500 * 1024,
+      fileExists: fileExists,
     ));
     notifyIfMounted();
     return AddAttachmentResult.success;
@@ -292,6 +298,7 @@ class CreateNotificationViewModel extends BasePortalViewModel {
     }
 
     final id = 'CAM_${DateTime.now().millisecondsSinceEpoch}_${attachments.length}';
+    final bool fileExists = File(filePath).existsSync();
     attachments.add(NotificationAttachmentModel(
       id: id,
       fileName: fileName,
@@ -300,6 +307,7 @@ class CreateNotificationViewModel extends BasePortalViewModel {
       isImage: true,
       extension: 'jpg',
       isCompressed: true,
+      fileExists: fileExists,
     ));
     notifyIfMounted();
     return AddAttachmentResult.success;
@@ -319,6 +327,7 @@ class CreateNotificationViewModel extends BasePortalViewModel {
       isImage: true,
       extension: 'jpg',
       isCompressed: true,
+      fileExists: false,
     );
 
     attachments.add(attachment);
@@ -378,13 +387,20 @@ class CreateNotificationViewModel extends BasePortalViewModel {
     notifyIfMounted();
   }
 
+  Timer? _searchDebounceTimer;
   final searchController = TextEditingController();
   String _searchQuery = '';
   String get searchQuery => _searchQuery;
 
   void _onSearchChanged() {
-    _searchQuery = searchController.text.trim().toLowerCase();
-    notifyIfMounted();
+    _searchDebounceTimer?.cancel();
+    _searchDebounceTimer = Timer(const Duration(milliseconds: 300), () {
+      final query = searchController.text.trim().toLowerCase();
+      if (_searchQuery != query) {
+        _searchQuery = query;
+        notifyIfMounted();
+      }
+    });
   }
 
   final Set<String> selectedGroupIds = {};
@@ -689,6 +705,7 @@ class CreateNotificationViewModel extends BasePortalViewModel {
 
   @override
   void dispose() {
+    _searchDebounceTimer?.cancel();
     contentController.dispose();
     searchController.dispose();
     sendNotificationCommand.dispose();

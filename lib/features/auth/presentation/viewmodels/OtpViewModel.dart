@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+import 'package:benhvien7c/core/dio/AppLocator.dart';
 import 'package:benhvien7c/core/network/ApiException.dart';
 import 'package:benhvien7c/core/network/ApiResult.dart';
 import 'package:benhvien7c/features/auth/domain/repositories/AuthRepository.dart';
@@ -22,7 +22,7 @@ class OtpViewModel extends ChangeNotifier {
   final String phoneNumber;
   final OtpPurpose purpose;
   final String fullName;
-  final String password;
+  String? password;
   String key;
   int adjustSeconds;
 
@@ -59,8 +59,8 @@ class OtpViewModel extends ChangeNotifier {
   void updateOtpError(String? val) {
     if (_message != null) {
       _message = null;
+      notifyListeners();
     }
-    notifyListeners();
   }
 
   Future<ApiResult<String>> _verifyOtp() async {
@@ -70,10 +70,11 @@ class OtpViewModel extends ChangeNotifier {
     final otp = otpController.text.trim();
 
     if (purpose == OtpPurpose.registration) {
+      final currentPassword = password ?? '';
       final res = await _authRepository.signUp(
         fullName,
         phoneNumber,
-        password,
+        currentPassword,
         otp,
         key,
         adjustSeconds,
@@ -87,6 +88,7 @@ class OtpViewModel extends ChangeNotifier {
         }
         notifyListeners();
         return ApiFailure(ApiException.validation(_message!));
+        // Không xóa password ở đây — người dùng có thể sửa OTP và thử lại với password đã nhập
       }
 
       final data = (res as ApiSuccess<String>).data;
@@ -94,38 +96,31 @@ class OtpViewModel extends ChangeNotifier {
         _message = 'Mã OTP không hợp lệ hoặc đăng ký thất bại';
         notifyListeners();
         return ApiFailure(ApiException.validation(_message!));
+        // Tương tự, chưa xóa password vì người dùng có thể nhập lại OTP
       }
 
-      final prefs = await SharedPreferences.getInstance();
+      // Đến đây signUp() ĐÃ THÀNH CÔNG: Mật khẩu không còn cần dùng nữa, an toàn để giải phóng khỏi RAM
+      password = null;
+
       final clean = phoneNumber.replaceAll(RegExp(r'\D'), '');
       if (fullName.trim().isNotEmpty) {
-        await prefs.setString('full_name_$clean', fullName.trim());
-        await prefs.setString('saved_full_name', fullName.trim());
+        try {
+          await AppLocator.secureStorage.saveSavedFullName(fullName.trim());
+          await AppLocator.secureStorage.saveSavedPhone(phoneNumber);
+          if (clean.isNotEmpty) {
+            await AppLocator.secureStorage.saveFullNameForPhone(clean, fullName.trim());
+          }
+        } catch (_) {}
       }
 
       return res;
     } else {
       if (otp.length != 6) {
-           // Với luồng quên mật khẩu (purpose != registration), OTP ở bước này
-      // CHỈ được kiểm tra độ dài (đủ 6 số) phía client, chưa gọi backend
-      // để xác minh mã có đúng hay không — đây là chủ đích thiết kế,
-      // không phải thiếu sót.
-      //
-      // Việc xác thực OTP thật sự diễn ra ở bước KẾ TIẾP: màn hình đặt
-      // mật khẩu mới (ResetPasswordViewModel._resetPassword()) sẽ gửi
-      // `otp` này kèm `key`/`adjustSeconds` lên API `resetPassword(...)`,
-      // và server sẽ từ chối nếu OTP sai/hết hạn.
-      //
-      // Lưu ý quan trọng: nếu người dùng bấm "Gửi lại mã" (resend) tại
-      // màn OTP này, `key`/`adjustSeconds` sẽ được cập nhật lại trong
-      // OtpViewModel. Khi điều hướng sang ResetPasswordViewModel, PHẢI
-      // truyền đúng `key`/`adjustSeconds` MỚI NHẤT (sau resend), không
-      // phải giá trị ban đầu — nếu không, server sẽ so khớp sai OTP dù
-      // người dùng nhập đúng mã vừa nhận.
         _message = 'Vui lòng nhập đủ 6 chữ số OTP';
         notifyListeners();
         return ApiFailure(ApiException.validation(_message!));
       }
+
       return const ApiSuccess('Xác thực OTP thành công!');
     }
   }
@@ -202,6 +197,7 @@ class OtpViewModel extends ChangeNotifier {
 
   @override
   void dispose() {
+    password = null;
     otpController.dispose();
     super.dispose();
   }

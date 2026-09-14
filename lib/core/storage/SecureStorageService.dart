@@ -4,6 +4,7 @@ import 'package:benhvien7c/core/utils/DateTimeConverter.dart';
 import 'package:device_info_plus/device_info_plus.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:uuid/uuid.dart';
 
 class SecureStorageService {
@@ -19,6 +20,128 @@ class SecureStorageService {
   static const String _biometricPhoneKey = 'biometric_phone';
   static const String _biometricPasswordKey = 'biometric_password';
   static const String _biometricEnabledKey = 'biometric_enabled';
+  static const String _savedPhoneKey = 'saved_phone';
+  static const String _savedFullNameKey = 'saved_full_name';
+  static const String _savedRoleKey = 'saved_role';
+
+  // ==================== PII (Thông tin cá nhân bảo mật) ====================
+
+  Future<void> saveSavedPhone(String phone) async {
+    await _storage.write(key: _savedPhoneKey, value: phone);
+  }
+
+  Future<String?> getSavedPhone() async {
+    try {
+      return await _storage.read(key: _savedPhoneKey);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<void> saveSavedFullName(String fullName) async {
+    await _storage.write(key: _savedFullNameKey, value: fullName);
+  }
+
+  Future<String?> getSavedFullName() async {
+    try {
+      return await _storage.read(key: _savedFullNameKey);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<void> saveSavedRole(String role) async {
+    await _storage.write(key: _savedRoleKey, value: role);
+  }
+
+  Future<String?> getSavedRole() async {
+    try {
+      return await _storage.read(key: _savedRoleKey);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  static const String _fullNamePhonePrefix = 'full_name_';
+
+  Future<void> saveFullNameForPhone(String phone, String fullName) async {
+    final clean = phone.replaceAll(RegExp(r'\D'), '');
+    if (clean.isNotEmpty) {
+      await _storage.write(key: '$_fullNamePhonePrefix$clean', value: fullName);
+    }
+  }
+
+  Future<String?> getFullNameForPhone(String phone) async {
+    final clean = phone.replaceAll(RegExp(r'\D'), '');
+    if (clean.isEmpty) return null;
+    try {
+      return await _storage.read(key: '$_fullNamePhonePrefix$clean');
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<void> deleteFullNameForPhone(String phone) async {
+    final clean = phone.replaceAll(RegExp(r'\D'), '');
+    if (clean.isNotEmpty) {
+      await _storage.delete(key: '$_fullNamePhonePrefix$clean');
+    }
+  }
+
+  Future<void> clearSavedPii() async {
+    await Future.wait([
+      _storage.delete(key: _savedPhoneKey),
+      _storage.delete(key: _savedFullNameKey),
+      _storage.delete(key: _savedRoleKey),
+    ]);
+  }
+
+  /// Tự động di chuyển dữ liệu cá nhân (SĐT, Họ tên, Role, tên gắn với SĐT) từ SharedPreferences cũ
+  /// sang FlutterSecureStorage mã hóa an toàn, sau đó xóa key cũ ở SharedPreferences.
+  Future<void> migratePiiFromPreferences(SharedPreferences prefs) async {
+    try {
+      final existingSecurePhone = await getSavedPhone();
+      final oldPhone = prefs.getString('saved_phone');
+      if ((existingSecurePhone == null || existingSecurePhone.isEmpty) && oldPhone != null && oldPhone.isNotEmpty) {
+        await saveSavedPhone(oldPhone);
+        await prefs.remove('saved_phone');
+      }
+
+      final existingSecureName = await getSavedFullName();
+      final oldName = prefs.getString('saved_full_name');
+      if ((existingSecureName == null || existingSecureName.isEmpty) && oldName != null && oldName.isNotEmpty) {
+        await saveSavedFullName(oldName);
+        await prefs.remove('saved_full_name');
+      }
+
+      final existingSecureRole = await getSavedRole();
+      final oldRole = prefs.getString('saved_role');
+      if ((existingSecureRole == null || existingSecureRole.isEmpty) && oldRole != null && oldRole.isNotEmpty) {
+        await saveSavedRole(oldRole);
+        await prefs.remove('saved_role');
+      }
+
+      // Di chuyển các key full_name_<cleanPhone> sang SecureStorage
+      final allKeys = prefs.getKeys();
+      for (final key in allKeys) {
+        if (key.startsWith(_fullNamePhonePrefix)) {
+          final phone = key.replaceFirst(_fullNamePhonePrefix, '');
+          final val = prefs.getString(key);
+          if (val != null && val.isNotEmpty) {
+            final existing = await getFullNameForPhone(phone);
+            if (existing == null || existing.isEmpty) {
+              await saveFullNameForPhone(phone, val);
+            }
+            await prefs.remove(key);
+          }
+        }
+      }
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('[SecureStorageService] migratePiiFromPreferences error: $e');
+      }
+    }
+  }
 
   // ---------------------------------------------------------------------
   // Access Token
@@ -84,6 +207,9 @@ class SecureStorageService {
       _storage.delete(key: _accessTokenKey),
       _storage.delete(key: _refreshTokenKey),
       _storage.delete(key: _expiresRefreshTokenKey),
+      _storage.delete(key: _savedPhoneKey),
+      _storage.delete(key: _savedFullNameKey),
+      _storage.delete(key: _savedRoleKey),
     ]);
   }
 

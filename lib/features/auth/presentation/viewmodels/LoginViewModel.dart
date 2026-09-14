@@ -1,9 +1,11 @@
 
 import 'dart:convert';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:benhvien7c/core/config/environment.dart';
 import 'package:benhvien7c/core/network/ApiException.dart';
 import 'package:benhvien7c/core/network/ApiResult.dart';
+import 'package:benhvien7c/core/network/NetworkInfoResult.dart';
 import 'package:benhvien7c/core/storage/SecureStorageService.dart';
 import 'package:benhvien7c/features/auth/domain/entities/AuthSessionEntity.dart';
 import 'package:benhvien7c/features/auth/domain/entities/LoginParams.dart';
@@ -85,12 +87,30 @@ class LoginViewModel extends ChangeNotifier {
   bool isCheckingNetwork = false;
   bool allowEmployeeRole = false;
   StreamSubscription<List<ConnectivityResult>>? _connectivitySubscription;
+  Timer? _connectivityDebounceTimer;
+
+  // Cache kiểm tra mạng nội bộ thông minh:
+  // Chỉ dùng lại kết quả nếu chưa quá 10 giây VÀ giữ nguyên Wi-Fi SSID.
+  // Khi người dùng đổi mạng (onConnectivityChanged), cache bị hủy lập tức!
+  NetworkAuthResult? _cachedAuthResult;
+  DateTime? _lastCheckTime;
+  String? _cachedSsid;
 
   void startListeningNetworkChanges() {
     _connectivitySubscription?.cancel();
     _connectivitySubscription = Connectivity().onConnectivityChanged.listen((results) {
-      debugPrint('[LoginViewModel] Network connectivity changed: $results -> Auto re-checking network!');
-      initNetworkCheck();
+      if (kDebugMode) {
+        debugPrint('[LoginViewModel] Connectivity changed: $results -> HỦY CACHE mạng & debounce re-check');
+      }
+      // HỦY CACHE LẬP TỨC: Đảm bảo không dùng lại quyền truy cập mạng cũ khi đã ngắt/đổi mạng
+      _cachedAuthResult = null;
+      _lastCheckTime = null;
+      _cachedSsid = null;
+
+      _connectivityDebounceTimer?.cancel();
+      _connectivityDebounceTimer = Timer(const Duration(milliseconds: 500), () {
+        initNetworkCheck(force: true);
+      });
     });
   }
   final NetworkInfoService _networkInfoService = NetworkInfoService();
@@ -98,20 +118,53 @@ class LoginViewModel extends ChangeNotifier {
 
   LoginViewModel(this._authRepository, this._secureStorage);
 
-  Future<void> initNetworkCheck() async {
+  Future<NetworkAuthResult> checkOrGetNetworkAuth({bool force = false}) async {
+    final info = await _networkInfoService.collectNetworkInfo();
+    final currentSsid = info.ssid;
+    final now = DateTime.now();
+
+    final isCacheValid = !force &&
+        _cachedAuthResult != null &&
+        _lastCheckTime != null &&
+        now.difference(_lastCheckTime!) < const Duration(seconds: 10) &&
+        _cachedSsid == currentSsid;
+
+    if (isCacheValid) {
+      if (kDebugMode) {
+        debugPrint('[LoginViewModel] Sử dụng cache kiểm tra mạng (SSID: "$currentSsid")');
+      }
+      return _cachedAuthResult!;
+    }
+
+    if (kDebugMode) {
+      debugPrint('[LoginViewModel] Gọi checkInternalNetwork mới (SSID: "$currentSsid")...');
+    }
+
+    final authResult = await _networkAuthService.checkInternalNetwork(info);
+    _cachedAuthResult = authResult;
+    _lastCheckTime = now;
+    _cachedSsid = currentSsid;
+
+    if (kDebugMode) {
+      debugPrint('[LoginViewModel] CheckInternalNetwork allowEmployeeRole: ${authResult.allowEmployeeRole}');
+    }
+
+    return authResult;
+  }
+
+  Future<void> initNetworkCheck({bool force = true}) async {
     isCheckingNetwork = true;
     notifyListeners();
     try {
-      final info = await _networkInfoService.collectNetworkInfo();
-      debugPrint('[LoginViewModel] Wi-Fi SSID fetched: "${info.ssid}"');
-      final authResult = await _networkAuthService.checkInternalNetwork(info);
-      debugPrint('[LoginViewModel] CheckInternalNetwork allowEmployeeRole: ${authResult.allowEmployeeRole}');
+      final authResult = await checkOrGetNetworkAuth(force: force);
       allowEmployeeRole = authResult.allowEmployeeRole;
       if (!allowEmployeeRole) {
         _selectedRole = UserRole.customer;
       }
     } catch (e) {
-      debugPrint('[LoginViewModel] Error in initNetworkCheck: $e');
+      if (kDebugMode) {
+        debugPrint('[LoginViewModel] Error in initNetworkCheck: $e');
+      }
       allowEmployeeRole = false;
       _selectedRole = UserRole.customer;
     } finally {
@@ -160,10 +213,9 @@ class LoginViewModel extends ChangeNotifier {
     _message = null;
     notifyListeners();
 
-    // Nếu chọn vai trò Nhân viên -> Re-check mạng ngay thời điểm bấm Đăng nhập!
+    // Nếu chọn vai trò Nhân viên -> Re-check mạng (khớp SSID và <10s thì dùng cache, khác SSID thì check mới)
     if (_selectedRole == UserRole.employee) {
-      final info = await _networkInfoService.collectNetworkInfo();
-      final authResult = await _networkAuthService.checkInternalNetwork(info);
+      final authResult = await checkOrGetNetworkAuth(force: false);
       if (!authResult.allowEmployeeRole) {
         allowEmployeeRole = false;
         _selectedRole = UserRole.customer;
@@ -192,7 +244,7 @@ class LoginViewModel extends ChangeNotifier {
       tenDangNhapHis: phoneVal,
       matKhauHis: passwordVal,
       username: 'mobile',
-      password: '1@QWEqaz23456',
+      password: Environment.appClientSecret,
       device: deviceId,
       platform: Environment.platform,
       version: Environment.appVersion,
@@ -293,7 +345,10 @@ class LoginViewModel extends ChangeNotifier {
       // Nếu server không trả về HoTenHis, lấy tên đã đăng ký riêng của SĐT này
       // (không dùng chung saved_full_name toàn cục)
       if (userFullName == 'Khách Hàng' || userFullName.isEmpty) {
-        final perAccountName = cleanPhone.isNotEmpty ? prefs.getString('full_name_$cleanPhone') : null;
+        String? perAccountName;
+        if (cleanPhone.isNotEmpty) {
+          perAccountName = await _secureStorage.getFullNameForPhone(cleanPhone) ?? prefs.getString('full_name_$cleanPhone');
+        }
         if (perAccountName != null && perAccountName.trim().isNotEmpty && perAccountName.trim() != phoneVal.trim()) {
           userFullName = perAccountName.trim();
         } else {
@@ -321,12 +376,12 @@ class LoginViewModel extends ChangeNotifier {
     await _secureStorage.saveTokensRecord(session.accessToken, session.refreshToken);
     await _secureStorage.saveExpiresRefreshToken((session.refreshTokenExpiry?.millisecondsSinceEpoch ?? 0).toString());
 
-    final prefsObj = await SharedPreferences.getInstance();
-    prefsObj.setString('saved_phone', phoneVal);
-    prefsObj.setString('saved_role', userRole == UserRole.employee ? 'employee' : 'customer');
-    prefsObj.setString('saved_full_name', userFullName);
+    await _secureStorage.saveSavedPhone(phoneVal);
+    await _secureStorage.saveSavedRole(userRole == UserRole.employee ? 'employee' : 'customer');
+    await _secureStorage.saveSavedFullName(userFullName);
+
     if (cleanPhone.isNotEmpty) {
-      prefsObj.setString('full_name_$cleanPhone', userFullName);
+      await _secureStorage.saveFullNameForPhone(cleanPhone, userFullName);
     }
 
     AppSessionStore.instance.setSession(
@@ -343,6 +398,7 @@ class LoginViewModel extends ChangeNotifier {
 
   @override
   void dispose() {
+    _connectivityDebounceTimer?.cancel();
     _connectivitySubscription?.cancel();
     phoneController.dispose();
     passwordController.dispose();

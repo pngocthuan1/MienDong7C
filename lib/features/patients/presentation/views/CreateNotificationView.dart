@@ -1082,7 +1082,7 @@ class _CreateNotificationViewState extends State<CreateNotificationView> with Si
       barrierColor: Colors.black,
       builder: (context) {
         final file = File(attachment.path);
-        final fileExists = file.existsSync();
+        final fileExists = attachment.fileExists;
 
         return Dialog.fullscreen(
           child: Scaffold(
@@ -1255,8 +1255,7 @@ class _CreateNotificationViewState extends State<CreateNotificationView> with Si
   void _showInAppDocumentSummaryDialog(NotificationAttachmentModel doc) {
     final docColor = _getDocColor(doc.extension);
     final docIcon = _getDocIcon(doc.extension);
-    final file = File(doc.path);
-    final fileExists = file.existsSync();
+    final fileExists = doc.fileExists;
 
     showDialog<void>(
       context: context,
@@ -1884,7 +1883,7 @@ class _CreateNotificationViewState extends State<CreateNotificationView> with Si
                     itemBuilder: (context, idx) {
                       final img = _viewModel.imageAttachments[idx];
                       final file = File(img.path);
-                      final fileExists = file.existsSync();
+                      final fileExists = img.fileExists;
 
                       return GestureDetector(
                         onTap: () => _showImagePreviewDialog(img),
@@ -3422,6 +3421,7 @@ class _MediaGridItem {
   final bool isVideo;
   final String? durationText;
   final int sizeBytes;
+  final bool fileExists;
 
   _MediaGridItem({
     required this.id,
@@ -3430,6 +3430,7 @@ class _MediaGridItem {
     required this.isVideo,
     this.durationText,
     required this.sizeBytes,
+    this.fileExists = true,
   });
 }
 
@@ -3486,6 +3487,7 @@ class _InAppMediaGallerySheetState extends State<_InAppMediaGallerySheet> {
                     isVideo: isVid,
                     durationText: isVid ? '00:28' : null,
                     sizeBytes: stat.size > 0 ? stat.size : (isVid ? 1500 * 1024 : 350 * 1024),
+                    fileExists: stat.type != FileSystemEntityType.notFound,
                   ));
                 }
               }
@@ -3521,6 +3523,7 @@ class _InAppMediaGallerySheetState extends State<_InAppMediaGallerySheet> {
             fileName: jpgName,
             isVideo: false,
             sizeBytes: length > 0 ? length : 280 * 1024,
+            fileExists: length > 0,
           );
 
           if (!_allMedia.any((m) => m.path == p.path)) {
@@ -3715,7 +3718,7 @@ class _InAppMediaGallerySheetState extends State<_InAppMediaGallerySheet> {
                         itemBuilder: (context, idx) {
                           final item = _filteredMedia[idx];
                           final isSelected = _selectedIds.contains(item.id);
-                          final fileExists = File(item.path).existsSync();
+                          final fileExists = item.fileExists;
 
                           return GestureDetector(
                             onTap: () => _toggleSelection(item),

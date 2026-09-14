@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:local_auth/local_auth.dart';
@@ -62,7 +63,9 @@ class _LoginViewState extends State<LoginView> with WidgetsBindingObserver {
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
-      debugPrint('[LoginView] App resumed -> Auto re-checking network!');
+      if (kDebugMode) {
+        debugPrint('[LoginView] App resumed -> Auto re-checking network!');
+      }
       _viewModel.initNetworkCheck();
     }
   }
@@ -291,26 +294,21 @@ class _LoginViewState extends State<LoginView> with WidgetsBindingObserver {
     return AuthGradientBackground(
       child: AuthCardShell(
         onLogoTap: _onLogoTapped,
-        child: AnimatedBuilder(
-          animation: _viewModel,
-          builder: (context, _) {
-            return Form(
-              key: _formKey,
-              child: _LoginForm(
-                viewModel: _viewModel,
-                onSubmit: _submit,
-                captchaToken: _captchaToken,
-                onCaptchaVerified: (token) {
-                  _viewModel.captchaToken = token;
-                  setState(() {
-                    _captchaToken = token;
-                  });
-                },
-                onBiometricPressed: _onBiometricLoginPressed,
-                isFaceIdAvailable: _isFaceIdAvailable,
-              ),
-            );
-          },
+        child: Form(
+          key: _formKey,
+          child: _LoginForm(
+            viewModel: _viewModel,
+            onSubmit: _submit,
+            captchaToken: _captchaToken,
+            onCaptchaVerified: (token) {
+              _viewModel.captchaToken = token;
+              setState(() {
+                _captchaToken = token;
+              });
+            },
+            onBiometricPressed: _onBiometricLoginPressed,
+            isFaceIdAvailable: _isFaceIdAvailable,
+          ),
         ),
       ),
     );
@@ -343,34 +341,43 @@ class _LoginForm extends StatelessWidget {
           icon: Icons.lock_person_rounded,
           title: 'Thông tin đăng nhập',
         ),
-        const SizedBox(height: 12),
-        if (viewModel.allowEmployeeRole) ...[
-          AuthRoleSwitcher(
-            selectedRole: viewModel.selectedRole,
-            onChanged: viewModel.updateRole,
-          ),
-          const SizedBox(height: 12),
-        ],
-        AppTextField(
-          controller: viewModel.phoneController,
-          label: viewModel.selectedRole == UserRole.employee
-              ? 'Tên đăng nhập HIS / Số điện thoại'
-              : 'Số điện thoại đăng ký',
-          hintText: viewModel.selectedRole == UserRole.employee
-              ? 'Nhập mã tài khoản HIS (VD: hunglng)'
-              : 'Nhập số điện thoại đăng ký',
-          keyboardType: viewModel.selectedRole == UserRole.customer
-              ? TextInputType.phone
-              : TextInputType.text,
-          inputFormatters: viewModel.selectedRole == UserRole.customer
-              ? [FilteringTextInputFormatter.digitsOnly]
-              : null,
-          prefixIcon: viewModel.selectedRole == UserRole.employee
-              ? Icons.badge_outlined
-              : Icons.phone_outlined,
-          validator: viewModel.checkPhone,
-          textInputAction: TextInputAction.next,
-          onChanged: viewModel.updatePhoneError,
+        ListenableBuilder(
+          listenable: viewModel,
+          builder: (context, _) {
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                if (viewModel.allowEmployeeRole) ...[
+                  AuthRoleSwitcher(
+                    selectedRole: viewModel.selectedRole,
+                    onChanged: viewModel.updateRole,
+                  ),
+                  const SizedBox(height: 12),
+                ],
+                AppTextField(
+                  controller: viewModel.phoneController,
+                  label: viewModel.selectedRole == UserRole.employee
+                      ? 'Tên đăng nhập HIS / Số điện thoại'
+                      : 'Số điện thoại đăng ký',
+                  hintText: viewModel.selectedRole == UserRole.employee
+                      ? 'Nhập mã tài khoản HIS (VD: hunglng)'
+                      : 'Nhập số điện thoại đăng ký',
+                  keyboardType: viewModel.selectedRole == UserRole.customer
+                      ? TextInputType.phone
+                      : TextInputType.text,
+                  inputFormatters: viewModel.selectedRole == UserRole.customer
+                      ? [FilteringTextInputFormatter.digitsOnly]
+                      : null,
+                  prefixIcon: viewModel.selectedRole == UserRole.employee
+                      ? Icons.badge_outlined
+                      : Icons.phone_outlined,
+                  validator: viewModel.checkPhone,
+                  textInputAction: TextInputAction.next,
+                  onChanged: viewModel.updatePhoneError,
+                ),
+              ],
+            );
+          },
         ),
         const SizedBox(height: AppSizes.itemSpacing),
         AppPasswordField(
@@ -392,10 +399,16 @@ class _LoginForm extends StatelessWidget {
             label: const Text('Quên mật khẩu?'),
           ),
         ),
-        if (viewModel.message != null) ...[
-          AuthFeedbackBanner(message: viewModel.message!),
-          const SizedBox(height: AppSizes.itemSpacing),
-        ],
+        ListenableBuilder(
+          listenable: viewModel,
+          builder: (context, _) {
+            if (viewModel.message == null) return const SizedBox.shrink();
+            return Padding(
+              padding: const EdgeInsets.only(bottom: AppSizes.itemSpacing),
+              child: AuthFeedbackBanner(message: viewModel.message!),
+            );
+          },
+        ),
         Center(
           child: CloudflareTurnstile(
             siteKey: Environment.turnstileSiteKey,

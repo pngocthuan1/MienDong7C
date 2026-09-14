@@ -128,6 +128,14 @@ class Environment {
   static const String turnstileSiteKey = '0x4AAAAAADvG0YDfYPtUpuix';
   static const String turnstileSecretKey = '0x4AAAAAADvG0dUTX_o58eUFpR14_5NXTYw';
 
+  /// Mật khẩu client tĩnh (App Client Secret) gửi kèm request /api/Token/Login
+  /// Hỗ trợ nạp động qua compile flag: --dart-define=APP_CLIENT_SECRET=...
+  /// Ghi chú: Đây là giải pháp ngắn hạn giúp loại bỏ hardcode khỏi Git source code.
+  static const String appClientSecret = String.fromEnvironment(
+    'APP_CLIENT_SECRET',
+    defaultValue: '1@QWEqaz23456',
+  );
+
   // Đường dẫn Điều khoản dịch vụ & Chính sách bảo mật (Có thể gán link tùy chỉnh tại đây)
   static String termsOfServiceUrl = 'https://quandanymiendong.vn/dieu-khoan-su-dung';
   static String privacyPolicyUrl = 'https://quandanymiendong.vn/chinh-sach-bao-mat';

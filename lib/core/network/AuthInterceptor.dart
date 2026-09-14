@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:benhvien7c/app/router/RouteNames.dart';
 import 'package:benhvien7c/core/config/environment.dart';
 import 'package:benhvien7c/core/navigation/AppNavigator.dart';
@@ -10,6 +11,7 @@ import 'package:dio/dio.dart';
 class AuthInterceptor extends Interceptor {
   final SecureStorageService _secureStorage;
   final Dio _dio;
+  Completer<String?>? _refreshTokenCompleter;
 
   AuthInterceptor(this._secureStorage, this._dio);
 
@@ -67,11 +69,51 @@ class AuthInterceptor extends Interceptor {
       return handler.next(err);
     }
 
+    // 1. Nếu đang có một request khác thực hiện RefreshToken -> Chờ Completer hoàn tất
+    if (_refreshTokenCompleter != null) {
+      try {
+        final newAccessToken = await _refreshTokenCompleter!.future;
+        if (newAccessToken != null && newAccessToken.isNotEmpty) {
+          final retryOptions = err.requestOptions;
+          retryOptions.headers['Authorization'] = 'Bearer $newAccessToken';
+          final retryResponse = await _dio.fetch(retryOptions);
+          return handler.resolve(retryResponse);
+        } else {
+          return handler.next(err);
+        }
+      } catch (retryErr) {
+        return handler.reject(
+          retryErr is DioException
+              ? retryErr
+              : DioException(requestOptions: err.requestOptions, error: retryErr),
+        );
+      }
+    }
+
     final accessToken = await _secureStorage.getAccessToken();
     final refreshToken = await _secureStorage.getRefreshToken();
 
     if (accessToken == null || refreshToken == null) {
       return handler.next(err);
+    }
+
+    // 2. Kiểm tra nếu request 401 này dùng token cũ hơn token đã lưu trong SecureStorage
+    // (Đã có request khác refresh thành công ngay trước đó khi request này đang in-flight)
+    final sentAuthHeader = err.requestOptions.headers['Authorization']?.toString();
+    final sentToken = sentAuthHeader?.replaceFirst('Bearer ', '').trim();
+    if (sentToken != null && accessToken != sentToken) {
+      final retryOptions = err.requestOptions;
+      retryOptions.headers['Authorization'] = 'Bearer $accessToken';
+      try {
+        final retryResponse = await _dio.fetch(retryOptions);
+        return handler.resolve(retryResponse);
+      } catch (retryErr) {
+        return handler.reject(
+          retryErr is DioException
+              ? retryErr
+              : DioException(requestOptions: err.requestOptions, error: retryErr),
+        );
+      }
     }
 
     final isExpired = await _secureStorage.isRefreshTokenExpired();
@@ -87,6 +129,9 @@ class AuthInterceptor extends Interceptor {
         ),
       );
     }
+
+    final completer = Completer<String?>();
+    _refreshTokenCompleter = completer;
 
     try {
       // Client riêng để gọi RefreshToken, tránh vòng lặp vô chậm interceptor.
@@ -118,7 +163,7 @@ class AuthInterceptor extends Interceptor {
         final newRefreshToken = data?['RefreshToken'];
         final expiresRefreshToken = data?['ExpiresRefreshToken'];
 
-        if (newRefreshToken != null && newRefreshToken != null) {
+        if (newRefreshToken != null && newAccessToken != null) {
           await _secureStorage.saveTokensRecord(
             newAccessToken,
             newRefreshToken,
@@ -129,6 +174,8 @@ class AuthInterceptor extends Interceptor {
             );
           }
 
+          completer.complete(newAccessToken.toString());
+
           final retryOptions = err.requestOptions;
           retryOptions.headers['Authorization'] = 'Bearer $newAccessToken';
 
@@ -138,6 +185,7 @@ class AuthInterceptor extends Interceptor {
       }
 
       // Response 200 nhưng thiếu token mới -> coi như refresh thất bại
+      if (!completer.isCompleted) completer.complete(null);
       await _handleSessionExpiration();
       return handler.reject(
         DioException(
@@ -149,6 +197,7 @@ class AuthInterceptor extends Interceptor {
         ),
       );
     } catch (e) {
+      if (!completer.isCompleted) completer.complete(null);
       await _handleSessionExpiration();
 
       String expiredMessage =
@@ -184,6 +233,8 @@ class AuthInterceptor extends Interceptor {
           type: DioExceptionType.badResponse,
         ),
       );
+    } finally {
+      _refreshTokenCompleter = null;
     }
   }
 }

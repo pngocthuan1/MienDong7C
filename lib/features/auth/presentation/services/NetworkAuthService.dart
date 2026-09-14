@@ -11,7 +11,9 @@ class NetworkAuthService {
   Future<NetworkAuthResult> checkInternalNetwork(NetworkInfoResult info) async {
     try {
       final wifiName = info.ssid ?? '';
-      debugPrint('[NetworkAuthService] Sending CheckMode with Name: "$wifiName", IsVpn: ${info.isVpn}');
+      if (kDebugMode) {
+        debugPrint('[NetworkAuthService] Sending CheckMode with Name: "$wifiName", IsVpn: ${info.isVpn}');
+      }
 
       final payload = {
         'Name': wifiName,
@@ -32,7 +34,9 @@ class NetworkAuthService {
         ),
       );
 
-      debugPrint('[NetworkAuthService] Server response status: ${response.statusCode}, data: ${response.data}');
+      if (kDebugMode) {
+        debugPrint('[NetworkAuthService] Server response status: ${response.statusCode}, data: ${response.data}');
+      }
 
       if (response.statusCode == 200 && response.data != null) {
         final data = response.data!;
@@ -46,7 +50,9 @@ class NetworkAuthService {
         // Cho phép vai trò Nhân viên khi: Server trả về Patient+Staff HOẶC đang bật VPN HOẶC Wi-Fi là "noi bo"
         final isStaffAllowed = isServerStaff || isVpnActive || isNoiBoWifi;
 
-        debugPrint('[NetworkAuthService] modeString: "$modeString", IsVpn: $isVpnActive, SSID: "$wifiName" -> isStaffAllowed: $isStaffAllowed');
+        if (kDebugMode) {
+          debugPrint('[NetworkAuthService] modeString: "$modeString", IsVpn: $isVpnActive, SSID: "$wifiName" -> isStaffAllowed: $isStaffAllowed');
+        }
         return NetworkAuthResult(
           isInternalNetwork: isStaffAllowed,
           allowEmployeeRole: isStaffAllowed,
@@ -55,7 +61,9 @@ class NetworkAuthService {
       }
       return NetworkAuthResult.deny();
     } catch (e, stack) {
-      debugPrint('[NetworkAuthService] Error checking internal network: $e\n$stack');
+      if (kDebugMode) {
+        debugPrint('[NetworkAuthService] Error checking internal network: $e\n$stack');
+      }
       return NetworkAuthResult.deny();
     }
   }

@@ -121,15 +121,27 @@ void main() async {
 
   // Phục hồi session nếu có (giữ đăng nhập khi ứng dụng khởi động lại)
   try {
+    // Tự động di chuyển dữ liệu cá nhân (SĐT, Họ tên, Role) từ SharedPreferences cũ sang SecureStorage
+    await secureStorage.migratePiiFromPreferences(sharedPreferences);
+
     final tokens = await secureStorage.getTokensRecord();
     final isExpired = await secureStorage.isRefreshTokenExpired();
     if (tokens.$1 != null && tokens.$2 != null && !isExpired) {
       final expires = await secureStorage.getExpiresRefreshToken();
       final expiry = _parseExpiry(expires);
 
-      final savedPhone = sharedPreferences.getString('saved_phone') ?? '';
+      final securePhone = await secureStorage.getSavedPhone();
+      final savedPhone = (securePhone != null && securePhone.isNotEmpty)
+          ? securePhone
+          : (sharedPreferences.getString('saved_phone') ?? '');
       final cleanPhone = savedPhone.replaceAll(RegExp(r'\D'), '');
-      String? savedName = cleanPhone.isNotEmpty ? sharedPreferences.getString('full_name_$cleanPhone') : sharedPreferences.getString('saved_full_name');
+
+      final secureName = await secureStorage.getSavedFullName();
+      String? savedName = (secureName != null && secureName.isNotEmpty)
+          ? secureName
+          : (cleanPhone.isNotEmpty
+              ? (await secureStorage.getFullNameForPhone(cleanPhone) ?? sharedPreferences.getString('full_name_$cleanPhone'))
+              : sharedPreferences.getString('saved_full_name'));
 
       if (savedPhone.isNotEmpty) {
         final jsonStr = sharedPreferences.getString('saved_my_personal_profile_$savedPhone');
@@ -144,7 +156,8 @@ void main() async {
         }
       }
 
-      final savedRoleStr = sharedPreferences.getString('saved_role');
+      final secureRole = await secureStorage.getSavedRole();
+      final savedRoleStr = secureRole ?? sharedPreferences.getString('saved_role');
       final role = (savedRoleStr == 'employee') ? UserRole.employee : UserRole.customer;
 
       final displayName = (savedName != null && savedName.trim().isNotEmpty)

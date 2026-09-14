@@ -109,40 +109,40 @@ class _RegisterViewState extends State<RegisterView> {
   Widget build(BuildContext context) {
     return AuthGradientBackground(
       child: AuthCardShell(
-        child: AnimatedBuilder(
-          animation: _viewModel,
-          builder: (context, _) {
-            return Form(
-              key: _formKey,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // 1. Số điện thoại (Đứng đầu tiên)
-                  AppTextField(
-                    controller: _viewModel.phoneController,
-                    label: 'Số điện thoại',
-                    hintText: 'Số điện thoại đăng ký',
-                    keyboardType: TextInputType.phone,
-                    prefixIcon: Icons.phone_outlined,
-                    inputFormatters: AppInputFormatters.phoneNumber,
-                    validator: _viewModel.checkPhone,
-                    autovalidateMode: AutovalidateMode.onUserInteraction,
-                    textInputAction: TextInputAction.next,
-                    onChanged: _viewModel.updatePhoneError,
-                  ),
-                  const SizedBox(height: AppSizes.itemSpacing),
+        child: Form(
+          key: _formKey,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // 1. Số điện thoại (Đứng đầu tiên)
+              AppTextField(
+                controller: _viewModel.phoneController,
+                label: 'Số điện thoại',
+                hintText: 'Số điện thoại đăng ký',
+                keyboardType: TextInputType.phone,
+                prefixIcon: Icons.phone_outlined,
+                inputFormatters: AppInputFormatters.phoneNumber,
+                validator: _viewModel.checkPhone,
+                autovalidateMode: AutovalidateMode.onUserInteraction,
+                textInputAction: TextInputAction.next,
+                onChanged: _viewModel.updatePhoneError,
+              ),
+              const SizedBox(height: AppSizes.itemSpacing),
 
-                  // 2. Mật khẩu
-                  AppPasswordField(
-                    controller: _viewModel.passwordController,
-                    focusNode: _passwordFocusNode,
-                    label: 'Mật khẩu',
-                    hintText: 'Tạo mật khẩu mới',
-                    validator: _viewModel.checkPassword,
-                    textInputAction: TextInputAction.next,
-                    onChanged: (_) => _viewModel.onPasswordChanged(),
-                  ),
-                  AnimatedSwitcher(
+              // 2. Mật khẩu
+              AppPasswordField(
+                controller: _viewModel.passwordController,
+                focusNode: _passwordFocusNode,
+                label: 'Mật khẩu',
+                hintText: 'Tạo mật khẩu mới',
+                validator: _viewModel.checkPassword,
+                textInputAction: TextInputAction.next,
+                onChanged: (_) => _viewModel.onPasswordChanged(),
+              ),
+              ListenableBuilder(
+                listenable: _viewModel,
+                builder: (context, _) {
+                  return AnimatedSwitcher(
                     duration: const Duration(milliseconds: 180),
                     child: _passwordFocusNode.hasFocus
                         ? Padding(
@@ -157,44 +157,52 @@ class _RegisterViewState extends State<RegisterView> {
                         : const SizedBox.shrink(
                             key: ValueKey('register-password-rules-hidden'),
                           ),
-                  ),
-                  const SizedBox(height: AppSizes.itemSpacing),
+                  );
+                },
+              ),
+              const SizedBox(height: AppSizes.itemSpacing),
 
-                  // 3. Nhập lại mật khẩu
-                  AppPasswordField(
-                    controller: _viewModel.confirmPasswordController,
-                    label: 'Nhập lại mật khẩu',
-                    hintText: 'Nhập lại để xác nhận',
-                    validator: _viewModel.checkConfirmPassword,
-                    textInputAction: TextInputAction.next,
-                    onChanged: _viewModel.updateConfirmPasswordError,
-                  ),
-                  const SizedBox(height: AppSizes.itemSpacing),
+              // 3. Nhập lại mật khẩu
+              AppPasswordField(
+                controller: _viewModel.confirmPasswordController,
+                label: 'Nhập lại mật khẩu',
+                hintText: 'Nhập lại để xác nhận',
+                validator: _viewModel.checkConfirmPassword,
+                textInputAction: TextInputAction.next,
+                onChanged: _viewModel.updateConfirmPasswordError,
+              ),
+              const SizedBox(height: AppSizes.itemSpacing),
 
-                  // 4. Họ và tên (Dưới cùng)
-                  AppTextField(
-                    controller: _viewModel.fullNameController,
-                    label: 'Họ và tên',
-                    hintText: 'Nhập họ tên đầy đủ',
-                    prefixIcon: Icons.badge_outlined,
-                    validator: _viewModel.checkFullName,
-                    textInputAction: TextInputAction.done,
-                    onChanged: _viewModel.updateFullNameError,
-                  ),
-                  if (_viewModel.message != null) ...[
-                    const SizedBox(height: AppSizes.itemSpacing),
-                    AuthFeedbackBanner(message: _viewModel.message!),
-                  ],
-                  const SizedBox(height: AppSizes.itemSpacing),
-                  CloudflareTurnstile(
-                    siteKey: Environment.turnstileSiteKey,
-                    onVerified: (token) {
-                      setState(() {
-                        _captchaToken = token;
-                      });
-                    },
-                  ),
-                  const SizedBox(height: 12),
+              // 4. Họ và tên (Dưới cùng)
+              AppTextField(
+                controller: _viewModel.fullNameController,
+                label: 'Họ và tên',
+                hintText: 'Nhập họ tên đầy đủ',
+                prefixIcon: Icons.badge_outlined,
+                validator: _viewModel.checkFullName,
+                textInputAction: TextInputAction.done,
+                onChanged: _viewModel.updateFullNameError,
+              ),
+              ListenableBuilder(
+                listenable: _viewModel,
+                builder: (context, _) {
+                  if (_viewModel.message == null) return const SizedBox.shrink();
+                  return Padding(
+                    padding: const EdgeInsets.only(top: AppSizes.itemSpacing),
+                    child: AuthFeedbackBanner(message: _viewModel.message!),
+                  );
+                },
+              ),
+              const SizedBox(height: AppSizes.itemSpacing),
+              CloudflareTurnstile(
+                siteKey: Environment.turnstileSiteKey,
+                onVerified: (token) {
+                  setState(() {
+                    _captchaToken = token;
+                  });
+                },
+              ),
+              const SizedBox(height: 12),
                   Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
@@ -267,9 +275,7 @@ class _RegisterViewState extends State<RegisterView> {
                   ),
                 ],
               ),
-            );
-          },
-        ),
+            ),
       ),
     );
   }

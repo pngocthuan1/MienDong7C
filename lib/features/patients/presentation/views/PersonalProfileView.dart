@@ -217,10 +217,10 @@ class _PersonalProfileViewState extends State<PersonalProfileView> {
 
       if (draft.fullName.isNotEmpty) {
         AppLocator.sessionStore.updateFullName(draft.fullName);
-        await prefs.setString('saved_full_name', draft.fullName);
+        await AppLocator.secureStorage.saveSavedFullName(draft.fullName);
         final cleanPhone = draft.phoneNumber.replaceAll(RegExp(r'\D'), '');
         if (cleanPhone.isNotEmpty) {
-          await prefs.setString('full_name_$cleanPhone', draft.fullName);
+          await AppLocator.secureStorage.saveFullNameForPhone(cleanPhone, draft.fullName);
         }
       }
 
