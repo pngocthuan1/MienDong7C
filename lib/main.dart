@@ -182,7 +182,8 @@ void main() async {
     debugPrint('Lỗi phục hồi session: $e');
   }
 
-  final String initialRoute = RouteNames.splash;
+  final hasUser = appSessionStore.session != null;
+  final String initialRoute = hasUser ? RouteNames.home : RouteNames.login;
 
   runApp(
     ProviderScope(
