@@ -13,13 +13,15 @@ class _SplashViewState extends State<SplashView> with SingleTickerProviderStateM
   late AnimationController _controller;
   late Animation<double> _scaleAnimation;
   late Animation<double> _fadeAnimation;
+  bool _hasNavigated = false;
 
   @override
   void initState() {
     super.initState();
+    // 0.6s hiển thị logo nhanh gọn, mượt mà và chuyên nghiệp
     _controller = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 900),
+      duration: const Duration(milliseconds: 600),
     );
 
     _scaleAnimation = Tween<double>(begin: 0.88, end: 1.0).animate(
@@ -44,7 +46,8 @@ class _SplashViewState extends State<SplashView> with SingleTickerProviderStateM
   }
 
   void _navigateToNextScreen() {
-    if (!mounted) return;
+    if (!mounted || _hasNavigated) return;
+    _hasNavigated = true;
 
     final hasUser = AppSessionStore.instance.currentUser != null;
     final nextRoute = hasUser ? RouteNames.home : RouteNames.login;
@@ -62,7 +65,10 @@ class _SplashViewState extends State<SplashView> with SingleTickerProviderStateM
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.white,
-      body: Center(
+      body: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: _navigateToNextScreen, // Cho phép chạm nhẹ để vào thẳng ngay lập tức
+        child: Center(
         child: FadeTransition(
           opacity: _fadeAnimation,
           child: ScaleTransition(
@@ -105,6 +111,7 @@ class _SplashViewState extends State<SplashView> with SingleTickerProviderStateM
           ),
         ),
       ),
-    );
-  }
+    ),
+  );
+}
 }

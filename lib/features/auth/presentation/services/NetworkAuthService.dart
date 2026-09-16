@@ -41,21 +41,30 @@ class NetworkAuthService {
       if (response.statusCode == 200 && response.data != null) {
         final data = response.data!;
         final rawDataVal = data['Data'] ?? data['data'];
-        final modeString = rawDataVal?.toString() ?? '';
 
-        final bool isServerStaff = modeString.contains('Staff') || modeString.contains('Employee') || modeString.contains('Admin');
-        final bool isVpnActive = info.isVpn;
-        final bool isNoiBoWifi = wifiName.toLowerCase().contains('noi bo') || wifiName.toLowerCase().contains('noibo');
-
-        // Cho phép vai trò Nhân viên khi: Server trả về Patient+Staff HOẶC đang bật VPN HOẶC Wi-Fi là "noi bo"
-        final isStaffAllowed = isServerStaff || isVpnActive || isNoiBoWifi;
+        // BẢO MẬT TUYỆT ĐỐI: Quyền truy cập nội bộ CHỈ do Server quyết định.
+        // Tuyệt đối không cho phép Client tự ý override bằng tên Wi-Fi (SSID) tự đặt
+        // hoặc cờ VPN cục bộ của thiết bị.
+        bool isServerStaff = false;
+        if (rawDataVal is Map<String, dynamic>) {
+          isServerStaff = rawDataVal['allowEmployeeRole'] == true ||
+              rawDataVal['isInternalNetwork'] == true ||
+              (rawDataVal['mode']?.toString().contains('Staff') ?? false) ||
+              (rawDataVal['mode']?.toString().contains('Employee') ?? false);
+        } else {
+          final modeString = rawDataVal?.toString() ?? '';
+          isServerStaff = modeString.contains('Staff') ||
+              modeString.contains('Employee') ||
+              modeString.contains('Admin');
+        }
 
         if (kDebugMode) {
-          debugPrint('[NetworkAuthService] modeString: "$modeString", IsVpn: $isVpnActive, SSID: "$wifiName" -> isStaffAllowed: $isStaffAllowed');
+          debugPrint('[NetworkAuthService] Server verification -> isServerStaff: $isServerStaff');
         }
+
         return NetworkAuthResult(
-          isInternalNetwork: isStaffAllowed,
-          allowEmployeeRole: isStaffAllowed,
+          isInternalNetwork: isServerStaff,
+          allowEmployeeRole: isServerStaff,
           verifiedBy: 'server_appinfo_checkmode',
         );
       }

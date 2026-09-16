@@ -130,15 +130,23 @@ class _SearchablePickerModalState<T> extends State<SearchablePickerModal<T>> {
 
   @override
   Widget build(BuildContext context) {
-    final maxHeight = MediaQuery.of(context).size.height * 0.82;
+    final mediaQuery = MediaQuery.of(context);
+    final bottomInset = mediaQuery.viewInsets.bottom;
+    final availableHeight = mediaQuery.size.height - bottomInset;
+    final maxHeight = (availableHeight * 0.88).clamp(200.0, mediaQuery.size.height * 0.88);
 
-    return SafeArea(
-      child: Container(
-        constraints: BoxConstraints(maxHeight: maxHeight),
-        decoration: const BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-        ),
+    return AnimatedPadding(
+      padding: EdgeInsets.only(bottom: bottomInset),
+      duration: const Duration(milliseconds: 100),
+      curve: Curves.easeOut,
+      child: SafeArea(
+        top: false,
+        child: Container(
+          constraints: BoxConstraints(maxHeight: maxHeight),
+          decoration: const BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+          ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -259,6 +267,7 @@ class _SearchablePickerModalState<T> extends State<SearchablePickerModal<T>> {
           ],
         ),
       ),
-    );
-  }
+    ),
+  );
+}
 }

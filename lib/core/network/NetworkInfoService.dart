@@ -18,8 +18,8 @@ class NetworkInfoService {
     final isAndroid = !kIsWeb && Platform.isAndroid;
     final platformName = kIsWeb ? 'web' : (isAndroid ? 'android' : 'ios');
 
-    // If not connected to Wi-Fi, return early without prompting location permissions
-    if (connectionType != ConnectionType.wifi) {
+    // If not connected to Wi-Fi and not VPN, return early without prompting location permissions
+    if (connectionType != ConnectionType.wifi && !isVpn) {
       return NetworkInfoResult(
         locationPermissionGranted: false,
         locationServiceEnabled: false,
@@ -29,10 +29,17 @@ class NetworkInfoService {
       );
     }
 
-    // Silent check: Do not popup location permission dialog
+    // Yêu cầu cấp quyền đọc thông tin Wi-Fi (SSID) và mạng
     bool isPermissionGranted = false;
+    bool isLocationServiceEnabled = true;
     try {
-      final status = await Permission.locationWhenInUse.status;
+      if (isAndroid) {
+        isLocationServiceEnabled = await Permission.location.serviceStatus.isEnabled;
+      }
+      var status = await Permission.locationWhenInUse.status;
+      if (!status.isGranted && !status.isPermanentlyDenied) {
+        status = await Permission.locationWhenInUse.request();
+      }
       isPermissionGranted = status.isGranted;
     } catch (_) {}
 
@@ -76,7 +83,7 @@ class NetworkInfoService {
 
     return NetworkInfoResult(
       locationPermissionGranted: isPermissionGranted,
-      locationServiceEnabled: true,
+      locationServiceEnabled: isLocationServiceEnabled,
       ssid: ssid,
       bssid: bssid,
       localIp: localIp,

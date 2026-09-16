@@ -68,5 +68,7 @@
 	</array>
 	<key>NSFaceIDUsageDescription</key>
 	<string>Ứng dụng cần quyền sinh trắc học để đăng nhập tài khoản nhanh chóng.</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>Ứng dụng cần quyền vị trí để xác định kết nối mạng Wi-Fi nội bộ của bệnh viện.</string>
 </dict>
 </plist>
