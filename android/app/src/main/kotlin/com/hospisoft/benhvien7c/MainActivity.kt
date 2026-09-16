@@ -243,16 +243,28 @@ class MainActivity : FlutterFragmentActivity() {
 
                     contentValues.clear()
                     contentValues.put(android.provider.MediaStore.MediaColumns.IS_PENDING, 0)
-                    resolver.update(uri, null, null)
+                    resolver.update(uri, contentValues, null, null)
+
+                    var actualPath = targetFile.absolutePath
+                    try {
+                        resolver.query(uri, arrayOf(android.provider.MediaStore.MediaColumns.DATA), null, null, null)?.use { cursor ->
+                            if (cursor.moveToFirst()) {
+                                val idx = cursor.getColumnIndex(android.provider.MediaStore.MediaColumns.DATA)
+                                if (idx != -1) {
+                                    actualPath = cursor.getString(idx) ?: targetFile.absolutePath
+                                }
+                            }
+                        }
+                    } catch (e: Exception) {}
 
                     android.media.MediaScannerConnection.scanFile(
                         applicationContext,
-                        arrayOf(targetFile.absolutePath),
+                        arrayOf(actualPath),
                         arrayOf(mimeType),
                         null
                     )
 
-                    result.success(targetFile.absolutePath)
+                    result.success(actualPath)
                     return
                 }
             }

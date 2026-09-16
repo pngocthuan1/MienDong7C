@@ -1071,17 +1071,19 @@ class _InAppDocxDetailModalState extends State<_InAppDocxDetailModal> {
             }
           }
         } catch (_) {
-          // Fallback parser for binary .doc (Word 97-2003) files
-          final decodedText = utf8.decode(bytes, allowMalformed: true);
-          final textMatches = RegExp(r'[\wàáảãạâầấẩẫậăằắẳẵặèéẻẽẹêềếểễệìíỉĩịòóỏõọôồốổỗộơờớởỡợùúủũụưừứửữựỳýỷỹỵđÀÁẢÃẠÂẦẤẨẪẬĂẰẮẲẴẶÈÉẺẼẸÊỀẾỂỄỆÌÍỈĨỊÒÓỎÕỌÔỒỐỔỖỘƠỜỚỞỠỢÙÚỦŨỤƯỪỨỬỮỰỲÝỶỸỴĐ\s\.,;:!?\-\(\)\%\$\/\\]{4,}')
-              .allMatches(decodedText);
-          final List<_DocxNode> docNodes = [];
-          for (final m in textMatches) {
-            final str = m.group(0)?.trim() ?? '';
-            if (str.length >= 4 && !str.contains('Microsoft') && !str.contains('Word.Document') && !str.contains('Root Entry')) {
-              docNodes.add(_DocxTextNode(str, isHeader: str.length < 50 && str == str.toUpperCase()));
-            }
+          // Fallback parser cho tệp nhị phân .doc (Word 97-2003 / OLE2)
+          final docNodes = _extractDocNodesFromBinary(bytes);
+          if (docNodes.isNotEmpty) {
+            setState(() {
+              _nodes = docNodes;
+              _isLoading = false;
+            });
+            return;
           }
+        }
+
+        if (_nodes.isEmpty) {
+          final docNodes = _extractDocNodesFromBinary(bytes);
           if (docNodes.isNotEmpty) {
             setState(() {
               _nodes = docNodes;
@@ -1104,6 +1106,68 @@ class _InAppDocxDetailModalState extends State<_InAppDocxDetailModal> {
       ];
       _isLoading = false;
     });
+  }
+
+  List<_DocxNode> _extractDocNodesFromBinary(Uint8List bytes) {
+    final List<String> paragraphs = [];
+    final regex = RegExp(
+      r'[\wàáảãạâầấẩẫậăằắẳẵặèéẻẽẹêềếểễệìíỉĩịòóỏõọôồốổỗộơờớởỡợùúủũụưừứửữựỳýỷỹỵđÀÁẢÃẠÂẦẤẨẪẬĂẰẮẲẴẶÈÉẺẼẸÊỀẾỂỄỆÌÍỈĨỊÒÓỎÕỌÔỒỐỔỖỘƠỜỚỞỠỢÙÚỦŨỤƯỪỨỬỮỰỲÝỶỸỴĐ0-9\s\.,;:!?\-\(\)\%\$\/\\]{6,}',
+    );
+
+    // 1. Quét UTF-16LE ở offset 0 và 1 (Đặc thù tệp Word 97-2003 / OLE lưu text dạng 16-bit LE)
+    for (int offset = 0; offset < 2; offset++) {
+      final length = (bytes.length - offset) ~/ 2;
+      if (length <= 0) continue;
+      final units = List<int>.generate(length, (i) {
+        final pos = offset + i * 2;
+        return bytes[pos] | (bytes[pos + 1] << 8);
+      });
+      final decoded = String.fromCharCodes(units);
+      final matches = regex.allMatches(decoded);
+      for (final m in matches) {
+        final str = m.group(0)?.trim() ?? '';
+        if (str.length >= 6 &&
+            !str.contains('Microsoft') &&
+            !str.contains('Word.Document') &&
+            !str.contains('Root Entry') &&
+            !str.contains('CompObj') &&
+            !paragraphs.contains(str)) {
+          paragraphs.add(str);
+        }
+      }
+    }
+
+    // 2. Dự phòng quét 8-bit text (UTF-8 / Latin / ANSI)
+    if (paragraphs.isEmpty) {
+      final latin = String.fromCharCodes(bytes);
+      final matches = regex.allMatches(latin);
+      for (final m in matches) {
+        final str = m.group(0)?.trim() ?? '';
+        if (str.length >= 6 &&
+            !str.contains('Microsoft') &&
+            !str.contains('Word.Document') &&
+            !str.contains('Root Entry') &&
+            !str.contains('CompObj') &&
+            !paragraphs.contains(str)) {
+          paragraphs.add(str);
+        }
+      }
+    }
+
+    final List<_DocxNode> nodes = [];
+    for (final p in paragraphs) {
+      final isHeader = p.length < 80 &&
+          (p == p.toUpperCase() ||
+              p.startsWith('CỘNG HÒA') ||
+              p.startsWith('BỆNH VIỆN') ||
+              p.startsWith('THÔNG BÁO') ||
+              p.startsWith('KẾ HOẠCH') ||
+              p.startsWith('Kính gửi') ||
+              p.startsWith('ỦY BAN'));
+      nodes.add(_DocxTextNode(p, isHeader: isHeader));
+    }
+
+    return nodes;
   }
 
   @override
