@@ -122,6 +122,7 @@ void main() async {
     portalRepo: portalRepository,
     session: appSessionStore,
     dio: dioClient,
+    prefs: sharedPreferences,
   );
 
   // 4. Phục hồi session nếu có (giữ đăng nhập khi ứng dụng khởi động lại)

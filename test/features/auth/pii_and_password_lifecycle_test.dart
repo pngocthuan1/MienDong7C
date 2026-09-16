@@ -42,8 +42,10 @@ void main() {
   group('Đợt 3: PII Security & Password Memory Lifecycle', () {
     test('OtpViewModel: Password được GIỮ LẠI khi nhập sai OTP để retry, và CHỈ giải phóng khi signUp thành công', () async {
       FlutterSecureStorage.setMockInitialValues({});
+      SharedPreferences.setMockInitialValues({});
       final mockRepo = MockAuthRepo();
       final secureStorage = SecureStorageService();
+      final prefs = await SharedPreferences.getInstance();
 
       AppLocator.init(
         repository: mockRepo,
@@ -51,6 +53,7 @@ void main() {
         portalRepo: FakePortalRepository(),
         session: AppSessionStore.instance,
         dio: DioClient(secureStorage: secureStorage),
+        prefs: prefs,
       );
 
       final viewModel = OtpViewModel(

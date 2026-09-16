@@ -1,5 +1,7 @@
+import 'dart:convert';
 import 'package:benhvien7c/core/commands/command.dart';
 import 'package:benhvien7c/core/commands/result.dart';
+import 'package:benhvien7c/core/dio/AppLocator.dart';
 import 'package:benhvien7c/features/patients/domain/entities/MedicalTicketEntity.dart';
 import 'package:benhvien7c/features/patients/presentation/viewmodels/BasePortalViewModel.dart';
 
@@ -11,6 +13,8 @@ class AppointmentBookingViewModel extends BasePortalViewModel {
     super.sessionStore,
   ) {
     loadTicketsCommand = Command0<List<MedicalTicketEntity>>(_loadTickets);
+    // Stale-While-Revalidate: hiển thị cache ngay → fetch server ngầm để cập nhật
+    _loadCachedTickets();
     loadTicketsCommand.execute();
   }
 
@@ -25,6 +29,27 @@ class AppointmentBookingViewModel extends BasePortalViewModel {
 
   bool _isMutating = false;
   bool get isMutating => _isMutating;
+
+  static const String _cacheKeyPrefix = 'cached_tickets_v1_';
+
+  /// Đọc cache tickets từ SharedPreferences sync (không await).
+  /// Gọi ngay trong constructor → người dùng thấy danh sách ngay lập tức
+  /// trong khi fetch server đang chạy ngầm.
+  void _loadCachedTickets() {
+    try {
+      final phone = session.user.phoneNumber;
+      if (phone.isEmpty) return;
+      final prefs = AppLocator.sharedPreferences;
+      final raw = prefs.getString('$_cacheKeyPrefix$phone');
+      if (raw == null || raw.isEmpty) return;
+      final list = jsonDecode(raw) as List<dynamic>;
+      allTickets = list
+          .map((e) => MedicalTicketEntity.fromJson(e as Map<String, dynamic>))
+          .toList();
+      // Không gọi notifyListeners() ở đây — constructor chưa xong,
+      // frame đầu tiên sẽ build với allTickets đã có sẵn dữ liệu
+    } catch (_) {}
+  }
 
   void setSearchQuery(String query) {
     _searchQuery = query.trim().toLowerCase();

@@ -4,6 +4,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:intl/intl.dart';
 import 'package:benhvien7c/core/commands/command.dart';
 import 'package:benhvien7c/core/commands/result.dart';
+import 'package:benhvien7c/core/dio/AppLocator.dart';
 import 'package:benhvien7c/core/session/AppSessionStore.dart';
 import 'package:benhvien7c/core/utils/Validators.dart';
 import 'package:benhvien7c/core/utils/CccdParserHelper.dart';
@@ -24,6 +25,11 @@ class PatientProfileCreateViewModel extends BasePortalViewModel {
     continueCommand = Command0<MedicalTicketEntity>(_continueFlow);
     loadProfilesCommand = Command0<List<PatientProfileDraftEntity>>(_loadProfiles);
     _initAddressData();
+    // Đọc thông tin cá nhân đã lưu NGAY LẬP TỨC (sync, không await) từ
+    // SharedPreferences đã sẵn sàng trong AppLocator — điền vào form trước
+    // frame đầu tiên, loại bỏ hoàn toàn delay ~1 giây
+    _loadPersonalProfileSync();
+    // Load danh sách hồ sơ đã lưu (async) và đồng bộ SharedPreferences → SecureStorage
     loadProfilesCommand.execute();
   }
 
@@ -87,6 +93,36 @@ class PatientProfileCreateViewModel extends BasePortalViewModel {
     await AddressHelper.instance.init();
     provinces = AddressHelper.instance.provinces;
     notifyListeners();
+  }
+
+  /// Đọc thông tin hồ sơ cá nhân đã lưu ĐỒNG BỘ (sync) từ SharedPreferences
+  /// đã sẵn sàng trong AppLocator. Không cần await — gọi trong constructor để
+  /// điền form trước frame đầu tiên, loại bỏ hoàn toàn delay ~1 giây.
+  void _loadPersonalProfileSync() {
+    try {
+      final username = session.user.phoneNumber;
+      if (username.isEmpty) return;
+      final prefs = AppLocator.sharedPreferences;
+      final jsonStr = prefs.getString('saved_my_personal_profile_$username');
+      if (jsonStr == null || jsonStr.isEmpty) return;
+      final draft = PatientProfileDraftEntity.fromJson(jsonDecode(jsonStr));
+      if (draft.fullName.isNotEmpty) fullNameController.text = draft.fullName;
+      if (draft.dateOfBirth != null && draft.dateOfBirth!.isNotEmpty) {
+        dobController.text = draft.dateOfBirth!;
+      }
+      if (draft.birthYear.isNotEmpty) birthYearController.text = draft.birthYear;
+      if (draft.phoneNumber.isNotEmpty) phoneController.text = draft.phoneNumber;
+      if (draft.identifier.isNotEmpty) identifierController.text = draft.identifier;
+      if (draft.cccdIssueDate != null && draft.cccdIssueDate!.isNotEmpty) {
+        cccdIssueDateController.text = draft.cccdIssueDate!;
+      }
+      if (draft.gender.isNotEmpty) _gender = draft.gender;
+      if (draft.province != null) provinceController.text = draft.province!;
+      if (draft.ward != null) wardController.text = draft.ward!;
+      if (draft.clinic != null) clinicController.text = draft.clinic!;
+    } catch (_) {
+      // Bỏ qua lỗi parse — _loadProfiles() async vẫn sẽ thử lại
+    }
   }
 
   void selectProvince(String name) {

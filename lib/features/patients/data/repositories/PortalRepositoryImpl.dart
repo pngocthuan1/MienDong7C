@@ -477,8 +477,23 @@ class PortalRepositoryImpl implements PortalRepository {
     }
   }
 
+  // --- Ticket Cache (Stale-While-Revalidate) ---
+
+  static const String _ticketsCacheKeyPrefix = 'cached_tickets_v1_';
+
+
+  /// Ghi danh sách ticket vào cache SharedPreferences (fire-and-forget)
+  void _writeTicketsCache(String phone, List<MedicalTicketEntity> tickets) {
+    try {
+      final prefs = AppLocator.sharedPreferences;
+      final encoded = jsonEncode(tickets.map((t) => t.toJson()).toList());
+      prefs.setString('$_ticketsCacheKeyPrefix$phone', encoded);
+    } catch (_) {}
+  }
+
   @override
   Future<Result<List<MedicalTicketEntity>>> loadMedicalTickets(UserRole role) async {
+    final phone = _getHisUsername();
     try {
       final remote = _remoteDatasource ?? DatLichKhamRemoteDataSource(AppLocator.dioClient);
       final listSoKham = await remote.getListSoKham();
@@ -511,6 +526,10 @@ class PortalRepositoryImpl implements PortalRepository {
           dangKyGiup: dto.dangKyDum,
         );
       }).toList();
+      // Ghi cache mới (fire-and-forget, không block UI)
+      if (phone.isNotEmpty) {
+        _writeTicketsCache(phone, entities);
+      }
       return Ok(entities);
     } on Exception catch (exception) {
       return Error(exception, exception.toString());
