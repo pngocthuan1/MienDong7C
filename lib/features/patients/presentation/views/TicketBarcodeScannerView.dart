@@ -12,7 +12,11 @@ class _TicketBarcodeScannerViewState extends State<TicketBarcodeScannerView> {
   final MobileScannerController _scannerController = MobileScannerController(
     detectionSpeed: DetectionSpeed.noDuplicates,
     facing: CameraFacing.back,
-    formats: const [BarcodeFormat.code39, BarcodeFormat.code128], // Chỉ quét mã vạch Barcode dẹt phổ biến tại bệnh viện
+    formats: const [
+      BarcodeFormat.code39,
+      BarcodeFormat.code128,
+      BarcodeFormat.qrCode,
+    ], // Hỗ trợ cả Barcode dẹt chuẩn bệnh viện và QR Code
     cameraResolution: const Size(1920, 1080),
   );
 

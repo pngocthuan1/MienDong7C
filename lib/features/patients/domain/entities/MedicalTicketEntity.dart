@@ -59,6 +59,13 @@ class MedicalTicketEntity {
   final bool isDeleted;
   final bool _isPastExplicit;
 
+  bool get isToday {
+    final d = parsedTicketDate;
+    if (d == null) return false;
+    final now = DateTime.now();
+    return d.year == now.year && d.month == now.month && d.day == now.day;
+  }
+
   bool get isPast {
     if (_isPastExplicit) return true;
     try {

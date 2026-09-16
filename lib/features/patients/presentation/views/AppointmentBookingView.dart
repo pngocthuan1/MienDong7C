@@ -9,6 +9,7 @@ import 'package:benhvien7c/features/patients/domain/entities/NotificationSummary
 import 'package:benhvien7c/features/patients/presentation/viewmodels/AppointmentBookingViewModel.dart';
 import 'package:benhvien7c/features/patients/presentation/widgets/PortalDrawer.dart';
 import 'package:benhvien7c/features/patients/presentation/views/TicketBarcodeScannerView.dart';
+import 'package:benhvien7c/features/patients/presentation/widgets/TicketPickerBottomSheet.dart';
 
 class AppointmentBookingView extends StatefulWidget {
   const AppointmentBookingView({super.key});
@@ -361,6 +362,16 @@ class _AppointmentBookingViewState extends State<AppointmentBookingView> {
     );
   }
 
+  Future<void> _openTicketDetail(MedicalTicketEntity ticket) async {
+    await AppNavigator.pushNamed(
+      context,
+      RouteNames.medicalTicket,
+      arguments: MedicalTicketViewArgs(ticket: ticket),
+    );
+    if (!mounted) return;
+    _viewModel.loadTicketsCommand.execute();
+  }
+
   Future<void> _scanTicketBarcode() async {
     final scannedCode = await Navigator.of(context).push<String>(
       MaterialPageRoute(
@@ -368,29 +379,67 @@ class _AppointmentBookingViewState extends State<AppointmentBookingView> {
       ),
     );
 
-    if (scannedCode == null || !mounted) return;
+    if (scannedCode == null || scannedCode.trim().isEmpty || !mounted) return;
+    final cleanCode = scannedCode.trim();
 
-    final matchingTickets = _viewModel.allTickets.where(
-      (t) => t.patientCode.trim() == scannedCode.trim(),
-    ).toList();
+    // 1. Khớp chính xác ID phiếu (ticket.id) nếu mã quét là mã phiếu
+    final directIdMatches = _viewModel.allTickets
+        .where((t) => !t.isDeleted && t.id != null && t.id!.trim() == cleanCode)
+        .toList();
+    if (directIdMatches.isNotEmpty) {
+      await _openTicketDetail(directIdMatches.first);
+      return;
+    }
 
-    if (matchingTickets.isNotEmpty) {
-      final ticket = matchingTickets.first;
-      await AppNavigator.pushNamed(
-        context,
-        RouteNames.medicalTicket,
-        arguments: MedicalTicketViewArgs(ticket: ticket),
-      );
-      if (!mounted) return;
-      _viewModel.loadTicketsCommand.execute();
-    } else {
+    // 2. Lọc danh sách phiếu chưa xóa theo Mã bệnh nhân (patientCode)
+    final matchingTickets = _viewModel.allTickets
+        .where((t) => !t.isDeleted && t.patientCode.trim() == cleanCode)
+        .toList();
+
+    if (matchingTickets.isEmpty) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Không tìm thấy phiếu khám nào khớp với Mã BN: $scannedCode'),
+          content: Text('Không tìm thấy phiếu khám nào khớp với mã: $cleanCode'),
           backgroundColor: Colors.redAccent,
         ),
       );
+      return;
+    }
+
+    // Sắp xếp các phiếu: ngày khám gần nhất/mới nhất lên đầu
+    matchingTickets.sort((a, b) {
+      final dateA = a.parsedTicketDate ?? DateTime(1970);
+      final dateB = b.parsedTicketDate ?? DateTime(1970);
+      return dateB.compareTo(dateA);
+    });
+
+    // Nếu chỉ có đúng 1 phiếu duy nhất -> Mở thẳng luôn (không cần hỏi)
+    if (matchingTickets.length == 1) {
+      await _openTicketDetail(matchingTickets.first);
+      return;
+    }
+
+    // Nếu có từ 2 phiếu trở lên: Kiểm tra các phiếu của ngày hôm nay
+    final todayTickets = matchingTickets.where((t) => t.isToday).toList();
+
+    // Nếu đúng 1 phiếu hôm nay -> Mở thẳng luôn (Tốc độ tối đa cho trường hợp phổ biến nhất)
+    if (todayTickets.length == 1) {
+      await _openTicketDetail(todayTickets.first);
+      return;
+    }
+
+    // Nếu có >= 2 phiếu hôm nay HOẶC 0 phiếu hôm nay: Hiện Bottom Sheet để người dùng/nhân viên chọn
+    if (!mounted) return;
+    final selectedTicket = await TicketPickerBottomSheet.show(
+      context: context,
+      patientCode: cleanCode,
+      allTickets: matchingTickets,
+      todayTickets: todayTickets,
+    );
+
+    if (selectedTicket != null && mounted) {
+      await _openTicketDetail(selectedTicket);
     }
   }
 

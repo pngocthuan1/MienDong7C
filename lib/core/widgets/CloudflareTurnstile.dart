@@ -103,7 +103,8 @@ class _CloudflareTurnstileState extends State<CloudflareTurnstile> {
           },
         );
 
-      final htmlContent = '''
+      final htmlContent =
+          '''
 <!DOCTYPE html>
 <html>
   <head>
@@ -152,10 +153,7 @@ class _CloudflareTurnstileState extends State<CloudflareTurnstile> {
 </html>
 ''';
 
-      controller.loadHtmlString(
-        htmlContent,
-        baseUrl: 'https://benhvien7c.vn',
-      );
+      controller.loadHtmlString(htmlContent, baseUrl: 'https://benhvien7c.vn');
 
       setState(() {
         _webViewController = controller;
@@ -183,7 +181,9 @@ class _CloudflareTurnstileState extends State<CloudflareTurnstile> {
           _isSuccess = true;
           _isWebviewFailed = true;
         });
-        widget.onVerified('cf-token-mock-${DateTime.now().millisecondsSinceEpoch}');
+        widget.onVerified(
+          'cf-token-mock-${DateTime.now().millisecondsSinceEpoch}',
+        );
       }
     });
   }
@@ -199,14 +199,18 @@ class _CloudflareTurnstileState extends State<CloudflareTurnstile> {
           color: _isLoading
               ? const Color(0xFFE2E8F0)
               : widget.simulateBot
-                  ? const Color(0xFFFCA5A5)
-                  : const Color(0xFFE2E8F0),
+              ? const Color(0xFFFCA5A5)
+              : const Color(0xFFE2E8F0),
           width: 1,
         ),
         borderRadius: BorderRadius.circular(12),
       ),
       clipBehavior: Clip.antiAlias,
-      child: _webViewController != null && !_isSuccess && !widget.simulateBot && !_isWebviewFailed
+      child:
+          _webViewController != null &&
+              !_isSuccess &&
+              !widget.simulateBot &&
+              !_isWebviewFailed
           ? WebViewWidget(controller: _webViewController!)
           : Padding(
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
@@ -223,20 +227,22 @@ class _CloudflareTurnstileState extends State<CloudflareTurnstile> {
                               height: 18,
                               child: CircularProgressIndicator(
                                 strokeWidth: 2.0,
-                                valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF1976D2)),
+                                valueColor: AlwaysStoppedAnimation<Color>(
+                                  Color(0xFF1976D2),
+                                ),
                               ),
                             )
                           : widget.simulateBot
-                              ? const Icon(
-                                  Icons.cancel_rounded,
-                                  color: Color(0xFFDC2626),
-                                  size: 26,
-                                )
-                              : const Icon(
-                                  Icons.check_circle_rounded,
-                                  color: Color(0xFF22C55E),
-                                  size: 26,
-                                ),
+                          ? const Icon(
+                              Icons.cancel_rounded,
+                              color: Color(0xFFDC2626),
+                              size: 26,
+                            )
+                          : const Icon(
+                              Icons.check_circle_rounded,
+                              color: Color(0xFF22C55E),
+                              size: 26,
+                            ),
                     ),
                   ),
                   const SizedBox(width: 8),
@@ -250,8 +256,8 @@ class _CloudflareTurnstileState extends State<CloudflareTurnstile> {
                           _isLoading
                               ? 'Đang nạp Cloudflare Turnstile...'
                               : widget.simulateBot
-                                  ? 'Xác thực thất bại (Bot)'
-                                  : 'Xác minh thành công',
+                              ? 'Xác thực thất bại (Bot)'
+                              : 'Xác minh thành công',
                           maxLines: 2,
                           overflow: TextOverflow.ellipsis,
                           style: TextStyle(
@@ -260,8 +266,8 @@ class _CloudflareTurnstileState extends State<CloudflareTurnstile> {
                             color: _isLoading
                                 ? const Color(0xFF475569)
                                 : widget.simulateBot
-                                    ? const Color(0xFFDC2626)
-                                    : const Color(0xFF15803D),
+                                ? const Color(0xFFDC2626)
+                                : const Color(0xFF15803D),
                           ),
                         ),
                         if (_isLoading)
@@ -315,10 +321,7 @@ class _CloudflareTurnstileState extends State<CloudflareTurnstile> {
                       const SizedBox(height: 2),
                       const Text(
                         'Bảo mật Cloudflare',
-                        style: TextStyle(
-                          fontSize: 9,
-                          color: Color(0xFF94A3B8),
-                        ),
+                        style: TextStyle(fontSize: 9, color: Color(0xFF94A3B8)),
                       ),
                     ],
                   ),
