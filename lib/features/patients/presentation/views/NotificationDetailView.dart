@@ -1,19 +1,17 @@
 import 'dart:io';
 import 'dart:convert';
+import 'dart:async';
 import 'package:archive/archive.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:benhvien7c/core/services/DocumentCacheService.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_pdfview/flutter_pdfview.dart';
-import 'package:dio/dio.dart';
-import 'package:path_provider/path_provider.dart';
-import 'package:url_launcher/url_launcher.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 import 'package:benhvien7c/app/router/RouteNames.dart';
 import 'package:benhvien7c/core/dio/AppLocator.dart';
 import 'package:benhvien7c/features/patients/domain/entities/NotificationItemEntity.dart';
-import 'package:benhvien7c/features/patients/domain/entities/NotificationReadStatusEntity.dart';
 import 'package:benhvien7c/features/patients/presentation/viewmodels/NotificationViewModel.dart';
 import 'package:benhvien7c/core/session/AppSessionStore.dart';
 
@@ -34,7 +32,8 @@ class _NotificationDetailViewState extends State<NotificationDetailView> {
   late NotificationItemEntity _item;
 
   bool get _isSender => AppSessionStore.instance.currentUser?.fullName == _item.senderName;
-  bool _showReadListOnly = true; // Tab filter: true = show read, false = show unread
+  final Set<String> _downloadingIds = {};
+  final Set<String> _cachedNotifIds = {};
 
   @override
   void initState() {
@@ -52,19 +51,63 @@ class _NotificationDetailViewState extends State<NotificationDetailView> {
     _prefetchAttachmentFile(_item);
   }
 
-  void _prefetchAttachmentFile(NotificationItemEntity item) async {
+  void _prefetchAttachmentFile(NotificationItemEntity item) {
     final fileUrl = item.attachmentPath;
     final fileName = item.attachmentName;
-    if (fileUrl == null || fileUrl.isEmpty || fileName == null || fileName.isEmpty) return;
-    if (!fileUrl.startsWith('http://') && !fileUrl.startsWith('https://')) return;
 
-    try {
-      final tempDir = await getTemporaryDirectory();
-      final targetFile = File('${tempDir.path}/$fileName');
-      if (!targetFile.existsSync() || targetFile.lengthSync() == 0) {
-        await AppLocator.dioClient.dio.download(fileUrl, targetFile.path);
+    // 1. Tải ngầm file đính kèm chính (PDF, Word, Excel...) qua DocumentCacheService
+    if (fileUrl != null && fileUrl.isNotEmpty && fileName != null && fileName.isNotEmpty) {
+      if (fileUrl.startsWith('http://') || fileUrl.startsWith('https://')) {
+        // Kiểm tra xem đã có sẵn trong cache từ phiên trước chưa
+        DocumentCacheService.instance.getCachedFile(
+          notifId: item.id,
+          fileName: fileName,
+          fileUrl: fileUrl,
+        ).then((cached) {
+          if (cached != null && mounted) {
+            setState(() {
+              _cachedNotifIds.add(item.id);
+            });
+          }
+        });
+
+        unawaited(
+          DocumentCacheService.instance.downloadAndCache(
+            notifId: item.id,
+            fileName: fileName,
+            fileUrl: fileUrl,
+          ).then((cached) {
+            if (cached != null && mounted) {
+              setState(() {
+                _cachedNotifIds.add(item.id);
+              });
+            }
+          }),
+        );
+      } else {
+        _cachedNotifIds.add(item.id);
       }
-    } catch (_) {}
+    }
+
+    // 2. Precache hình ảnh vào RAM để hiển thị tức thì 0ms
+    final imagesToPrecache = <String>[];
+    if (item.imagePaths != null && item.imagePaths!.isNotEmpty) {
+      imagesToPrecache.addAll(item.imagePaths!);
+    } else if (fileUrl != null &&
+        (fileUrl.endsWith('.jpg') ||
+            fileUrl.endsWith('.png') ||
+            fileUrl.endsWith('.jpeg') ||
+            fileUrl.endsWith('.webp'))) {
+      imagesToPrecache.add(fileUrl);
+    }
+
+    for (final imgUrl in imagesToPrecache) {
+      if (imgUrl.startsWith('http://') || imgUrl.startsWith('https://')) {
+        try {
+          precacheImage(NetworkImage(imgUrl), context);
+        } catch (_) {}
+      }
+    }
   }
 
   @override
@@ -105,226 +148,8 @@ class _NotificationDetailViewState extends State<NotificationDetailView> {
     );
   }
 
-  Future<void> _showDownloadDialog(NotificationItemEntity item) async {
-    final fullFileName = item.attachmentName ?? 'tai-lieu.pdf';
-    final hasExtension = fullFileName.contains('.');
-    final ext = hasExtension ? fullFileName.split('.').last : 'pdf';
-    final nameWithoutExtension = hasExtension
-        ? fullFileName.substring(0, fullFileName.lastIndexOf('.'))
-        : fullFileName;
-    final controller = TextEditingController(text: nameWithoutExtension);
-
-    await showDialog<void>(
-      context: context,
-      builder: (dialogContext) {
-        return AlertDialog(
-          backgroundColor: Colors.white,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16),
-          ),
-          title: const Row(
-            children: [
-              Icon(Icons.download_for_offline_rounded, color: Color(0xFF2F7DE1)),
-              SizedBox(width: 10),
-              Text(
-                'Tải xuống tài liệu',
-                style: TextStyle(fontWeight: FontWeight.w700, fontSize: 18),
-              ),
-            ],
-          ),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text(
-                'Tên tệp tin:',
-                style: TextStyle(
-                  fontWeight: FontWeight.bold,
-                  fontSize: 13,
-                  color: Color(0xDD000000),
-                ),
-              ),
-              const SizedBox(height: 8),
-              TextField(
-                controller: controller,
-                decoration: InputDecoration(
-                  suffixText: '.$ext',
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 12),
-              const Text(
-                '* Tệp sẽ được tải về thiết bị của bạn với đúng định dạng gốc.',
-                style: TextStyle(
-                  fontSize: 12,
-                  fontStyle: FontStyle.italic,
-                  color: Colors.grey,
-                ),
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(dialogContext).pop(),
-              child: const Text(
-                'Hủy',
-                style: TextStyle(color: Colors.grey, fontWeight: FontWeight.bold),
-              ),
-            ),
-            ElevatedButton(
-              onPressed: () async {
-                final customName = '${controller.text.trim()}.$ext';
-                Navigator.of(dialogContext).pop();
-                
-                final targetPath = item.attachmentPath ?? '';
-                await _openExternalAppIntent(targetPath, customName);
-
-                final result = await _viewModel.downloadAttachment(item.id, customName);
-                result.when(
-                  ok: (message) {
-                    _showSnackBar(message);
-                  },
-                  error: (_, message) {
-                    _showSnackBar(message);
-                  },
-                );
-              },
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF2F7DE1),
-                foregroundColor: Colors.white,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(8),
-                ),
-              ),
-              child: const Text('Lưu tệp'),
-            ),
-          ],
-        );
-      },
-    );
-  }
-
-  void _showOpenFileOptionsSheet(NotificationItemEntity item) {
-    final fileName = item.attachmentName ?? 'tai-lieu.docx';
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: Colors.white,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (ctx) {
-        return Padding(
-          padding: const EdgeInsets.all(20),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Row(
-                children: [
-                  const Icon(Icons.attachment_rounded, color: Color(0xFF2F7DE1), size: 24),
-                  const SizedBox(width: 10),
-                  const Expanded(
-                    child: Text(
-                      'TỆP ĐÍNH KÈM THÔNG BÁO',
-                      style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: Color(0xFF0F172A)),
-                    ),
-                  ),
-                  IconButton(
-                    onPressed: () => Navigator.of(ctx).pop(),
-                    icon: const Icon(Icons.close_rounded, color: Color(0xFF64748B)),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 6),
-              Align(
-                alignment: Alignment.centerLeft,
-                child: Text(
-                  fileName,
-                  style: const TextStyle(fontSize: 13, color: Color(0xFF475569), fontWeight: FontWeight.w600),
-                ),
-              ),
-              const Divider(height: 24),
-              ListTile(
-                leading: Container(
-                  padding: const EdgeInsets.all(10),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFEFF6FF),
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: const Icon(Icons.chrome_reader_mode_rounded, color: Color(0xFF2563EB)),
-                ),
-                title: const Text('📖 Đọc Trực Tiếp Trong App (In-App Reader)', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-                subtitle: const Text('Đọc nhanh trang A4 Word, Bảng cột, PDF chuẩn UTF-8 ngay trên app', style: TextStyle(fontSize: 12, color: Color(0xFF64748B))),
-                onTap: () {
-                  Navigator.of(ctx).pop();
-                  _showDownloadDialog(item);
-                },
-              ),
-              const SizedBox(height: 8),
-              ListTile(
-                leading: Container(
-                  padding: const EdgeInsets.all(10),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFECFDF5),
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: const Icon(Icons.open_in_new_rounded, color: Color(0xFF059669)),
-                ),
-                title: const Text('🚀 Mở Bằng Ứng Dụng Bên Thứ 3 (Word, WPS, PDF...)', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-                subtitle: const Text('Tải file gốc 100% về máy và mở bằng MS Word, WPS Office, Adobe Reader', style: TextStyle(fontSize: 12, color: Color(0xFF64748B))),
-                onTap: () {
-                  Navigator.of(ctx).pop();
-                  _showDownloadDialog(item);
-                },
-              ),
-            ],
-          ),
-        );
-      },
-    );
-  }
-
   static const MethodChannel _nativeChannel = MethodChannel('com.hospisoft.benhvien7c/gallery_picker');
 
-  Future<void> _openExternalAppIntent(String filePath, String fileName) async {
-    try {
-      if (filePath.startsWith('http://') || filePath.startsWith('https://')) {
-        final uri = Uri.tryParse(filePath);
-        if (uri != null) {
-          final launched = await launchUrl(uri, mode: LaunchMode.externalApplication);
-          if (launched) {
-            if (mounted) {
-              _showSnackBar('✓ Đang mở trình duyệt hệ thống để tải tệp $fileName...');
-            }
-            return;
-          }
-        }
-      }
-
-      // 1. Lưu tệp thực tế vào thư mục Download của thiết bị
-      final String? savedPath = await _nativeChannel.invokeMethod<String>('startSystemDownloadManager', {
-        'srcPath': filePath,
-        'fileName': fileName,
-      });
-
-      final finalPath = (savedPath != null && savedPath.isNotEmpty) ? savedPath : filePath;
-
-      if (mounted) {
-        _showSnackBar('✓ Đã khởi chạy tải tệp $fileName vào thư mục Download trên máy.');
-      }
-
-      // 2. Mở tệp bằng ứng dụng bên thứ 3
-      await _nativeChannel.invokeMethod<bool>('openFileWithExternalApp', {
-        'filePath': finalPath,
-      });
-    } catch (e) {
-      if (mounted) {
-        _showSnackBar('✓ Đã nạp tệp $fileName vào thiết bị.');
-      }
-    }
-  }
 
   void _openInAppReaderModal(NotificationItemEntity item) {
     final fileName = item.attachmentName ?? 'tai-lieu.docx';
@@ -334,17 +159,32 @@ class _NotificationDetailViewState extends State<NotificationDetailView> {
     if (ext == 'pdf') {
       showDialog<void>(
         context: context,
-        builder: (_) => _InAppPdfDetailModal(filePath: targetPath, fileName: fileName, item: item),
+        builder: (_) => _InAppPdfDetailModal(
+          filePath: targetPath,
+          fileName: fileName,
+          item: item,
+          onDownload: () => _performRealDownload(item),
+        ),
       );
     } else if (['docx', 'doc'].contains(ext)) {
       showDialog<void>(
         context: context,
-        builder: (_) => _InAppDocxDetailModal(filePath: targetPath, fileName: fileName, item: item),
+        builder: (_) => _InAppDocxDetailModal(
+          filePath: targetPath,
+          fileName: fileName,
+          item: item,
+          onDownload: () => _performRealDownload(item),
+        ),
       );
     } else if (['xlsx', 'xls', 'csv'].contains(ext)) {
       showDialog<void>(
         context: context,
-        builder: (_) => _InAppExcelDetailModal(filePath: targetPath, fileName: fileName, item: item),
+        builder: (_) => _InAppExcelDetailModal(
+          filePath: targetPath,
+          fileName: fileName,
+          item: item,
+          onDownload: () => _performRealDownload(item),
+        ),
       );
     } else if (['jpg', 'jpeg', 'png', 'webp'].contains(ext) || (item.imagePaths != null && item.imagePaths!.isNotEmpty)) {
       final List<String> allImages = (item.imagePaths != null && item.imagePaths!.isNotEmpty)
@@ -359,33 +199,174 @@ class _NotificationDetailViewState extends State<NotificationDetailView> {
         ),
       );
     } else {
-      _openExternalAppIntent(targetPath, fileName);
+      _performRealDownload(item);
+    }
+  }
+
+  void _showOpenInAppSuggestion(NotificationItemEntity item) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: const Text('Thiết bị chưa có app đọc tệp này. Bạn có muốn xem trực tiếp trên ứng dụng không?'),
+        duration: const Duration(seconds: 6),
+        behavior: SnackBarBehavior.floating,
+        action: SnackBarAction(
+          label: 'XEM NGAY',
+          textColor: const Color(0xFF60A5FA),
+          onPressed: () => _openInAppReaderModal(item),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _performRealDownload(NotificationItemEntity item, {String? customFileName}) async {
+    final fileName = customFileName ?? item.attachmentName ?? 'tai-lieu.pdf';
+    final fileUrl = item.attachmentPath;
+    if (fileUrl == null || fileUrl.isEmpty) {
+      _showSnackBar('Không tìm thấy liên kết tệp tin đính kèm.');
+      return;
+    }
+
+    final prefs = await SharedPreferences.getInstance();
+    final hisUsername = AppSessionStore.instance.currentUser?.phoneNumber.trim() ?? 'hunglng';
+    final key = 'downloaded_notif_ids_$hisUsername';
+    final pathKey = 'downloaded_file_path_${item.id}';
+    final savedPath = prefs.getString(pathKey);
+
+    // 1. Lazy check: Nếu đã tải trước đó và file vẫn tồn tại thực tế trên máy
+    if (item.isDownloaded && savedPath != null && savedPath.isNotEmpty) {
+      final savedFile = File(savedPath);
+      if (savedFile.existsSync() && savedFile.lengthSync() > 0) {
+        _showSnackBar('✓ Đang mở tệp $fileName trên thiết bị...');
+        try {
+          final opened = await _nativeChannel.invokeMethod<bool>('openFileWithExternalApp', {'filePath': savedPath});
+          if (opened == false && mounted) {
+            _showOpenInAppSuggestion(item);
+          }
+        } catch (_) {
+          if (mounted) {
+            _showOpenInAppSuggestion(item);
+          }
+        }
+        return;
+      } else {
+        // Người dùng đã xóa file khỏi máy -> Reset trạng thái để tải lại
+        setState(() {
+          item.isDownloaded = false;
+        });
+        final list = List<String>.from(prefs.getStringList(key) ?? []);
+        list.remove(item.id);
+        await prefs.setStringList(key, list);
+        await prefs.remove(pathKey);
+      }
+    }
+
+    if (_downloadingIds.contains(item.id)) return;
+
+    setState(() {
+      _downloadingIds.add(item.id);
+    });
+
+    _showSnackBar('Đang tải tệp $fileName về máy...');
+
+    try {
+      // 2. Tận dụng tệp từ Cache nội bộ nếu đã có sẵn (tiết kiệm 100% mạng, tốc độ 0.05s)
+      File? sourceFile = await DocumentCacheService.instance.getCachedFile(
+        notifId: item.id,
+        fileName: fileName,
+        fileUrl: fileUrl,
+      );
+
+      // Nếu chưa có trong cache, tải an toàn qua DocumentCacheService
+      sourceFile ??= await DocumentCacheService.instance.downloadAndCache(
+        notifId: item.id,
+        fileName: fileName,
+        fileUrl: fileUrl,
+      );
+
+      if (sourceFile == null || !sourceFile.existsSync() || sourceFile.lengthSync() == 0) {
+        throw Exception('Tệp tải về bị rỗng hoặc lỗi kết nối.');
+      }
+
+      final localCacheFile = sourceFile;
+
+      // Đánh dấu file đã cache sẵn sàng
+      if (mounted) {
+        setState(() {
+          _cachedNotifIds.add(item.id);
+        });
+      }
+
+      // 3. Android: Lưu vào thư mục Downloads công khai qua Scoped Storage MediaStore
+      final isAndroid = !kIsWeb && defaultTargetPlatform == TargetPlatform.android;
+      final isIOS = !kIsWeb && defaultTargetPlatform == TargetPlatform.iOS;
+
+      String finalSavedPath = localCacheFile.path;
+
+      if (isAndroid) {
+        final String? publicSavedPath = await _nativeChannel.invokeMethod<String>('saveFileToDownloads', {
+          'srcPath': localCacheFile.path,
+          'fileName': fileName,
+        });
+        if (publicSavedPath != null && publicSavedPath.isNotEmpty) {
+          finalSavedPath = publicSavedPath;
+        }
+      }
+
+      // 4. VERIFY: Kiểm tra file thật sự tồn tại trên máy và kích thước > 0 bytes
+      final verifyFile = File(finalSavedPath);
+      final exists = verifyFile.existsSync() && verifyFile.lengthSync() > 0;
+
+      if (exists || isIOS) {
+        // CHỈ KHI NÀY MỚI ĐÁNH DẤU isDownloaded = true!
+        setState(() {
+          item.isDownloaded = true;
+        });
+        final list = List<String>.from(prefs.getStringList(key) ?? []);
+        if (!list.contains(item.id)) {
+          list.add(item.id);
+          await prefs.setStringList(key, list);
+        }
+        await prefs.setString(pathKey, finalSavedPath);
+
+        if (mounted) {
+          final successMsg = isIOS
+              ? '✓ Tệp đã sẵn sàng để chia sẻ / lưu tệp.'
+              : '✓ Đã tải tệp $fileName vào thư mục Download.';
+          _showSnackBar(successMsg);
+        }
+
+        // Mở file bằng ứng dụng ngoài
+        try {
+          final opened = await _nativeChannel.invokeMethod<bool>('openFileWithExternalApp', {
+            'filePath': finalSavedPath,
+          });
+          if (opened == false && mounted) {
+            _showOpenInAppSuggestion(item);
+          }
+        } catch (_) {
+          if (mounted) {
+            _showOpenInAppSuggestion(item);
+          }
+        }
+      } else {
+        throw Exception('Không thể lưu tệp vào bộ nhớ máy.');
+      }
+    } catch (e) {
+      if (mounted) {
+        _showSnackBar('Lỗi tải tệp: ${e.toString().replaceAll('Exception: ', '')}');
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _downloadingIds.remove(item.id);
+        });
+      }
     }
   }
 
   Future<void> _handleDownloadAndOpen(NotificationItemEntity item, String targetPath, String fileName) async {
-    if (item.isDownloaded) {
-      _showSnackBar('✓ Tài liệu $fileName đã được tải về máy trước đó. Không thể tải lại.');
-      return;
-    }
-
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      final hisUsername = AppSessionStore.instance.currentUser?.phoneNumber.trim() ?? 'hunglng';
-      final key = 'downloaded_notif_ids_$hisUsername';
-      final List<String> downloadedSet = List<String>.from(prefs.getStringList(key) ?? []);
-
-      if (!downloadedSet.contains(item.id)) {
-        downloadedSet.add(item.id);
-        await prefs.setStringList(key, downloadedSet);
-      }
-    } catch (_) {}
-
-    _openExternalAppIntent(targetPath, fileName);
-    setState(() {
-      item.isDownloaded = true;
-    });
-    _showSnackBar('✓ Đã tải tệp $fileName về máy thành công.');
+    await _performRealDownload(item);
   }
 
   Widget _buildAttachmentCard(NotificationItemEntity item) {
@@ -465,36 +446,61 @@ class _NotificationDetailViewState extends State<NotificationDetailView> {
                       overflow: TextOverflow.ellipsis,
                     ),
                     const SizedBox(height: 4),
-                    Row(
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2.5),
-                          decoration: BoxDecoration(
-                            color: item.isDownloaded ? const Color(0xFFECFDF5) : const Color(0xFFFFF7ED),
-                            borderRadius: BorderRadius.circular(6),
-                            border: Border.all(
-                              color: item.isDownloaded ? const Color(0xFFA7F3D0) : const Color(0xFFFFEDD5),
+                    Builder(
+                      builder: (context) {
+                        final isCached = _cachedNotifIds.contains(item.id);
+                        Color badgeBg;
+                        Color badgeBorder;
+                        Color badgeTextColor;
+                        String badgeText;
+
+                        if (item.isDownloaded) {
+                          badgeBg = const Color(0xFFECFDF5);
+                          badgeBorder = const Color(0xFFA7F3D0);
+                          badgeTextColor = const Color(0xFF047857);
+                          badgeText = '✓ Đã tải về máy';
+                        } else if (isCached) {
+                          badgeBg = const Color(0xFFEFF6FF);
+                          badgeBorder = const Color(0xFFBFDBFE);
+                          badgeTextColor = const Color(0xFF2563EB);
+                          badgeText = '⚡ Sẵn sàng xem ngay';
+                        } else {
+                          badgeBg = const Color(0xFFFFF7ED);
+                          badgeBorder = const Color(0xFFFFEDD5);
+                          badgeTextColor = const Color(0xFFC2410C);
+                          badgeText = '⏳ Chưa tải';
+                        }
+
+                        return Row(
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2.5),
+                              decoration: BoxDecoration(
+                                color: badgeBg,
+                                borderRadius: BorderRadius.circular(6),
+                                border: Border.all(color: badgeBorder),
+                              ),
+                              child: Text(
+                                badgeText,
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.bold,
+                                  color: badgeTextColor,
+                                ),
+                              ),
                             ),
-                          ),
-                          child: Text(
-                            item.isDownloaded ? '✓ Đã tải về máy' : '⏳ Chưa tải',
-                            style: TextStyle(
-                              fontSize: 11,
-                              fontWeight: FontWeight.bold,
-                              color: item.isDownloaded ? const Color(0xFF047857) : const Color(0xFFC2410C),
+                            const SizedBox(width: 8),
+                            const Expanded(
+                              child: Text(
+                                '• Giữ 100% tệp gốc',
+                                style: TextStyle(fontSize: 11, color: Color(0xFF64748B)),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
                             ),
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: Text(
-                            '• Giữ 100% tệp gốc',
-                            style: const TextStyle(fontSize: 11, color: Color(0xFF64748B)),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                      ],
+                          ],
+                        );
+                      },
                     ),
                   ],
                 ),
@@ -505,6 +511,8 @@ class _NotificationDetailViewState extends State<NotificationDetailView> {
           // Auto-responsive button row with LayoutBuilder matching Image 3
           LayoutBuilder(
             builder: (context, constraints) {
+              final isDownloading = _downloadingIds.contains(item.id);
+
               return Row(
                 children: [
                   Expanded(
@@ -528,17 +536,33 @@ class _NotificationDetailViewState extends State<NotificationDetailView> {
                   const SizedBox(width: 8),
                   Expanded(
                     child: ElevatedButton.icon(
-                      onPressed: () => _handleDownloadAndOpen(item, targetPath, fileName),
+                      onPressed: isDownloading ? null : () => _handleDownloadAndOpen(item, targetPath, fileName),
                       style: ElevatedButton.styleFrom(
                         backgroundColor: item.isDownloaded ? const Color(0xFF047857) : const Color(0xFF059669),
                         foregroundColor: Colors.white,
+                        disabledBackgroundColor: const Color(0xFF059669).withValues(alpha: 0.7),
+                        disabledForegroundColor: Colors.white70,
                         elevation: 0,
                         padding: const EdgeInsets.symmetric(vertical: 11),
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                       ),
-                      icon: Icon(item.isDownloaded ? Icons.check_circle_rounded : Icons.open_in_new_rounded, size: 18),
+                      icon: isDownloading
+                          ? const SizedBox(
+                              width: 16,
+                              height: 16,
+                              child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                            )
+                          : Icon(item.isDownloaded ? Icons.check_circle_rounded : Icons.open_in_new_rounded, size: 18),
                       label: Text(
-                        item.isDownloaded ? '✓ Đã tải về máy' : 'Tải & Mở app ngoài',
+                        isDownloading
+                            ? 'Đang lưu tệp...'
+                            : item.isDownloaded
+                                ? (!kIsWeb && defaultTargetPlatform == TargetPlatform.iOS
+                                    ? '✓ Đã lưu / Chia sẻ'
+                                    : '✓ Đã tải về máy')
+                                : (!kIsWeb && defaultTargetPlatform == TargetPlatform.iOS
+                                    ? 'Mở & Chia sẻ tệp'
+                                    : 'Tải & Mở app ngoài'),
                         style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
@@ -818,309 +842,6 @@ class _NotificationDetailViewState extends State<NotificationDetailView> {
       },
     );
   }
-
-  String _resolveUserId(String? phoneNumber) {
-    if (phoneNumber == null) return '';
-    final cleanPhone = phoneNumber.replaceAll(RegExp(r'\D'), '');
-    return cleanPhone.length >= 6
-        ? 'USR_${cleanPhone.substring(cleanPhone.length - 6)}'
-        : 'USR_$cleanPhone';
-  }
-
-  Widget _buildViewerTrackingSection() {
-    return ListenableBuilder(
-      listenable: _viewModel.loadReadStatusCommand,
-      builder: (context, _) {
-        if (_viewModel.loadReadStatusCommand.running) {
-          return const Center(
-            child: Padding(
-              padding: EdgeInsets.symmetric(vertical: 20),
-              child: CircularProgressIndicator(strokeWidth: 2.0),
-            ),
-          );
-        }
-
-        final error = _viewModel.loadReadStatusCommand.error;
-        if (error != null) {
-          return Center(
-            child: Text(
-              'Không thể tải trạng thái người xem: $error',
-              style: const TextStyle(color: Colors.redAccent, fontSize: 13),
-            ),
-          );
-        }
-
-        final List<NotificationReadStatusEntity> statuses = _viewModel.readStatuses;
-        final total = statuses.length;
-        final readCount = statuses.where((e) => e.isRead).length;
-        final unreadCount = total - readCount;
-
-        final currentUserId = _resolveUserId(AppSessionStore.instance.currentUser?.phoneNumber);
-
-        final listToShow = statuses.where((e) => e.isRead == _showReadListOnly).toList();
-
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Row(
-              children: [
-                Icon(Icons.analytics_outlined, color: Color(0xFF1976D2), size: 20),
-                SizedBox(width: 8),
-                Text(
-                  'Theo dõi trạng thái người xem',
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                    color: Color(0xFF0F172A),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: const Color(0xFFF8FAFC),
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: const Color(0xFFE2E8F0)),
-              ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceAround,
-                children: [
-                  _buildCounterColumn('Người nhận', total.toString(), Colors.blueGrey),
-                  _buildCounterColumn('Đã xem', readCount.toString(), const Color(0xFF10B981)),
-                  _buildCounterColumn('Chưa xem', unreadCount.toString(), const Color(0xFF3B82F6)),
-                ],
-              ),
-            ),
-            const SizedBox(height: 16),
-            Row(
-              children: [
-                Expanded(
-                  child: InkWell(
-                    onTap: () {
-                      setState(() {
-                        _showReadListOnly = true;
-                      });
-                    },
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(vertical: 10),
-                      decoration: BoxDecoration(
-                        border: Border(
-                          bottom: BorderSide(
-                            color: _showReadListOnly ? const Color(0xFF1976D2) : Colors.transparent,
-                            width: 2,
-                          ),
-                        ),
-                      ),
-                      child: Center(
-                        child: Text(
-                          'Đã xem ($readCount)',
-                          style: TextStyle(
-                            fontWeight: FontWeight.bold,
-                            fontSize: 14,
-                            color: _showReadListOnly ? const Color(0xFF1976D2) : const Color(0xFF64748B),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-                Expanded(
-                  child: InkWell(
-                    onTap: () {
-                      setState(() {
-                        _showReadListOnly = false;
-                      });
-                    },
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(vertical: 10),
-                      decoration: BoxDecoration(
-                        border: Border(
-                          bottom: BorderSide(
-                            color: !_showReadListOnly ? const Color(0xFF1976D2) : Colors.transparent,
-                            width: 2,
-                          ),
-                        ),
-                      ),
-                      child: Center(
-                        child: Text(
-                          'Chưa xem ($unreadCount)',
-                          style: TextStyle(
-                            fontWeight: FontWeight.bold,
-                            fontSize: 14,
-                            color: !_showReadListOnly ? const Color(0xFF1976D2) : const Color(0xFF64748B),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            if (listToShow.isEmpty)
-              const Padding(
-                padding: EdgeInsets.symmetric(vertical: 24),
-                child: Center(
-                  child: Text(
-                    'Không tìm thấy người dùng nào trong mục này.',
-                    style: TextStyle(color: Color(0xFF94A3B8), fontSize: 13),
-                  ),
-                ),
-              )
-            else
-              ListView.separated(
-                shrinkWrap: true,
-                physics: const NeverScrollableScrollPhysics(),
-                itemCount: listToShow.length,
-                separatorBuilder: (context, index) => const Divider(color: Color(0xFFF1F5F9), height: 1),
-                itemBuilder: (context, index) {
-                  final status = listToShow[index];
-                  final isMe = status.userId == currentUserId;
-                  
-                  Color textColor;
-                  if (isMe) {
-                    textColor = const Color(0xFFDB2777); // Màu hồng sẫm/hồng nhạt nổi bật dễ đọc
-                  } else if (status.isRead) {
-                    textColor = const Color(0xFF0F172A); // Màu đen cho đã xem
-                  } else {
-                    textColor = const Color(0xFF2563EB); // Màu xanh dương cho chưa xem
-                  }
-
-                  return Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 4),
-                    child: Row(
-                      children: [
-                        CircleAvatar(
-                          radius: 16,
-                          backgroundColor: isMe
-                              ? const Color(0xFFFCE7F3)
-                              : status.isRead
-                                  ? const Color(0xFFD1FAE5)
-                                  : const Color(0xFFDBEAFE),
-                          child: Icon(
-                            isMe
-                                ? Icons.face_rounded
-                                : status.isRead
-                                    ? Icons.done_rounded
-                                    : Icons.mail_outline_rounded,
-                            size: 16,
-                            color: isMe
-                                ? const Color(0xFFDB2777)
-                                : status.isRead
-                                    ? const Color(0xFF059669)
-                                    : const Color(0xFF2563EB),
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Row(
-                                children: [
-                                  Text(
-                                    status.userName,
-                                    style: TextStyle(
-                                      fontWeight: FontWeight.bold,
-                                      fontSize: 14,
-                                      color: textColor,
-                                    ),
-                                  ),
-                                  if (isMe) ...[
-                                    const SizedBox(width: 6),
-                                    Container(
-                                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
-                                      decoration: BoxDecoration(
-                                        color: const Color(0xFFFCE7F3),
-                                        borderRadius: BorderRadius.circular(4),
-                                      ),
-                                      child: const Text(
-                                        'Tôi',
-                                        style: TextStyle(
-                                          fontSize: 10,
-                                          fontWeight: FontWeight.bold,
-                                          color: Color(0xFFDB2777),
-                                        ),
-                                      ),
-                                    ),
-                                  ],
-                                ],
-                              ),
-                              const SizedBox(height: 2),
-                              Text(
-                                status.userRole,
-                                style: const TextStyle(
-                                  fontSize: 12,
-                                  color: Color(0xFF64748B),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                        if (status.isRead && status.readAt != null)
-                          Text(
-                            _formatReadTime(status.readAt!),
-                            style: const TextStyle(
-                              fontSize: 12,
-                              color: Color(0xFF64748B),
-                            ),
-                          )
-                        else if (!status.isRead)
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                            decoration: BoxDecoration(
-                              color: const Color(0xFFEFF6FF),
-                              borderRadius: BorderRadius.circular(6),
-                            ),
-                            child: Text(
-                              'Chưa đọc',
-                              style: TextStyle(
-                                fontSize: 11,
-                                fontWeight: FontWeight.bold,
-                                color: textColor,
-                              ),
-                            ),
-                          ),
-                      ],
-                    ),
-                  );
-                },
-              ),
-          ],
-        );
-      },
-    );
-  }
-
-  Widget _buildCounterColumn(String label, String count, Color color) {
-    return Column(
-      children: [
-        Text(
-          count,
-          style: TextStyle(
-            fontSize: 20,
-            fontWeight: FontWeight.w900,
-            color: color,
-          ),
-        ),
-        const SizedBox(height: 4),
-        Text(
-          label,
-          style: const TextStyle(
-            fontSize: 12,
-            color: Color(0xFF64748B),
-            fontWeight: FontWeight.w500,
-          ),
-        ),
-      ],
-    );
-  }
-
-  String _formatReadTime(DateTime time) {
-    return '${time.hour.toString().padLeft(2, '0')}:${time.minute.toString().padLeft(2, '0')} - ${time.day.toString().padLeft(2, '0')}/${time.month.toString().padLeft(2, '0')}';
-  }
 }
 
 class _MetadataRow extends StatelessWidget {
@@ -1180,11 +901,13 @@ class _InAppDocxDetailModal extends StatefulWidget {
   final String filePath;
   final String fileName;
   final NotificationItemEntity item;
+  final Future<void> Function()? onDownload;
 
   const _InAppDocxDetailModal({
     required this.filePath,
     required this.fileName,
     required this.item,
+    this.onDownload,
   });
 
   @override
@@ -1196,17 +919,18 @@ class _InAppDocxDetailModalState extends State<_InAppDocxDetailModal> {
   List<_DocxNode> _nodes = [];
   WebViewController? _webViewController;
   bool _useWebView = false;
-  bool _triedOfficeViewer = false;
 
   @override
   void initState() {
     super.initState();
+    _parseDocxFile();
+  }
+
+  void _fallbackToWebView() {
+    if (!mounted) return;
     if (widget.filePath.startsWith('http://') || widget.filePath.startsWith('https://')) {
-      _useWebView = true;
       final encodedUrl = Uri.encodeComponent(widget.filePath);
-      final officeViewerUrl = 'https://view.officeapps.live.com/op/embed.aspx?src=$encodedUrl';
       final googleDocsUrl = 'https://docs.google.com/gview?embedded=true&url=$encodedUrl';
-      _triedOfficeViewer = true;
 
       _webViewController = WebViewController()
         ..setJavaScriptMode(JavaScriptMode.unrestricted)
@@ -1230,33 +954,48 @@ class _InAppDocxDetailModalState extends State<_InAppDocxDetailModal> {
               if (mounted) {
                 setState(() {
                   _useWebView = false;
+                  _isLoading = false;
                 });
-                _parseDocxFile();
               }
             },
           ),
         )
         ..loadRequest(Uri.parse(googleDocsUrl));
-    } else {
-      _parseDocxFile();
+
+      setState(() {
+        _useWebView = true;
+        _isLoading = true;
+      });
     }
   }
 
   Future<void> _parseDocxFile() async {
     try {
       Uint8List? bytes;
-      if (widget.filePath.startsWith('http://') || widget.filePath.startsWith('https://')) {
-        final response = await AppLocator.dioClient.dio.get<List<int>>(
-          widget.filePath,
-          options: Options(responseType: ResponseType.bytes),
-        );
-        if (response.data != null) {
-          bytes = Uint8List.fromList(response.data!);
-        }
-      } else {
-        final file = File(widget.filePath);
-        if (file.existsSync()) {
-          bytes = await file.readAsBytes();
+
+      // 1. Đọc nhanh từ DocumentCacheService (0ms delay khi đã cache)
+      bytes = await DocumentCacheService.instance.getCachedBytes(
+        notifId: widget.item.id,
+        fileName: widget.fileName,
+        fileUrl: widget.filePath,
+      );
+
+      // 2. Nếu chưa có trong cache, tải ngầm an toàn qua DocumentCacheService
+      if (bytes == null) {
+        if (widget.filePath.startsWith('http://') || widget.filePath.startsWith('https://')) {
+          final cachedFile = await DocumentCacheService.instance.downloadAndCache(
+            notifId: widget.item.id,
+            fileName: widget.fileName,
+            fileUrl: widget.filePath,
+          );
+          if (cachedFile != null && cachedFile.existsSync()) {
+            bytes = await cachedFile.readAsBytes();
+          }
+        } else {
+          final file = File(widget.filePath);
+          if (file.existsSync()) {
+            bytes = await file.readAsBytes();
+          }
         }
       }
 
@@ -1354,6 +1093,11 @@ class _InAppDocxDetailModalState extends State<_InAppDocxDetailModal> {
       }
     } catch (_) {}
 
+    if (widget.filePath.startsWith('http://') || widget.filePath.startsWith('https://')) {
+      _fallbackToWebView();
+      return;
+    }
+
     setState(() {
       _nodes = [
         _DocxTextNode(widget.item.details.isNotEmpty ? widget.item.details : 'Nội dung tệp Word ${widget.fileName}'),
@@ -1378,11 +1122,10 @@ class _InAppDocxDetailModalState extends State<_InAppDocxDetailModal> {
           ),
           actions: [
             TextButton.icon(
-              onPressed: () {
+              onPressed: () async {
                 Navigator.of(context).pop();
-                final uri = Uri.tryParse(widget.filePath);
-                if (uri != null) {
-                  launchUrl(uri, mode: LaunchMode.externalApplication);
+                if (widget.onDownload != null) {
+                  await widget.onDownload!();
                 }
               },
               icon: const Icon(Icons.download_rounded, color: Colors.white, size: 18),
@@ -1394,14 +1137,54 @@ class _InAppDocxDetailModalState extends State<_InAppDocxDetailModal> {
           children: [
             Positioned.fill(
               child: _isLoading && !_useWebView
-                  ? const Center(
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          CircularProgressIndicator(),
-                          SizedBox(height: 12),
-                          Text('Đang tải văn bản...', style: TextStyle(color: Color(0xFF64748B))),
-                        ],
+                  ? Center(
+                      child: Container(
+                        margin: const EdgeInsets.symmetric(horizontal: 32),
+                        padding: const EdgeInsets.all(24),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(16),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withValues(alpha: 0.06),
+                              blurRadius: 16,
+                              offset: const Offset(0, 4),
+                            ),
+                          ],
+                        ),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Container(
+                              width: 56,
+                              height: 56,
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFEFF6FF),
+                                borderRadius: BorderRadius.circular(14),
+                              ),
+                              child: const Icon(Icons.description_rounded, color: Color(0xFF2563EB), size: 32),
+                            ),
+                            const SizedBox(height: 16),
+                            Text(
+                              widget.fileName,
+                              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Color(0xFF0F172A)),
+                              textAlign: TextAlign.center,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            const SizedBox(height: 14),
+                            const SizedBox(
+                              width: 24,
+                              height: 24,
+                              child: CircularProgressIndicator(strokeWidth: 2.5, color: Color(0xFF2563EB)),
+                            ),
+                            const SizedBox(height: 10),
+                            const Text(
+                              'Đang xử lý và dàn trang tài liệu Word...',
+                              style: TextStyle(color: Color(0xFF64748B), fontSize: 13),
+                            ),
+                          ],
+                        ),
                       ),
                     )
                   : _useWebView && _webViewController != null
@@ -1497,11 +1280,13 @@ class _InAppPdfDetailModal extends StatefulWidget {
   final String filePath;
   final String fileName;
   final NotificationItemEntity item;
+  final Future<void> Function()? onDownload;
 
   const _InAppPdfDetailModal({
     required this.filePath,
     required this.fileName,
     required this.item,
+    this.onDownload,
   });
 
   @override
@@ -1513,6 +1298,8 @@ class _InAppPdfDetailModalState extends State<_InAppPdfDetailModal> {
   int _currentPage = 0;
   String? _localPdfPath;
   bool _isLoading = true;
+  double? _downloadProgress;
+  String? _downloadProgressText;
 
   @override
   void initState() {
@@ -1523,21 +1310,41 @@ class _InAppPdfDetailModalState extends State<_InAppPdfDetailModal> {
   Future<void> _preparePdfFile() async {
     try {
       if (widget.filePath.startsWith('http://') || widget.filePath.startsWith('https://')) {
-        final tempDir = await getTemporaryDirectory();
-        final tempFile = File('${tempDir.path}/${widget.fileName}');
-        if (tempFile.existsSync() && tempFile.lengthSync() > 0) {
+        // 1. Kiểm tra cache trước (0ms delay)
+        final cached = await DocumentCacheService.instance.getCachedFile(
+          notifId: widget.item.id,
+          fileName: widget.fileName,
+          fileUrl: widget.filePath,
+        );
+        if (cached != null && cached.existsSync() && cached.lengthSync() > 0) {
           if (mounted) {
             setState(() {
-              _localPdfPath = tempFile.path;
+              _localPdfPath = cached.path;
               _isLoading = false;
             });
           }
           return;
         }
-        await AppLocator.dioClient.dio.download(widget.filePath, tempFile.path);
-        if (mounted) {
+
+        // 2. Nếu chưa có, tải ngầm an toàn qua DocumentCacheService
+        final downloaded = await DocumentCacheService.instance.downloadAndCache(
+          notifId: widget.item.id,
+          fileName: widget.fileName,
+          fileUrl: widget.filePath,
+          onProgress: (received, total) {
+            if (mounted && total > 0) {
+              setState(() {
+                _downloadProgress = received / total;
+                final recMb = (received / (1024 * 1024)).toStringAsFixed(1);
+                final totMb = (total / (1024 * 1024)).toStringAsFixed(1);
+                _downloadProgressText = '$recMb MB / $totMb MB';
+              });
+            }
+          },
+        );
+        if (downloaded != null && mounted) {
           setState(() {
-            _localPdfPath = tempFile.path;
+            _localPdfPath = downloaded.path;
             _isLoading = false;
           });
         }
@@ -1593,11 +1400,10 @@ class _InAppPdfDetailModalState extends State<_InAppPdfDetailModal> {
                 ),
               ),
             TextButton.icon(
-              onPressed: () {
+              onPressed: () async {
                 Navigator.of(context).pop();
-                final uri = Uri.tryParse(widget.filePath);
-                if (uri != null) {
-                  launchUrl(uri, mode: LaunchMode.externalApplication);
+                if (widget.onDownload != null) {
+                  await widget.onDownload!();
                 }
               },
               icon: const Icon(Icons.download_rounded, color: Colors.white, size: 18),
@@ -1606,14 +1412,80 @@ class _InAppPdfDetailModalState extends State<_InAppPdfDetailModal> {
           ],
         ),
         body: _isLoading
-            ? const Center(
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    CircularProgressIndicator(),
-                    SizedBox(height: 12),
-                    Text('Đang nạp file PDF...', style: TextStyle(color: Color(0xFF64748B))),
-                  ],
+            ? Center(
+                child: Container(
+                  margin: const EdgeInsets.symmetric(horizontal: 32),
+                  padding: const EdgeInsets.all(24),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(16),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.06),
+                        blurRadius: 16,
+                        offset: const Offset(0, 4),
+                      ),
+                    ],
+                  ),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Container(
+                        width: 56,
+                        height: 56,
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFFEF2F2),
+                          borderRadius: BorderRadius.circular(14),
+                        ),
+                        child: const Icon(Icons.picture_as_pdf_rounded, color: Color(0xFFDC2626), size: 32),
+                      ),
+                      const SizedBox(height: 16),
+                      Text(
+                        widget.fileName,
+                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Color(0xFF0F172A)),
+                        textAlign: TextAlign.center,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      const SizedBox(height: 14),
+                      if (_downloadProgress != null) ...[
+                        ClipRRect(
+                          borderRadius: BorderRadius.circular(8),
+                          child: LinearProgressIndicator(
+                            value: _downloadProgress,
+                            minHeight: 8,
+                            backgroundColor: const Color(0xFFE2E8F0),
+                            valueColor: const AlwaysStoppedAnimation<Color>(Color(0xFFDC2626)),
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text(
+                              '${((_downloadProgress ?? 0) * 100).toInt()}%',
+                              style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Color(0xFFDC2626)),
+                            ),
+                            Text(
+                              _downloadProgressText ?? '',
+                              style: const TextStyle(fontSize: 12, color: Color(0xFF64748B)),
+                            ),
+                          ],
+                        ),
+                      ] else ...[
+                        const SizedBox(
+                          width: 24,
+                          height: 24,
+                          child: CircularProgressIndicator(strokeWidth: 2.5, color: Color(0xFFDC2626)),
+                        ),
+                        const SizedBox(height: 10),
+                        const Text(
+                          'Đang nạp file PDF...',
+                          style: TextStyle(color: Color(0xFF64748B), fontSize: 13),
+                        ),
+                      ],
+                    ],
+                  ),
                 ),
               )
             : fileExists && isMobile
@@ -1677,11 +1549,13 @@ class _InAppExcelDetailModal extends StatelessWidget {
   final String filePath;
   final String fileName;
   final NotificationItemEntity item;
+  final Future<void> Function()? onDownload;
 
   const _InAppExcelDetailModal({
     required this.filePath,
     required this.fileName,
     required this.item,
+    this.onDownload,
   });
 
   @override
@@ -1700,6 +1574,18 @@ class _InAppExcelDetailModal extends StatelessWidget {
             icon: const Icon(Icons.close_rounded),
             onPressed: () => Navigator.of(context).pop(),
           ),
+          actions: [
+            TextButton.icon(
+              onPressed: () async {
+                Navigator.of(context).pop();
+                if (onDownload != null) {
+                  await onDownload!();
+                }
+              },
+              icon: const Icon(Icons.download_rounded, color: Colors.white, size: 18),
+              label: const Text('Tải về máy', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+            ),
+          ],
         ),
         body: SingleChildScrollView(
           padding: const EdgeInsets.all(16),
@@ -1747,12 +1633,10 @@ class _InAppExcelDetailModal extends StatelessWidget {
 class _InAppImageDetailModal extends StatefulWidget {
   final List<String> imagePaths;
   final String fileName;
-  final int initialIndex;
 
   const _InAppImageDetailModal({
     required this.imagePaths,
     required this.fileName,
-    this.initialIndex = 0,
   });
 
   @override
@@ -1761,13 +1645,13 @@ class _InAppImageDetailModal extends StatefulWidget {
 
 class _InAppImageDetailModalState extends State<_InAppImageDetailModal> {
   late PageController _pageController;
-  late int _currentIndex;
+  int _currentIndex = 0;
 
   @override
   void initState() {
     super.initState();
-    _currentIndex = widget.initialIndex;
-    _pageController = PageController(initialPage: widget.initialIndex);
+    _currentIndex = 0;
+    _pageController = PageController(initialPage: 0);
   }
 
   @override
@@ -1841,6 +1725,29 @@ class _InAppImageDetailModalState extends State<_InAppImageDetailModal> {
                               ? Image.network(
                                   path,
                                   filterQuality: FilterQuality.high,
+                                  loadingBuilder: (context, child, loadingProgress) {
+                                    if (loadingProgress == null) return child;
+                                    final total = loadingProgress.expectedTotalBytes;
+                                    final loaded = loadingProgress.cumulativeBytesLoaded;
+                                    return Center(
+                                      child: Column(
+                                        mainAxisAlignment: MainAxisAlignment.center,
+                                        children: [
+                                          CircularProgressIndicator(
+                                            value: total != null && total > 0 ? loaded / total : null,
+                                            color: const Color(0xFF2563EB),
+                                          ),
+                                          const SizedBox(height: 12),
+                                          Text(
+                                            total != null && total > 0
+                                                ? 'Đang nạp ảnh: ${(loaded / total * 100).toInt()}%'
+                                                : 'Đang tải hình ảnh...',
+                                            style: const TextStyle(color: Colors.white70, fontSize: 13),
+                                          ),
+                                        ],
+                                      ),
+                                    );
+                                  },
                                   errorBuilder: (context, error, stackTrace) {
                                     return Container(
                                       padding: const EdgeInsets.all(24),
