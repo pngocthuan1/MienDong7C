@@ -34,13 +34,16 @@ class _SplashViewState extends State<SplashView> with SingleTickerProviderStateM
       curve: Curves.easeIn,
     );
 
+    _controller.addStatusListener((status) {
+      if (status == AnimationStatus.completed) {
+        _navigateToNextScreen();
+      }
+    });
+
     _controller.forward();
-    _navigateToNextScreen();
   }
 
-  Future<void> _navigateToNextScreen() async {
-    // Thời gian hiển thị splash vừa vặn, mượt mà chuẩn như TikTok
-    await Future<void>.delayed(const Duration(milliseconds: 1200));
+  void _navigateToNextScreen() {
     if (!mounted) return;
 
     final hasUser = AppSessionStore.instance.currentUser != null;

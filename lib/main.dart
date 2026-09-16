@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
@@ -62,22 +63,28 @@ import 'package:device_info_plus/device_info_plus.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // Khởi tạo kết nối Firebase (google-services.json / GoogleService-Info.plist) & lấy Token
-  await FirebaseTokenService.instance.initialize();
-
-  // 1. Khởi tạo dịch vụ lưu trữ an toàn & Lấy Device ID định danh thiết bị
   final secureStorage = SecureStorageService();
-  final deviceId = await secureStorage.getOrCreateDeviceId();
+  final deviceInfoPlugin = DeviceInfoPlugin();
 
-  // Xác định hệ điều hành & kiểm tra thiết bị thật vs máy ảo
-  String platform = kIsWeb ? 'android' : Platform.operatingSystem;
-  bool isPhysicalDevice = false;
-  if (!kIsWeb && Platform.isAndroid) {
-    try {
-      final deviceInfo = DeviceInfoPlugin();
-      final androidInfo = await deviceInfo.androidInfo;
-      isPhysicalDevice = androidInfo.isPhysicalDevice;
-    } catch (_) {}
+  // 1. Tối ưu khởi tạo song song: Đọc Device ID, SharedPreferences và DeviceInfo đồng thời
+  final initResults = await Future.wait([
+    secureStorage.getOrCreateDeviceId(),
+    SharedPreferences.getInstance(),
+    (!kIsWeb && Platform.isAndroid)
+        ? deviceInfoPlugin.androidInfo
+        : Future<AndroidDeviceInfo?>.value(null),
+  ]);
+
+  final deviceId = initResults[0] as String;
+  final sharedPreferences = initResults[1] as SharedPreferences;
+  final androidInfo = initResults[2] as AndroidDeviceInfo?;
+
+  final isPhysicalDevice = androidInfo?.isPhysicalDevice ?? false;
+  final platform = kIsWeb ? 'android' : Platform.operatingSystem;
+
+  String? deviceInfoString;
+  if (!kIsWeb && androidInfo != null) {
+    deviceInfoString = '${androidInfo.manufacturer} ${androidInfo.model} (Android ${androidInfo.version.release})';
   }
 
   // 2. Khởi tạo môi trường ứng dụng
@@ -89,15 +96,12 @@ void main() async {
     isPhysicalDevice: isPhysicalDevice,
   );
 
-  // 3. Khởi tạo SharedPreferences phục vụ LocalStorage
-  final sharedPreferences = await SharedPreferences.getInstance();
-
   final customBaseUrl = sharedPreferences.getString('custom_base_url');
   if (customBaseUrl != null && customBaseUrl.trim().isNotEmpty) {
     Environment.setCustomBaseUrl(customBaseUrl.trim());
   }
 
-  // 4. Khởi tạo các Service phụ trợ và gán vào AppLocator tĩnh
+  // 3. Khởi tạo các Service phụ trợ và gán vào AppLocator tĩnh
   final dioClient = DioClient(secureStorage: secureStorage);
   final remoteDataSource = AuthRemoteDataSource(dioClient);
   final authRepository = AuthRepositoryImpl(remoteDataSource, secureStorage);
@@ -120,28 +124,47 @@ void main() async {
     dio: dioClient,
   );
 
-  // Phục hồi session nếu có (giữ đăng nhập khi ứng dụng khởi động lại)
+  // 4. Phục hồi session nếu có (giữ đăng nhập khi ứng dụng khởi động lại)
   try {
-    // Tự động di chuyển dữ liệu cá nhân (SĐT, Họ tên, Role) từ SharedPreferences cũ sang SecureStorage
+    // Tự động di chuyển dữ liệu cá nhân (SĐT, Họ tên, Role) từ SharedPreferences cũ sang SecureStorage nếu cần
     await secureStorage.migratePiiFromPreferences(sharedPreferences);
 
-    final tokens = await secureStorage.getTokensRecord();
-    final isExpired = await secureStorage.isRefreshTokenExpired();
+    // Song song hóa các truy vấn SecureStorage độc lập
+    final sessionData = await Future.wait([
+      secureStorage.getTokensRecord(),
+      secureStorage.isRefreshTokenExpired(),
+      secureStorage.getExpiresRefreshToken(),
+      secureStorage.getSavedPhone(),
+      secureStorage.getSavedRole(),
+    ]);
+
+    final tokens = sessionData[0] as (String?, String?);
+    final isExpired = sessionData[1] as bool;
+    final expires = sessionData[2] as String?;
+    final securePhone = sessionData[3] as String?;
+    final secureRole = sessionData[4] as String?;
+
     if (tokens.$1 != null && tokens.$2 != null && !isExpired) {
-      final expires = await secureStorage.getExpiresRefreshToken();
       final expiry = _parseExpiry(expires);
 
-      final securePhone = await secureStorage.getSavedPhone();
       final savedPhone = (securePhone != null && securePhone.isNotEmpty)
           ? securePhone
           : (sharedPreferences.getString('saved_phone') ?? '');
       final cleanPhone = savedPhone.replaceAll(RegExp(r'\D'), '');
 
-      final secureName = await secureStorage.getSavedFullName();
+      // Truy vấn tên độc lập theo điều kiện
+      final nameResults = await Future.wait([
+        secureStorage.getSavedFullName(),
+        cleanPhone.isNotEmpty ? secureStorage.getFullNameForPhone(cleanPhone) : Future<String?>.value(null),
+      ]);
+
+      final secureName = nameResults[0];
+      final phoneFullName = nameResults[1];
+
       String? savedName = (secureName != null && secureName.isNotEmpty)
           ? secureName
           : (cleanPhone.isNotEmpty
-              ? (await secureStorage.getFullNameForPhone(cleanPhone) ?? sharedPreferences.getString('full_name_$cleanPhone'))
+              ? (phoneFullName ?? sharedPreferences.getString('full_name_$cleanPhone'))
               : sharedPreferences.getString('saved_full_name'));
 
       if (savedPhone.isNotEmpty) {
@@ -157,7 +180,6 @@ void main() async {
         }
       }
 
-      final secureRole = await secureStorage.getSavedRole();
       final savedRoleStr = secureRole ?? sharedPreferences.getString('saved_role');
       final role = (savedRoleStr == 'employee') ? UserRole.employee : UserRole.customer;
 
@@ -182,9 +204,7 @@ void main() async {
     debugPrint('Lỗi phục hồi session: $e');
   }
 
-  final hasUser = appSessionStore.session != null;
-  final String initialRoute = hasUser ? RouteNames.home : RouteNames.login;
-
+  // 5. Khởi chạy UI ngay lập tức với SplashView (logo bệnh viện hoạt họa mượt mà, không giật lag)
   runApp(
     ProviderScope(
       overrides: [
@@ -192,7 +212,16 @@ void main() async {
         sharedPreferencesProvider.overrideWithValue(sharedPreferences),
         authRepositoryProvider.overrideWithValue(authRepository),
       ],
-      child: MyApp(initialRoute: initialRoute),
+      child: const MyApp(initialRoute: RouteNames.splash),
+    ),
+  );
+
+  // 6. KHỞI TẠO FIREBASE CHẠY NỀN (Unawaited non-blocking background task)
+  // Không chặn hàm main, không làm treo ứng dụng trên iOS khi chờ cấp quyền
+  unawaited(
+    FirebaseTokenService.instance.initialize(
+      predefinedDeviceInfo: deviceInfoString,
+      prefs: sharedPreferences,
     ),
   );
 }
