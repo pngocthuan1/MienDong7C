@@ -124,9 +124,21 @@ class Environment {
   /// là áp dụng toàn app.
   static Duration get apiTimeout => const Duration(seconds: 20);
 
-  // Cloudflare Turnstile Configuration
+  // Cloudflare Turnstile Configuration (Chỉ giữ SiteKey công khai, SecretKey lưu tại Cloudflare Worker)
   static const String turnstileSiteKey = '0x4AAAAAADvG0YDfYPtUpuix';
-  static const String turnstileSecretKey = '0x4AAAAAADvG0dUTX_o58eUFpR14_5NXTYw';
+
+  // Địa chỉ máy chủ Cloudflare Worker xác thực token
+  static String captchaVerifyWorkerUrl = const String.fromEnvironment(
+    'CAPTCHA_WORKER_URL',
+    defaultValue: 'https://benhvien7c-captcha-verify.phamngocthuan1123.workers.dev',
+  );
+
+  /// Cho phép cập nhật URL Worker động nếu cần
+  static void setCustomWorkerUrl(String? url) {
+    if (url != null && url.trim().isNotEmpty) {
+      captchaVerifyWorkerUrl = url.trim();
+    }
+  }
 
   /// Mật khẩu client tĩnh (App Client Secret) gửi kèm request /api/Token/Login
   /// Hỗ trợ nạp động qua compile flag: --dart-define=APP_CLIENT_SECRET=...

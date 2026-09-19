@@ -274,7 +274,7 @@ class _RegisterViewState extends State<RegisterView> {
                   ListenableBuilder(
                     listenable: _viewModel.registerCommand,
                     builder: (context, _) {
-                      final isCaptchaVerified = _captchaToken != null || Environment.isDevelopment;
+                      final isCaptchaVerified = _captchaToken != null;
                       return AppButton(
                         label: 'Đăng ký',
                         icon: Icons.verified_user_outlined,

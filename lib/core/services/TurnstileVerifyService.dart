@@ -5,26 +5,17 @@ import 'package:benhvien7c/core/network/ApiException.dart';
 
 class TurnstileVerifyResult {
   final bool success;
-  final String? hostname;
-  final String? challengeTs;
-  final List<String> errorCodes;
+  final String? error;
 
   const TurnstileVerifyResult({
     required this.success,
-    this.hostname,
-    this.challengeTs,
-    this.errorCodes = const [],
+    this.error,
   });
 
   factory TurnstileVerifyResult.fromJson(Map<String, dynamic> json) {
     return TurnstileVerifyResult(
-      success: json['success'] as bool? ?? false,
-      hostname: json['hostname'] as String?,
-      challengeTs: json['challenge_ts'] as String?,
-      errorCodes: (json['error-codes'] as List<dynamic>?)
-              ?.map((e) => e.toString())
-              .toList() ??
-          const [],
+      success: json['valid'] as bool? ?? false,
+      error: json['error'] as String?,
     );
   }
 }
@@ -34,8 +25,7 @@ class TurnstileVerifyService {
 
   TurnstileVerifyService({Dio? dio}) : _dio = dio ?? Dio();
 
-  /// Gọi trực tiếp Cloudflare Siteverify API từ App Flutter
-  /// Hỗ trợ kiểm tra mã Token (kể cả mã thật từ Cloudflare hoặc mã Mock tự sinh)
+  /// Xác thực token qua máy chủ bảo mật Cloudflare Worker (không để lộ Secret Key trong App)
   Future<ApiResult<TurnstileVerifyResult>> verifyToken(String captchaToken) async {
     if (captchaToken.isEmpty) {
       return ApiFailure(
@@ -43,55 +33,17 @@ class TurnstileVerifyService {
       );
     }
 
-    // 1. Nếu là token giả lập Bot (Thử nghiệm Bot thật từ Cloudflare Edge)
-    if (captchaToken == 'cf-token-bot-failed') {
-      try {
-        final response = await _dio.post<Map<String, dynamic>>(
-          'https://challenges.cloudflare.com/turnstile/v0/siteverify',
-          data: {
-            'secret': '2x0000000000000000000000000000000AB', // Secret Key thử nghiệm chặn Bot của Cloudflare
-            'response': 'invalid_bot_token',
-          },
-          options: Options(
-            contentType: Headers.formUrlEncodedContentType,
-          ),
-        );
-        if (response.data != null) {
-          final result = TurnstileVerifyResult.fromJson(response.data!);
-          return ApiFailure(
-            BusinessException(
-              'Máy chủ Cloudflare Edge đã phát hiện hành vi Spam Bot! Lỗi: ${result.errorCodes.join(", ")}',
-            ),
-          );
-        }
-      } catch (_) {}
-      return ApiFailure(
-        BusinessException('Phát hiện nghi ngờ Spam Bot / Tự động hóa!'),
-      );
-    }
-
-    // 2. Nếu là token mô phỏng đăng nhập nhanh cho môi trường Demo
-    if (captchaToken.startsWith('cf-token-mock-')) {
-      await Future.delayed(const Duration(milliseconds: 300));
-      return const ApiSuccess(
-        TurnstileVerifyResult(
-          success: true,
-          hostname: 'localhost',
-          challengeTs: 'mock_timestamp',
-        ),
-      );
-    }
-
-    // 3. Nếu là token thật từ Cloudflare -> Gọi API https://challenges.cloudflare.com/turnstile/v0/siteverify
     try {
+      final workerUrl = Environment.captchaVerifyWorkerUrl;
       final response = await _dio.post<Map<String, dynamic>>(
-        'https://challenges.cloudflare.com/turnstile/v0/siteverify',
+        workerUrl,
         data: {
-          'secret': Environment.turnstileSecretKey,
-          'response': captchaToken,
+          'token': captchaToken,
         },
         options: Options(
-          contentType: Headers.formUrlEncodedContentType,
+          contentType: Headers.jsonContentType,
+          sendTimeout: const Duration(seconds: 10),
+          receiveTimeout: const Duration(seconds: 10),
         ),
       );
 
@@ -102,19 +54,36 @@ class TurnstileVerifyService {
         } else {
           return ApiFailure(
             BusinessException(
-              'Xác thực CAPTCHA thất bại: ${result.errorCodes.join(", ")}',
+              'Xác thực CAPTCHA thất bại: ${result.error ?? "Phát hiện nghi ngờ tự động hóa"}',
             ),
           );
         }
       }
 
       return ApiFailure(
-        UnknownException('Không nhận được phản hồi từ máy chủ Cloudflare'),
+        UnknownException('Không nhận được phản hồi từ máy chủ xác thực Cloudflare Worker'),
       );
     } on DioException catch (e) {
+      if (e.type == DioExceptionType.connectionTimeout ||
+          e.type == DioExceptionType.receiveTimeout ||
+          e.type == DioExceptionType.connectionError) {
+        return ApiFailure(
+          NetworkException('Không thể kết nối đến máy chủ xác thực bảo mật. Vui lòng kiểm tra kết nối mạng.'),
+        );
+      }
       return ApiFailure(ApiException.fromDioError(e));
     } catch (e) {
       return ApiFailure(UnknownException('Lỗi xác minh CAPTCHA: $e'));
     }
+  }
+
+  /// Hàm tiện ích hỗ trợ xác thực nhanh từ Widget
+  static Future<bool> verify(String token) async {
+    final service = TurnstileVerifyService();
+    final result = await service.verifyToken(token);
+    if (result is ApiSuccess<TurnstileVerifyResult>) {
+      return result.data.success;
+    }
+    return false;
   }
 }

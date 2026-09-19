@@ -1,4 +1,3 @@
-
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -98,9 +97,13 @@ class LoginViewModel extends ChangeNotifier {
 
   void startListeningNetworkChanges() {
     _connectivitySubscription?.cancel();
-    _connectivitySubscription = Connectivity().onConnectivityChanged.listen((results) {
+    _connectivitySubscription = Connectivity().onConnectivityChanged.listen((
+      results,
+    ) {
       if (kDebugMode) {
-        debugPrint('[LoginViewModel] Connectivity changed: $results -> HỦY CACHE mạng & debounce re-check');
+        debugPrint(
+          '[LoginViewModel] Connectivity changed: $results -> HỦY CACHE mạng & debounce re-check',
+        );
       }
       // HỦY CACHE LẬP TỨC: Đảm bảo không dùng lại quyền truy cập mạng cũ khi đã ngắt/đổi mạng
       _cachedAuthResult = null;
@@ -113,8 +116,11 @@ class LoginViewModel extends ChangeNotifier {
       });
     });
   }
+
   final NetworkInfoService _networkInfoService = NetworkInfoService();
-  late final NetworkAuthService _networkAuthService = NetworkAuthService(AppLocator.dioClient);
+  late final NetworkAuthService _networkAuthService = NetworkAuthService(
+    AppLocator.dioClient,
+  );
 
   LoginViewModel(this._authRepository, this._secureStorage);
 
@@ -123,7 +129,8 @@ class LoginViewModel extends ChangeNotifier {
     final currentSsid = info.ssid;
     final now = DateTime.now();
 
-    final isCacheValid = !force &&
+    final isCacheValid =
+        !force &&
         _cachedAuthResult != null &&
         _lastCheckTime != null &&
         now.difference(_lastCheckTime!) < const Duration(seconds: 10) &&
@@ -131,13 +138,17 @@ class LoginViewModel extends ChangeNotifier {
 
     if (isCacheValid) {
       if (kDebugMode) {
-        debugPrint('[LoginViewModel] Sử dụng cache kiểm tra mạng (SSID: "$currentSsid")');
+        debugPrint(
+          '[LoginViewModel] Sử dụng cache kiểm tra mạng (SSID: "$currentSsid")',
+        );
       }
       return _cachedAuthResult!;
     }
 
     if (kDebugMode) {
-      debugPrint('[LoginViewModel] Gọi checkInternalNetwork mới (SSID: "$currentSsid")...');
+      debugPrint(
+        '[LoginViewModel] Gọi checkInternalNetwork mới (SSID: "$currentSsid")...',
+      );
     }
 
     final authResult = await _networkAuthService.checkInternalNetwork(info);
@@ -146,7 +157,9 @@ class LoginViewModel extends ChangeNotifier {
     _cachedSsid = currentSsid;
 
     if (kDebugMode) {
-      debugPrint('[LoginViewModel] CheckInternalNetwork allowEmployeeRole: ${authResult.allowEmployeeRole}');
+      debugPrint(
+        '[LoginViewModel] CheckInternalNetwork allowEmployeeRole: ${authResult.allowEmployeeRole}',
+      );
     }
 
     return authResult;
@@ -219,9 +232,14 @@ class LoginViewModel extends ChangeNotifier {
       if (!authResult.allowEmployeeRole) {
         allowEmployeeRole = false;
         _selectedRole = UserRole.customer;
-        _message = 'Tài khoản Nhân viên chỉ được phép đăng nhập khi kết nối Mạng Nội bộ Bệnh viện hoặc VPN!';
+        _message =
+            'Đăng nhập thất bại. Vui lòng kiểm tra lại thông tin đăng nhập!';
         notifyListeners();
-        return ApiFailure(ForbiddenException('Chỉ được phép đăng nhập tài khoản Nhân viên từ Mạng Nội bộ Bệnh viện hoặc VPN.'));
+        return ApiFailure(
+          ForbiddenException(
+            'Đăng nhập thất bại. Vui lòng kiểm tra lại thông tin đăng nhập!',
+          ),
+        );
       }
     }
 
@@ -230,7 +248,9 @@ class LoginViewModel extends ChangeNotifier {
 
     // Chế độ Server Thật -> Kiểm tra CAPTCHA nếu có trước khi gọi Backend API
     if (captchaToken != null && captchaToken!.isNotEmpty) {
-      final verifyRes = await AppLocator.turnstileService.verifyToken(captchaToken!);
+      final verifyRes = await AppLocator.turnstileService.verifyToken(
+        captchaToken!,
+      );
       if (verifyRes is ApiFailure<TurnstileVerifyResult>) {
         _message = 'Xác thực CAPTCHA thất bại hoặc nghi ngờ Spam Bot.';
         notifyListeners();
@@ -269,18 +289,19 @@ class LoginViewModel extends ChangeNotifier {
     final prefs = await SharedPreferences.getInstance();
     final cleanPhone = phoneVal.replaceAll(RegExp(r'\D'), '');
 
-    final boundRoleKey = cleanPhone.isNotEmpty ? cleanPhone : phoneVal.trim().toLowerCase();
-    final isRegisteredMobileCustomer = prefs.getString('account_role_$boundRoleKey') == 'customer';
+    final boundRoleKey = cleanPhone.isNotEmpty
+        ? cleanPhone
+        : phoneVal.trim().toLowerCase();
+    final isRegisteredMobileCustomer =
+        prefs.getString('account_role_$boundRoleKey') == 'customer';
 
     if (_selectedRole == UserRole.employee) {
       if (isRegisteredMobileCustomer) {
-        _message = 'Đăng nhập thất bại. Vui lòng kiểm tra lại thông tin đăng nhập!';
+        _message =
+            'Đăng nhập thất bại. Vui lòng kiểm tra lại thông tin đăng nhập!';
         notifyListeners();
         return ApiFailure(
-          ForbiddenException(
-            'Đăng nhập thất bại.',
-            statusCode: 403,
-          ),
+          ForbiddenException('Đăng nhập thất bại.', statusCode: 403),
         );
       }
 
@@ -294,14 +315,16 @@ class LoginViewModel extends ChangeNotifier {
           userRole = UserRole.employee;
           await prefs.setString('account_role_$boundRoleKey', 'employee');
         } else {
-          _message = 'Đăng nhập thất bại. Vui lòng kiểm tra lại thông tin đăng nhập!';
+          _message =
+              'Đăng nhập thất bại. Vui lòng kiểm tra lại thông tin đăng nhập!';
           notifyListeners();
           return ApiFailure(
             ForbiddenException('Đăng nhập thất bại.', statusCode: 403),
           );
         }
       } else {
-        _message = 'Đăng nhập thất bại. Vui lòng kiểm tra lại thông tin đăng nhập!';
+        _message =
+            'Đăng nhập thất bại. Vui lòng kiểm tra lại thông tin đăng nhập!';
         notifyListeners();
         return ApiFailure(
           ForbiddenException('Đăng nhập thất bại.', statusCode: 403),
@@ -310,7 +333,8 @@ class LoginViewModel extends ChangeNotifier {
     } else {
       // Đăng nhập vai trò Bệnh nhân / Khách hàng (UserRole.customer)
       // inconsistency nếu server trả về khác nhau giữa các lần gọi).
-      final looksLikeEmployeeUsername = RegExp(r'[a-zA-Z]').hasMatch(phoneVal.trim()) ||
+      final looksLikeEmployeeUsername =
+          RegExp(r'[a-zA-Z]').hasMatch(phoneVal.trim()) ||
           prefs.getString('account_role_$boundRoleKey') == 'employee';
 
       UserProfileEntity? hisProfile;
@@ -330,7 +354,8 @@ class LoginViewModel extends ChangeNotifier {
       // không cho đăng nhập với vai trò Khách hàng.
       if (looksLikeEmployeeUsername && hisProfile != null) {
         await prefs.setString('account_role_$boundRoleKey', 'employee');
-        _message = 'Đăng nhập thất bại. Vui lòng kiểm tra lại thông tin đăng nhập!';
+        _message =
+            'Đăng nhập thất bại. Vui lòng kiểm tra lại thông tin đăng nhập!';
         notifyListeners();
         return ApiFailure(
           ForbiddenException('Đăng nhập thất bại.', statusCode: 403),
@@ -347,12 +372,18 @@ class LoginViewModel extends ChangeNotifier {
       if (userFullName == 'Khách Hàng' || userFullName.isEmpty) {
         String? perAccountName;
         if (cleanPhone.isNotEmpty) {
-          perAccountName = await _secureStorage.getFullNameForPhone(cleanPhone) ?? prefs.getString('full_name_$cleanPhone');
+          perAccountName =
+              await _secureStorage.getFullNameForPhone(cleanPhone) ??
+              prefs.getString('full_name_$cleanPhone');
         }
-        if (perAccountName != null && perAccountName.trim().isNotEmpty && perAccountName.trim() != phoneVal.trim()) {
+        if (perAccountName != null &&
+            perAccountName.trim().isNotEmpty &&
+            perAccountName.trim() != phoneVal.trim()) {
           userFullName = perAccountName.trim();
         } else {
-          final jsonStr = prefs.getString('saved_my_personal_profile_$phoneVal');
+          final jsonStr = prefs.getString(
+            'saved_my_personal_profile_$phoneVal',
+          );
           String? profileName;
           if (jsonStr != null && jsonStr.isNotEmpty) {
             try {
@@ -363,7 +394,9 @@ class LoginViewModel extends ChangeNotifier {
           if (profileName != null && profileName.trim().isNotEmpty) {
             userFullName = profileName.trim();
           } else {
-            userFullName = phoneVal.trim().isNotEmpty ? 'Tài khoản ${phoneVal.trim()}' : 'Khách hàng';
+            userFullName = phoneVal.trim().isNotEmpty
+                ? 'Tài khoản ${phoneVal.trim()}'
+                : 'Khách hàng';
           }
         }
       }
@@ -373,11 +406,18 @@ class LoginViewModel extends ChangeNotifier {
     }
 
     _message = null;
-    await _secureStorage.saveTokensRecord(session.accessToken, session.refreshToken);
-    await _secureStorage.saveExpiresRefreshToken((session.refreshTokenExpiry?.millisecondsSinceEpoch ?? 0).toString());
+    await _secureStorage.saveTokensRecord(
+      session.accessToken,
+      session.refreshToken,
+    );
+    await _secureStorage.saveExpiresRefreshToken(
+      (session.refreshTokenExpiry?.millisecondsSinceEpoch ?? 0).toString(),
+    );
 
     await _secureStorage.saveSavedPhone(phoneVal);
-    await _secureStorage.saveSavedRole(userRole == UserRole.employee ? 'employee' : 'customer');
+    await _secureStorage.saveSavedRole(
+      userRole == UserRole.employee ? 'employee' : 'customer',
+    );
     await _secureStorage.saveSavedFullName(userFullName);
 
     if (cleanPhone.isNotEmpty) {

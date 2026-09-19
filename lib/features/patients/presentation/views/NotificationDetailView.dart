@@ -1,12 +1,14 @@
 import 'dart:io';
 import 'dart:convert';
 import 'dart:async';
-import 'package:archive/archive.dart';
+
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:benhvien7c/core/services/DocumentCacheService.dart';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+
 import 'package:flutter_pdfview/flutter_pdfview.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 import 'package:benhvien7c/app/router/RouteNames.dart';
@@ -885,17 +887,7 @@ class _MetadataRow extends StatelessWidget {
   }
 }
 
-abstract class _DocxNode {}
-
-class _DocxTextNode extends _DocxNode {
-  final String text;
-  final bool isHeader;
-  _DocxTextNode(this.text, {this.isHeader = false});
-}
-class _DocxTableNode extends _DocxNode {
-  final List<List<String>> rows;
-  _DocxTableNode(this.rows);
-}
+// ─── DOCX inline-formatted viewer ────────────────────────────────────────────
 
 class _InAppDocxDetailModal extends StatefulWidget {
   final String filePath;
@@ -916,71 +908,27 @@ class _InAppDocxDetailModal extends StatefulWidget {
 
 class _InAppDocxDetailModalState extends State<_InAppDocxDetailModal> {
   bool _isLoading = true;
-  List<_DocxNode> _nodes = [];
+  String? _errorMessage;
   WebViewController? _webViewController;
-  bool _useWebView = false;
+
+  // Fallback for legacy .doc binary
+  List<_LegacyDocLine>? _legacyLines;
 
   @override
   void initState() {
     super.initState();
-    _parseDocxFile();
+    _loadFile();
   }
 
-  void _fallbackToWebView() {
-    if (!mounted) return;
-    if (widget.filePath.startsWith('http://') || widget.filePath.startsWith('https://')) {
-      final encodedUrl = Uri.encodeComponent(widget.filePath);
-      final googleDocsUrl = 'https://docs.google.com/gview?embedded=true&url=$encodedUrl';
-
-      _webViewController = WebViewController()
-        ..setJavaScriptMode(JavaScriptMode.unrestricted)
-        ..setNavigationDelegate(
-          NavigationDelegate(
-            onPageFinished: (_) {
-              if (mounted) {
-                _webViewController?.runJavaScript('''
-                  (function() {
-                    var style = document.createElement('style');
-                    style.innerHTML = '* { -webkit-font-smoothing: antialiased !important; -moz-osx-font-smoothing: grayscale !important; text-rendering: optimizeLegibility !important; } img { image-rendering: -webkit-optimize-contrast !important; }';
-                    document.head.appendChild(style);
-                  })();
-                ''');
-                setState(() {
-                  _isLoading = false;
-                });
-              }
-            },
-            onWebResourceError: (_) {
-              if (mounted) {
-                setState(() {
-                  _useWebView = false;
-                  _isLoading = false;
-                });
-              }
-            },
-          ),
-        )
-        ..loadRequest(Uri.parse(googleDocsUrl));
-
-      setState(() {
-        _useWebView = true;
-        _isLoading = true;
-      });
-    }
-  }
-
-  Future<void> _parseDocxFile() async {
+  Future<void> _loadFile() async {
     try {
-      Uint8List? bytes;
-
-      // 1. Đọc nhanh từ DocumentCacheService (0ms delay khi đã cache)
-      bytes = await DocumentCacheService.instance.getCachedBytes(
+      // 1. Get bytes from cache (instant if pre-fetched)
+      Uint8List? bytes = await DocumentCacheService.instance.getCachedBytes(
         notifId: widget.item.id,
         fileName: widget.fileName,
         fileUrl: widget.filePath,
       );
 
-      // 2. Nếu chưa có trong cache, tải ngầm an toàn qua DocumentCacheService
       if (bytes == null) {
         if (widget.filePath.startsWith('http://') || widget.filePath.startsWith('https://')) {
           final cachedFile = await DocumentCacheService.instance.downloadAndCache(
@@ -993,128 +941,173 @@ class _InAppDocxDetailModalState extends State<_InAppDocxDetailModal> {
           }
         } else {
           final file = File(widget.filePath);
-          if (file.existsSync()) {
-            bytes = await file.readAsBytes();
-          }
+          if (file.existsSync()) bytes = await file.readAsBytes();
         }
       }
 
-      if (bytes != null) {
-        try {
-          final archive = ZipDecoder().decodeBytes(bytes);
+      if (bytes == null) {
+        if (mounted) setState(() { _isLoading = false; _errorMessage = 'Không thể tải tệp.'; });
+        return;
+      }
 
-          ArchiveFile? docXmlFile;
-          for (final f in archive.files) {
-            if (f.name == 'word/document.xml') {
-              docXmlFile = f;
-              break;
-            }
-          }
+      // 2. Detect if it's a valid ZIP (DOCX) or legacy binary .doc
+      final isDocx = _isZip(bytes);
 
-          if (docXmlFile != null) {
-            final content = docXmlFile.content;
-            String xmlString = content is List<int> ? utf8.decode(content, allowMalformed: true) : content.toString();
-
-            final List<_DocxNode> parsedNodes = [];
-            final bodyRegex = RegExp(r'<w:body[^>]*>(.*?)</w:body>', dotAll: true);
-            final bodyXml = bodyRegex.firstMatch(xmlString)?.group(1) ?? xmlString;
-
-            final elementRegex = RegExp(r'<(w:p|w:tbl)[^>]*>.*?</\1>', dotAll: true);
-            final matches = elementRegex.allMatches(bodyXml);
-
-            for (final m in matches) {
-              final xmlBlock = m.group(0) ?? '';
-              if (xmlBlock.startsWith('<w:tbl')) {
-                final List<List<String>> tableRows = [];
-                final trRegex = RegExp(r'<w:tr[^>]*>(.*?)</w:tr>', dotAll: true);
-                final trMatches = trRegex.allMatches(xmlBlock);
-
-                for (final trMatch in trMatches) {
-                  final trXml = trMatch.group(1) ?? '';
-                  final List<String> rowCells = [];
-                  final tcRegex = RegExp(r'<w:tc[^>]*>(.*?)</w:tc>', dotAll: true);
-                  final tcMatches = tcRegex.allMatches(trXml);
-
-                  for (final tcMatch in tcMatches) {
-                    final tcXml = tcMatch.group(1) ?? '';
-                    final textRunRegex = RegExp(r'<w:t[^>]*>(.*?)</w:t>', dotAll: true);
-                    final cellTexts = textRunRegex.allMatches(tcXml).map((tm) => tm.group(1) ?? '').join(' ');
-                    rowCells.add(cellTexts.replaceAll(RegExp(r'<[^>]*>'), '').trim());
-                  }
-
-                  if (rowCells.any((c) => c.isNotEmpty)) {
-                    tableRows.add(rowCells);
-                  }
-                }
-
-                if (tableRows.isNotEmpty) {
-                  parsedNodes.add(_DocxTableNode(tableRows));
-                }
-              } else if (xmlBlock.startsWith('<w:p')) {
-                final textRunRegex = RegExp(r'<w:t[^>]*>(.*?)</w:t>', dotAll: true);
-                final pText = textRunRegex.allMatches(xmlBlock).map((tm) => tm.group(1) ?? '').join('');
-                final cleanText = pText.replaceAll(RegExp(r'<[^>]*>'), '').trim();
-
-                if (cleanText.isNotEmpty) {
-                  final isHeading = xmlBlock.contains('Heading') || cleanText.length < 50;
-                  parsedNodes.add(_DocxTextNode(cleanText, isHeader: isHeading));
-                }
-              }
-            }
-
-            if (parsedNodes.isNotEmpty) {
-              setState(() {
-                _nodes = parsedNodes;
-                _isLoading = false;
-              });
-              return;
-            }
-          }
-        } catch (_) {
-          // Fallback parser cho tệp nhị phân .doc (Word 97-2003 / OLE2)
-          final docNodes = _extractDocNodesFromBinary(bytes);
-          if (docNodes.isNotEmpty) {
-            setState(() {
-              _nodes = docNodes;
-              _isLoading = false;
-            });
-            return;
-          }
-        }
-
-        if (_nodes.isEmpty) {
-          final docNodes = _extractDocNodesFromBinary(bytes);
-          if (docNodes.isNotEmpty) {
-            setState(() {
-              _nodes = docNodes;
-              _isLoading = false;
-            });
-            return;
-          }
+      if (isDocx) {
+        await _renderWithMammoth(bytes);
+      } else {
+        // Legacy binary .doc fallback
+        final lines = _extractLegacyLines(bytes);
+        if (mounted) {
+          setState(() {
+            _legacyLines = lines;
+            _isLoading = false;
+          });
         }
       }
-    } catch (_) {}
-
-    if (widget.filePath.startsWith('http://') || widget.filePath.startsWith('https://')) {
-      _fallbackToWebView();
-      return;
+    } catch (e) {
+      if (mounted) setState(() { _isLoading = false; _errorMessage = 'Lỗi: $e'; });
     }
-
-    setState(() {
-      _nodes = [
-        _DocxTextNode(widget.item.details.isNotEmpty ? widget.item.details : 'Nội dung tệp Word ${widget.fileName}'),
-      ];
-      _isLoading = false;
-    });
   }
 
-  List<_DocxNode> _extractDocNodesFromBinary(Uint8List bytes) {
+  /// ZIP magic bytes: PK (0x50 0x4B)
+  bool _isZip(Uint8List bytes) {
+    return bytes.length > 4 && bytes[0] == 0x50 && bytes[1] == 0x4B;
+  }
+
+  Future<void> _renderWithMammoth(Uint8List docxBytes) async {
+    // 1. Load mammoth.js from Flutter asset (bundled in app, no internet needed)
+    final mammothJs = await rootBundle.loadString('assets/js/mammoth.min.js');
+
+    // 2. Encode DOCX bytes as base64 (stays on device)
+    final base64Docx = base64Encode(docxBytes);
+
+    // 3. Build self-contained HTML page
+    final html = _buildMammothHtml(mammothJs, base64Docx, widget.fileName);
+
+    // 4. Create WebView controller and load HTML locally (no network)
+    final controller = WebViewController()
+      ..setJavaScriptMode(JavaScriptMode.unrestricted)
+      ..setBackgroundColor(const Color(0xFFF1F5F9))
+      ..setNavigationDelegate(NavigationDelegate(
+        onPageFinished: (_) {
+          if (mounted) setState(() => _isLoading = false);
+        },
+      ))
+      ..loadHtmlString(html);
+
+    if (mounted) {
+      setState(() {
+        _webViewController = controller;
+        // Don't set _isLoading = false yet — wait for onPageFinished
+      });
+    }
+  }
+
+  String _buildMammothHtml(String mammothJs, String base64Docx, String fileName) {
+    return '''<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=3.0">
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: #f1f5f9;
+    font-family: "Times New Roman", Times, serif;
+    font-size: 13px;
+    color: #1e293b;
+    padding: 12px 8px 32px;
+  }
+  .banner {
+    background: #fff7ed;
+    border: 1px solid #fed7aa;
+    border-radius: 8px;
+    padding: 9px 12px;
+    margin-bottom: 12px;
+    font-size: 11px;
+    color: #9a3412;
+    font-family: sans-serif;
+    display: flex;
+    gap: 6px;
+    align-items: flex-start;
+  }
+  .page {
+    background: white;
+    border-radius: 4px;
+    box-shadow: 0 2px 12px rgba(0,0,0,0.12);
+    padding: 32px 28px 40px;
+    min-height: 400px;
+  }
+  /* mammoth default styles override */
+  p { margin-bottom: 8px; line-height: 1.65; }
+  h1, h2, h3, h4 { text-align: center; margin: 14px 0 8px; font-family: "Times New Roman", serif; }
+  h1 { font-size: 18px; }
+  h2 { font-size: 15px; }
+  h3 { font-size: 14px; }
+  h4 { font-size: 13px; }
+  b, strong { font-weight: bold; }
+  i, em { font-style: italic; }
+  u { text-decoration: underline; }
+  table { border-collapse: collapse; width: 100%; margin: 12px 0; }
+  td, th { border: 1px solid #cbd5e1; padding: 7px 9px; vertical-align: top; font-size: 12.5px; }
+  th, tr:first-child td { background: #eff6ff; font-weight: bold; }
+  tr:nth-child(even) td { background: #f8fafc; }
+  ul, ol { padding-left: 24px; margin-bottom: 8px; }
+  li { margin-bottom: 4px; line-height: 1.6; }
+  img { max-width: 100%; height: auto; margin: 8px 0; }
+  .error { color: #dc2626; font-family: sans-serif; font-size: 13px; text-align: center; padding: 24px; }
+</style>
+</head>
+<body>
+<div class="banner">
+  ⚠️ Đây là bản xem nhanh. Một số định dạng phức tạp (font, màu nền, cột đôi) có thể hiển thị khác so với file gốc.
+</div>
+<div class="page" id="content">
+  <p style="color:#64748b;text-align:center;font-family:sans-serif;font-size:12px">Đang xử lý tài liệu...</p>
+</div>
+
+<script>
+${mammothJs}
+
+(function() {
+  try {
+    var b64 = '${base64Docx}';
+    var raw = atob(b64);
+    var buf = new ArrayBuffer(raw.length);
+    var view = new Uint8Array(buf);
+    for (var i = 0; i < raw.length; i++) { view[i] = raw.charCodeAt(i); }
+
+    mammoth.convertToHtml({ arrayBuffer: buf }, {
+      styleMap: [
+        "p[style-name='Heading 1'] => h1:fresh",
+        "p[style-name='Heading 2'] => h2:fresh",
+        "p[style-name='Heading 3'] => h3:fresh",
+        "p[style-name='Heading 4'] => h4:fresh"
+      ]
+    }).then(function(result) {
+      document.getElementById('content').innerHTML =
+        result.value || '<p class="error">Tài liệu trống.</p>';
+    }).catch(function(err) {
+      document.getElementById('content').innerHTML =
+        '<p class="error">Không thể đọc file: ' + err.message + '</p>';
+    });
+  } catch(e) {
+    document.getElementById('content').innerHTML =
+      '<p class="error">Lỗi xử lý: ' + e.message + '</p>';
+  }
+})();
+</script>
+</body>
+</html>''';
+  }
+
+  // ─── Legacy binary .doc extractor ────────────────────────────────────────
+  List<_LegacyDocLine> _extractLegacyLines(Uint8List bytes) {
     final List<String> paragraphs = [];
     final regex = RegExp(
       r'[\wàáảãạâầấẩẫậăằắẳẵặèéẻẽẹêềếểễệìíỉĩịòóỏõọôồốổỗộơờớởỡợùúủũụưừứửữựỳýỷỹỵđÀÁẢÃẠÂẦẤẨẪẬĂẰẮẲẴẶÈÉẺẼẸÊỀẾỂỄỆÌÍỈĨỊÒÓỎÕỌÔỒỐỔỖỘƠỜỚỞỠỢÙÚỦŨỤƯỪỨỬỮỰỲÝỶỸỴĐ0-9\s\.,;:!?\-\(\)\%\$\/\\]{6,}',
     );
-
-    // 1. Quét UTF-16LE ở offset 0 và 1 (Đặc thù tệp Word 97-2003 / OLE lưu text dạng 16-bit LE)
     for (int offset = 0; offset < 2; offset++) {
       final length = (bytes.length - offset) ~/ 2;
       if (length <= 0) continue;
@@ -1123,63 +1116,52 @@ class _InAppDocxDetailModalState extends State<_InAppDocxDetailModal> {
         return bytes[pos] | (bytes[pos + 1] << 8);
       });
       final decoded = String.fromCharCodes(units);
-      final matches = regex.allMatches(decoded);
-      for (final m in matches) {
+      for (final m in regex.allMatches(decoded)) {
         final str = m.group(0)?.trim() ?? '';
         if (str.length >= 6 &&
-            !str.contains('Microsoft') &&
-            !str.contains('Word.Document') &&
-            !str.contains('Root Entry') &&
-            !str.contains('CompObj') &&
+            !str.contains('Microsoft') && !str.contains('Word.Document') &&
+            !str.contains('Root Entry') && !str.contains('CompObj') &&
             !paragraphs.contains(str)) {
           paragraphs.add(str);
         }
       }
     }
-
-    // 2. Dự phòng quét 8-bit text (UTF-8 / Latin / ANSI)
     if (paragraphs.isEmpty) {
       final latin = String.fromCharCodes(bytes);
-      final matches = regex.allMatches(latin);
-      for (final m in matches) {
+      for (final m in regex.allMatches(latin)) {
         final str = m.group(0)?.trim() ?? '';
         if (str.length >= 6 &&
-            !str.contains('Microsoft') &&
-            !str.contains('Word.Document') &&
-            !str.contains('Root Entry') &&
-            !str.contains('CompObj') &&
+            !str.contains('Microsoft') && !str.contains('Word.Document') &&
+            !str.contains('Root Entry') && !str.contains('CompObj') &&
             !paragraphs.contains(str)) {
           paragraphs.add(str);
         }
       }
     }
-
-    final List<_DocxNode> nodes = [];
-    for (final p in paragraphs) {
-      final isHeader = p.length < 80 &&
+    return paragraphs.map((p) {
+      final isH = p.length < 80 &&
           (p == p.toUpperCase() ||
-              p.startsWith('CỘNG HÒA') ||
-              p.startsWith('BỆNH VIỆN') ||
-              p.startsWith('THÔNG BÁO') ||
-              p.startsWith('KẾ HOẠCH') ||
-              p.startsWith('Kính gửi') ||
-              p.startsWith('ỦY BAN'));
-      nodes.add(_DocxTextNode(p, isHeader: isHeader));
-    }
-
-    return nodes;
+              p.startsWith('CỘNG HÒA') || p.startsWith('BỆNH VIỆN') ||
+              p.startsWith('THÔNG BÁO') || p.startsWith('KẾ HOẠCH') ||
+              p.startsWith('Kính gửi') || p.startsWith('ỦY BAN') ||
+              p.startsWith('QUYẾT ĐỊNH'));
+      return _LegacyDocLine(p, isHeader: isH);
+    }).toList();
   }
 
+  // ─── Build ────────────────────────────────────────────────────────────────
   @override
   Widget build(BuildContext context) {
     return Dialog.fullscreen(
       child: Scaffold(
-        backgroundColor: Colors.white,
+        backgroundColor: const Color(0xFFF1F5F9),
         appBar: AppBar(
           backgroundColor: const Color(0xFF2563EB),
           foregroundColor: Colors.white,
           elevation: 0,
-          title: Text(widget.fileName, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+          title: Text(widget.fileName,
+              style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
+              maxLines: 1, overflow: TextOverflow.ellipsis),
           leading: IconButton(
             icon: const Icon(Icons.arrow_back_rounded),
             onPressed: () => Navigator.of(context).pop(),
@@ -1188,157 +1170,147 @@ class _InAppDocxDetailModalState extends State<_InAppDocxDetailModal> {
             TextButton.icon(
               onPressed: () async {
                 Navigator.of(context).pop();
-                if (widget.onDownload != null) {
-                  await widget.onDownload!();
-                }
+                if (widget.onDownload != null) await widget.onDownload!();
               },
               icon: const Icon(Icons.download_rounded, color: Colors.white, size: 18),
-              label: const Text('Tải về máy', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+              label: const Text('Tải về máy',
+                  style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
             ),
           ],
         ),
         body: Stack(
           children: [
-            Positioned.fill(
-              child: _isLoading && !_useWebView
-                  ? Center(
-                      child: Container(
-                        margin: const EdgeInsets.symmetric(horizontal: 32),
-                        padding: const EdgeInsets.all(24),
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.circular(16),
-                          boxShadow: [
-                            BoxShadow(
-                              color: Colors.black.withValues(alpha: 0.06),
-                              blurRadius: 16,
-                              offset: const Offset(0, 4),
-                            ),
-                          ],
-                        ),
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Container(
-                              width: 56,
-                              height: 56,
-                              decoration: BoxDecoration(
-                                color: const Color(0xFFEFF6FF),
-                                borderRadius: BorderRadius.circular(14),
-                              ),
-                              child: const Icon(Icons.description_rounded, color: Color(0xFF2563EB), size: 32),
-                            ),
-                            const SizedBox(height: 16),
-                            Text(
-                              widget.fileName,
-                              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Color(0xFF0F172A)),
-                              textAlign: TextAlign.center,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                            const SizedBox(height: 14),
-                            const SizedBox(
-                              width: 24,
-                              height: 24,
-                              child: CircularProgressIndicator(strokeWidth: 2.5, color: Color(0xFF2563EB)),
-                            ),
-                            const SizedBox(height: 10),
-                            const Text(
-                              'Đang xử lý và dàn trang tài liệu Word...',
-                              style: TextStyle(color: Color(0xFF64748B), fontSize: 13),
-                            ),
-                          ],
-                        ),
-                      ),
-                    )
-                  : _useWebView && _webViewController != null
-                      ? WebViewWidget(controller: _webViewController!)
-                      : InteractiveViewer(
-                minScale: 0.5,
-                maxScale: 4.0,
-                child: SingleChildScrollView(
-                  padding: const EdgeInsets.all(8),
-                  child: Center(
-                    child: Container(
-                      width: double.infinity,
-                      padding: const EdgeInsets.all(16),
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(8),
-                        boxShadow: [
-                          BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 10),
-                        ],
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            widget.fileName,
-                            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: Color(0xFF0F172A)),
-                          ),
-                          const Divider(height: 24, thickness: 1),
-                          ..._nodes.map((node) {
-                            if (node is _DocxTextNode) {
-                              return Padding(
-                                padding: const EdgeInsets.only(bottom: 12),
-                                child: SelectableText(
-                                  node.text,
-                                  style: TextStyle(
-                                    fontSize: node.isHeader ? 15 : 14,
-                                    fontWeight: node.isHeader ? FontWeight.bold : FontWeight.normal,
-                                    color: node.isHeader ? const Color(0xFF0F172A) : const Color(0xFF334155),
-                                    height: 1.6,
-                                  ),
-                                ),
-                              );
-                            } else if (node is _DocxTableNode) {
-                              final maxCols = node.rows.fold<int>(0, (max, r) => r.length > max ? r.length : max);
-                              if (maxCols == 0) return const SizedBox.shrink();
+            // ── WebView (DOCX via mammoth.js) ──────────────────────────────
+            if (_webViewController != null)
+              WebViewWidget(controller: _webViewController!),
 
-                              return Padding(
-                                padding: const EdgeInsets.symmetric(vertical: 14),
-                                child: SingleChildScrollView(
-                                  scrollDirection: Axis.horizontal,
-                                  child: Table(
-                                    border: TableBorder.all(color: const Color(0xFFCBD5E1), width: 1),
-                                    defaultColumnWidth: const IntrinsicColumnWidth(),
-                                    children: node.rows.map((row) {
-                                      final paddedRow = List<String>.from(row);
-                                      while (paddedRow.length < maxCols) {
-                                        paddedRow.add('');
-                                      }
-                                      return TableRow(
-                                        children: paddedRow.map((cellText) {
-                                          return Container(
-                                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                                            color: const Color(0xFFF8FAFC),
-                                            child: Text(
-                                              cellText,
-                                              style: const TextStyle(fontSize: 13, color: Color(0xFF1E293B)),
-                                            ),
-                                          );
-                                        }).toList(),
-                                      );
-                                    }).toList(),
-                                  ),
-                                ),
-                              );
-                            }
-                            return const SizedBox.shrink();
-                          }),
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-            ),
+            // ── Legacy .doc text fallback ──────────────────────────────────
+            if (_webViewController == null && _legacyLines != null)
+              _buildLegacyFallback(),
+
+            // ── Error message ──────────────────────────────────────────────
+            if (_errorMessage != null && _webViewController == null && _legacyLines == null)
+              Center(child: Text(_errorMessage!,
+                  style: const TextStyle(color: Color(0xFF64748B)))),
+
+            // ── Loading overlay ────────────────────────────────────────────
+            if (_isLoading)
+              _buildLoadingOverlay(),
           ],
         ),
       ),
     );
   }
+
+  Widget _buildLoadingOverlay() {
+    return Container(
+      color: const Color(0xFFF1F5F9),
+      child: Center(
+        child: Container(
+          margin: const EdgeInsets.symmetric(horizontal: 32),
+          padding: const EdgeInsets.all(24),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(16),
+            boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.06),
+                blurRadius: 16, offset: const Offset(0, 4))],
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 56, height: 56,
+                decoration: BoxDecoration(
+                  color: const Color(0xFFEFF6FF),
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                child: const Icon(Icons.description_rounded, color: Color(0xFF2563EB), size: 32),
+              ),
+              const SizedBox(height: 16),
+              Text(widget.fileName,
+                  style: const TextStyle(fontWeight: FontWeight.bold,
+                      fontSize: 14, color: Color(0xFF0F172A)),
+                  textAlign: TextAlign.center, maxLines: 1,
+                  overflow: TextOverflow.ellipsis),
+              const SizedBox(height: 14),
+              const SizedBox(
+                width: 24, height: 24,
+                child: CircularProgressIndicator(strokeWidth: 2.5, color: Color(0xFF2563EB)),
+              ),
+              const SizedBox(height: 10),
+              const Text('Đang dàn trang tài liệu...',
+                  style: TextStyle(color: Color(0xFF64748B), fontSize: 13)),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildLegacyFallback() {
+    return InteractiveViewer(
+      minScale: 0.5,
+      maxScale: 4.0,
+      constrained: false,
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 8),
+        child: Center(
+          child: Container(
+            width: MediaQuery.of(context).size.width - 16,
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(4),
+              boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.12),
+                  blurRadius: 12, offset: const Offset(0, 2))],
+            ),
+            padding: const EdgeInsets.fromLTRB(28, 24, 28, 32),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFFFF7ED),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: const Color(0xFFFED7AA)),
+                  ),
+                  child: const Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Icon(Icons.info_outline_rounded, color: Color(0xFFC2410C), size: 17),
+                      SizedBox(width: 8),
+                      Expanded(child: Text(
+                        'Định dạng .doc cũ (Word 97-2003). Bản xem trước chỉ hiển thị văn bản, không có hình ảnh hay con dấu. Vui lòng tải file gốc để xem đầy đủ.',
+                        style: TextStyle(fontSize: 11.5, color: Color(0xFF9A3412), height: 1.4),
+                      )),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 20),
+                ...(_legacyLines ?? []).map((line) => Padding(
+                  padding: EdgeInsets.only(top: line.isHeader ? 12 : 0, bottom: line.isHeader ? 6 : 8),
+                  child: SelectableText(
+                    line.text,
+                    textAlign: line.isHeader ? TextAlign.center : TextAlign.start,
+                    style: TextStyle(
+                      fontSize: line.isHeader ? 14.5 : 13.5,
+                      fontWeight: line.isHeader ? FontWeight.bold : FontWeight.normal,
+                      color: line.isHeader ? const Color(0xFF0F172A) : const Color(0xFF334155),
+                      height: 1.65,
+                    ),
+                  ),
+                )),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
 }
+
+
+
 
 class _InAppPdfDetailModal extends StatefulWidget {
   final String filePath;
@@ -1898,4 +1870,10 @@ String _formatDateTime(DateTime dt) {
   final minute = dt.minute.toString().padLeft(2, '0');
   final second = dt.second.toString().padLeft(2, '0');
   return '$day/$month/$year $hour:$minute:$second';
+}
+
+class _LegacyDocLine {
+  final String text;
+  final bool isHeader;
+  _LegacyDocLine(this.text, {this.isHeader = false});
 }
