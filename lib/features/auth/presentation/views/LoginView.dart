@@ -99,6 +99,11 @@ class _LoginViewState extends State<LoginView> with WidgetsBindingObserver {
         AppNavigator.resetToNamed(context, RouteNames.home);
       },
       failure: (exception) {
+        if (_viewModel.captchaToken == null) {
+          setState(() {
+            _captchaToken = null; // Khóa nút Đăng nhập ngay lập tức khi CAPTCHA bị từ chối
+          });
+        }
         _viewModel.loginCommand.clearResult();
       },
     );
@@ -306,6 +311,12 @@ class _LoginViewState extends State<LoginView> with WidgetsBindingObserver {
                 _captchaToken = token;
               });
             },
+            onResetCaptcha: () {
+              _viewModel.captchaToken = null;
+              setState(() {
+                _captchaToken = null;
+              });
+            },
             onBiometricPressed: _onBiometricLoginPressed,
             isFaceIdAvailable: _isFaceIdAvailable,
           ),
@@ -321,6 +332,7 @@ class _LoginForm extends StatelessWidget {
     required this.onSubmit,
     required this.captchaToken,
     required this.onCaptchaVerified,
+    required this.onResetCaptcha,
     required this.onBiometricPressed,
     required this.isFaceIdAvailable,
   });
@@ -329,6 +341,7 @@ class _LoginForm extends StatelessWidget {
   final Future<void> Function() onSubmit;
   final String? captchaToken;
   final ValueChanged<String> onCaptchaVerified;
+  final VoidCallback onResetCaptcha;
   final VoidCallback onBiometricPressed;
   final bool isFaceIdAvailable;
 
@@ -409,11 +422,27 @@ class _LoginForm extends StatelessWidget {
             );
           },
         ),
-        Center(
-          child: CloudflareTurnstile(
-            siteKey: Environment.turnstileSiteKey,
-            onVerified: onCaptchaVerified,
-          ),
+        ListenableBuilder(
+          listenable: viewModel,
+          builder: (context, _) {
+            final hasCaptchaError = viewModel.message != null &&
+                viewModel.message!.contains('CAPTCHA');
+            return Center(
+              child: CloudflareTurnstile(
+                siteKey: Environment.turnstileSiteKey,
+                hasError: hasCaptchaError,
+                errorMessage: viewModel.message,
+                onRetry: () {
+                  viewModel.clearMessage();
+                  onResetCaptcha();
+                },
+                onVerified: (token) {
+                  viewModel.clearMessage();
+                  onCaptchaVerified(token);
+                },
+              ),
+            );
+          },
         ),
         const SizedBox(height: AppSizes.itemSpacing),
         Row(

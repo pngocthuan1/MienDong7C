@@ -80,6 +80,16 @@ class LoginViewModel extends ChangeNotifier {
   final phoneController = TextEditingController();
   final passwordController = TextEditingController();
   String? _message;
+  String? get message => _message;
+  set message(String? val) {
+    _message = val;
+    notifyListeners();
+  }
+
+  void clearMessage() {
+    _message = null;
+    notifyListeners();
+  }
   UserRole _selectedRole = UserRole.customer;
   UserRole get selectedRole => _selectedRole;
 
@@ -193,7 +203,6 @@ class LoginViewModel extends ChangeNotifier {
     notifyListeners();
   }
 
-  String? get message => _message;
 
   String? checkPhone(String? value) {
     return Validators.validatePhone(value);
@@ -253,6 +262,7 @@ class LoginViewModel extends ChangeNotifier {
       );
       if (verifyRes is ApiFailure<TurnstileVerifyResult>) {
         _message = 'Xác thực CAPTCHA thất bại hoặc nghi ngờ Spam Bot.';
+        captchaToken = null; // Khóa chặt nút bấm ngay lập tức, chặn spam!
         notifyListeners();
         return ApiFailure(verifyRes.exception);
       }

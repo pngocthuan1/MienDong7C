@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:dio/dio.dart';
 import 'package:benhvien7c/core/config/environment.dart';
 import 'package:benhvien7c/core/network/ApiResult.dart';
@@ -35,6 +36,7 @@ class TurnstileVerifyService {
 
     try {
       final workerUrl = Environment.captchaVerifyWorkerUrl;
+      debugPrint('[TurnstileService] 🚀 Gửi token lên Cloudflare Worker: $workerUrl');
       final response = await _dio.post<Map<String, dynamic>>(
         workerUrl,
         data: {
@@ -47,11 +49,15 @@ class TurnstileVerifyService {
         ),
       );
 
+      debugPrint('[TurnstileService] 📥 Phản hồi từ Worker: ${response.data}');
+
       if (response.data != null) {
         final result = TurnstileVerifyResult.fromJson(response.data!);
         if (result.success) {
+          debugPrint('[TurnstileService] ✅ CAPTCHA hợp lệ 100% từ Cloudflare Turnstile!');
           return ApiSuccess(result);
         } else {
+          debugPrint('[TurnstileService] ❌ CAPTCHA không hợp lệ hoặc bị từ chối.');
           return ApiFailure(
             BusinessException(
               'Xác thực CAPTCHA thất bại: ${result.error ?? "Phát hiện nghi ngờ tự động hóa"}',

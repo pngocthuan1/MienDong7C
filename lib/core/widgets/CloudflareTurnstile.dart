@@ -1,4 +1,4 @@
-﻿import 'dart:async';
+import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -11,13 +11,19 @@ class CloudflareTurnstile extends StatefulWidget {
     super.key,
     required this.onVerified,
     this.onExpired,
+    this.onRetry,
     this.simulateBot = false,
+    this.hasError = false,
+    this.errorMessage,
     this.siteKey,
   });
 
   final ValueChanged<String> onVerified;
   final VoidCallback? onExpired;
+  final VoidCallback? onRetry;
   final bool simulateBot;
+  final bool hasError;
+  final String? errorMessage;
   final String? siteKey;
 
   @override
@@ -32,6 +38,7 @@ class _CloudflareTurnstileState extends State<CloudflareTurnstile> {
   bool _isWebviewFailed = false;
   String? _errorDetail;
   Timer? _timeoutTimer;
+  Timer? _webCheckTimer;
 
   @override
   void initState() {
@@ -42,6 +49,20 @@ class _CloudflareTurnstileState extends State<CloudflareTurnstile> {
   @override
   void didUpdateWidget(covariant CloudflareTurnstile oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (widget.hasError && !oldWidget.hasError) {
+      setState(() {
+        _isLoading = false;
+        _isVerifying = false;
+        _isSuccess = false;
+        _isWebviewFailed = true;
+        _errorDetail = widget.errorMessage ?? 'Xác thực CAPTCHA thất bại hoặc nghi ngờ Spam Bot';
+      });
+      return;
+    }
+    if (!widget.hasError && oldWidget.hasError) {
+      _retry();
+      return;
+    }
     if (widget.simulateBot != oldWidget.simulateBot || widget.siteKey != oldWidget.siteKey) {
       _initTurnstile();
     }
@@ -50,21 +71,33 @@ class _CloudflareTurnstileState extends State<CloudflareTurnstile> {
   @override
   void dispose() {
     _timeoutTimer?.cancel();
+    _webCheckTimer?.cancel();
     super.dispose();
   }
 
   void _initTurnstile() {
     _timeoutTimer?.cancel();
+    _webCheckTimer?.cancel();
+
+    // Thiết lập trạng thái ban đầu: Đang xoay vòng kiểm tra an toàn
+    setState(() {
+      _isLoading = true;
+      _isVerifying = false;
+      _isSuccess = false;
+      _isWebviewFailed = false;
+      _errorDetail = null;
+    });
 
     // ── Chế độ mô phỏng Bot (DevTesting) ──
     if (widget.simulateBot) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
+      _webCheckTimer = Timer(const Duration(milliseconds: 1500), () {
         if (mounted) {
           setState(() {
             _isLoading = false;
+            _isVerifying = false;
             _isSuccess = false;
-            _isWebviewFailed = false;
-            _errorDetail = null;
+            _isWebviewFailed = true;
+            _errorDetail = 'Phát hiện nghi ngờ tự động hóa / Spam Bot';
           });
           widget.onExpired?.call();
         }
@@ -72,19 +105,19 @@ class _CloudflareTurnstileState extends State<CloudflareTurnstile> {
       return;
     }
 
-    // ── Web platform (Chrome/Edge localhost): tự động thông qua để dev/test ──
+    // ── Nền tảng Web: Chặn hẳn, xoay vòng kiểm tra 1.8s rồi báo Không thể xác thực ──
+    // Không tự động báo "thành công" giả để người dùng kiểm thử đúng trạng thái chặn thật
     if (kIsWeb) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
+      _webCheckTimer = Timer(const Duration(milliseconds: 1800), () {
         if (mounted) {
           setState(() {
             _isLoading = false;
-            _isSuccess = true;
-            _isWebviewFailed = false;
-            _errorDetail = null;
+            _isVerifying = false;
+            _isSuccess = false;
+            _isWebviewFailed = true;
+            _errorDetail = 'Không thể xác thực: Trình duyệt Web chưa được cấp phép bảo mật di động';
           });
-          widget.onVerified(
-            'cf-token-mock-web-${DateTime.now().millisecondsSinceEpoch}',
-          );
+          widget.onExpired?.call();
         }
       });
       return;
@@ -100,6 +133,14 @@ class _CloudflareTurnstileState extends State<CloudflareTurnstile> {
           'Mozilla/5.0 (Linux; Android 13; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Mobile Safari/537.36',
         )
         ..setNavigationDelegate(NavigationDelegate(
+          onPageFinished: (String url) {
+            _timeoutTimer?.cancel();
+            if (mounted && _isLoading && !_isSuccess && !_isVerifying && !_isWebviewFailed) {
+              setState(() {
+                _isLoading = false;
+              });
+            }
+          },
           onWebResourceError: (WebResourceError error) {
             if (kDebugMode) {
               debugPrint(
@@ -125,9 +166,17 @@ class _CloudflareTurnstileState extends State<CloudflareTurnstile> {
               final data = jsonDecode(message.message) as Map<String, dynamic>;
               final type = data['type'] as String?;
 
-              if (type == 'success') {
+              if (type == 'ready') {
+                _timeoutTimer?.cancel();
+                if (mounted && _isLoading) {
+                  setState(() {
+                    _isLoading = false;
+                  });
+                }
+              } else if (type == 'success') {
                 _timeoutTimer?.cancel();
                 final token = data['token'] as String;
+                debugPrint('[Turnstile] 🟢 Cloudflare vừa xác nhận người dùng thật! Token prefix: ${token.substring(0, token.length > 20 ? 20 : token.length)}...');
 
                 // Cập nhật UI: Đang xác thực token với Cloudflare Worker
                 if (mounted) {
@@ -138,8 +187,9 @@ class _CloudflareTurnstileState extends State<CloudflareTurnstile> {
                   });
                 }
 
-                // Gọi verify qua Cloudflare Worker
+                // Gọi verify qua Cloudflare Worker thật
                 final isValid = await TurnstileVerifyService.verify(token);
+                debugPrint('[Turnstile] 🎯 Kết quả xác thực cuối cùng: isValid = $isValid');
 
                 if (mounted) {
                   setState(() {
@@ -147,7 +197,7 @@ class _CloudflareTurnstileState extends State<CloudflareTurnstile> {
                     _isSuccess = isValid;
                     _isWebviewFailed = !isValid;
                     if (!isValid) {
-                      _errorDetail = 'Xác thực không hợp lệ từ máy chủ';
+                      _errorDetail = 'Xác thực không hợp lệ từ máy chủ bảo mật';
                     }
                   });
                 }
@@ -191,11 +241,14 @@ class _CloudflareTurnstileState extends State<CloudflareTurnstile> {
 <html>
   <head>
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
+    <script src="https://challenges.cloudflare.com/turnstile/v0/api.js?onload=onTurnstileLoaded" async defer></script>
     <style>
-      html, body {
+      * {
+        box-sizing: border-box;
         margin: 0;
         padding: 0;
+      }
+      html, body {
         width: 100%;
         height: 100%;
         display: flex;
@@ -204,17 +257,33 @@ class _CloudflareTurnstileState extends State<CloudflareTurnstile> {
         background-color: transparent;
         overflow: hidden;
       }
+      .cf-turnstile {
+        width: 100% !important;
+        display: flex;
+        justify-content: center;
+      }
+      .cf-turnstile > iframe {
+        width: 100% !important;
+        max-width: 100% !important;
+        height: 65px !important;
+      }
     </style>
   </head>
   <body>
     <div class="cf-turnstile"
          data-sitekey="$siteKey"
+         data-size="flexible"
          data-callback="onTurnstileSuccess"
          data-expired-callback="onTurnstileExpired"
          data-error-callback="onTurnstileError"
          data-theme="light">
     </div>
     <script>
+      function onTurnstileLoaded() {
+        if (window.TurnstileChannel) {
+          window.TurnstileChannel.postMessage(JSON.stringify({ type: 'ready' }));
+        }
+      }
       function onTurnstileSuccess(token) {
         if (window.TurnstileChannel) {
           window.TurnstileChannel.postMessage(JSON.stringify({ type: 'success', token: token }));
@@ -241,11 +310,6 @@ class _CloudflareTurnstileState extends State<CloudflareTurnstile> {
 
       setState(() {
         _webViewController = controller;
-        _isLoading = true;
-        _isVerifying = false;
-        _isSuccess = false;
-        _isWebviewFailed = false;
-        _errorDetail = null;
       });
 
       // Timeout 15 giây nếu mạng yếu
@@ -278,182 +342,209 @@ class _CloudflareTurnstileState extends State<CloudflareTurnstile> {
       _webViewController = null;
       _errorDetail = null;
     });
+    widget.onRetry?.call();
     _initTurnstile();
   }
 
   @override
   Widget build(BuildContext context) {
-    // ── Hiển thị WebView khi đang load Turnstile ──
-    final showWebView = _webViewController != null &&
+    final isFailed = _isWebviewFailed || widget.simulateBot || widget.hasError;
+
+    // ── Hiển thị WebView khi đang load Turnstile trên Mobile ──
+    final showWebView = !kIsWeb &&
+        _webViewController != null &&
         !_isSuccess &&
         !_isVerifying &&
-        !widget.simulateBot &&
-        !_isWebviewFailed;
+        !isFailed;
+
+    final Widget currentChild;
 
     if (showWebView) {
-      return Container(
+      currentChild = SizedBox(
+        key: const ValueKey('turnstile_webview'),
         width: double.infinity,
-        height: 70,
-        decoration: BoxDecoration(
-          color: const Color(0xFFF8FAFC),
-          border: Border.all(color: const Color(0xFFE2E8F0)),
-          borderRadius: BorderRadius.circular(12),
+        height: 65,
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(8),
+          child: WebViewWidget(controller: _webViewController!),
         ),
-        clipBehavior: Clip.antiAlias,
-        child: WebViewWidget(controller: _webViewController!),
+      );
+    } else {
+      currentChild = _buildStatusCard(
+        key: ValueKey(
+          'turnstile_${isFailed ? "failed" : _isSuccess ? "success" : "loading"}',
+        ),
+        isFailed: isFailed,
       );
     }
 
-    // ── Hiển thị trạng thái: đang verify với Worker / thành công / lỗi ──
-    return Container(
-      width: double.infinity,
-      height: 70,
-      decoration: BoxDecoration(
-        color: const Color(0xFFF8FAFC),
-        border: Border.all(
-          color: _isWebviewFailed || widget.simulateBot
-              ? const Color(0xFFFCA5A5)
-              : _isSuccess
-                  ? const Color(0xFF86EFAC)
-                  : const Color(0xFFE2E8F0),
-          width: 1.2,
+    return AnimatedSwitcher(
+      duration: const Duration(milliseconds: 250),
+      transitionBuilder: (child, animation) {
+        return FadeTransition(opacity: animation, child: child);
+      },
+      child: currentChild,
+    );
+  }
+
+  Widget _buildStatusCard({required Key key, required bool isFailed}) {
+    final Color bgColor;
+    final Color borderColor;
+    final Widget iconWidget;
+    final String title;
+    final String subtitle;
+    final Color titleColor;
+    final Color subtitleColor;
+    Widget? actionWidget;
+
+    if (isFailed) {
+      bgColor = const Color(0xFFFEF2F2);
+      borderColor = const Color(0xFFFCA5A5);
+      iconWidget = const Icon(
+        Icons.error_outline_rounded,
+        color: Color(0xFFDC2626),
+        size: 24,
+      );
+      title = 'Không thể xác thực';
+      subtitle = widget.errorMessage ??
+          _errorDetail ??
+          'Phát hiện nghi ngờ tự động hóa / Spam Bot';
+      titleColor = const Color(0xFFDC2626);
+      subtitleColor = const Color(0xFFB91C1C);
+
+      if (!_isLoading && !_isVerifying) {
+        actionWidget = GestureDetector(
+          onTap: _retry,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+            decoration: BoxDecoration(
+              color: const Color(0xFF1976D2),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: const Text(
+              'Thử lại',
+              style: TextStyle(
+                fontSize: 11,
+                color: Colors.white,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ),
+        );
+      }
+    } else if (_isSuccess) {
+      bgColor = const Color(0xFFF0FDF4);
+      borderColor = const Color(0xFF86EFAC);
+      iconWidget = const Icon(
+        Icons.check_circle_rounded,
+        color: Color(0xFF16A34A),
+        size: 24,
+      );
+      title = 'Xác minh thành công ✓';
+      subtitle = 'Bảo vệ bởi Cloudflare Turnstile';
+      titleColor = const Color(0xFF15803D);
+      subtitleColor = const Color(0xFF166534);
+    } else {
+      bgColor = const Color(0xFFF8FAFC);
+      borderColor = const Color(0xFFE2E8F0);
+      iconWidget = const SizedBox(
+        width: 20,
+        height: 20,
+        child: CircularProgressIndicator(
+          strokeWidth: 2.0,
+          valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF1976D2)),
         ),
-        borderRadius: BorderRadius.circular(12),
+      );
+      title = _isVerifying
+          ? 'Đang xác thực bảo mật máy chủ...'
+          : 'Đang kiểm tra an toàn...';
+      subtitle = _isVerifying
+          ? 'Đang kiểm tra token qua Cloudflare Worker'
+          : 'Kiểm tra an toàn Cloudflare Edge...';
+      titleColor = const Color(0xFF334155);
+      subtitleColor = const Color(0xFF64748B);
+    }
+
+    return Container(
+      key: key,
+      width: double.infinity,
+      height: 65,
+      decoration: BoxDecoration(
+        color: bgColor,
+        border: Border.all(color: borderColor, width: 1.0),
+        borderRadius: BorderRadius.circular(8),
       ),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.center,
-          children: [
-            SizedBox(
-              width: 32,
-              height: 32,
-              child: Center(
-                child: (_isLoading || _isVerifying)
-                    ? const SizedBox(
-                        width: 20,
-                        height: 20,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2.2,
-                          valueColor: AlwaysStoppedAnimation<Color>(
-                            Color(0xFF1976D2),
-                          ),
-                        ),
-                      )
-                    : _isWebviewFailed || widget.simulateBot
-                        ? const Icon(
-                            Icons.error_outline_rounded,
-                            color: Color(0xFFDC2626),
-                            size: 26,
-                          )
-                        : const Icon(
-                            Icons.check_circle_rounded,
-                            color: Color(0xFF22C55E),
-                            size: 26,
-                          ),
-              ),
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisAlignment: MainAxisAlignment.center,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    _isVerifying
-                        ? 'Đang xác thực bảo mật máy chủ...'
-                        : _isLoading
-                            ? 'Đang nạp Cloudflare Turnstile...'
-                            : _isWebviewFailed
-                                ? 'Không thể tải xác thực'
-                                : widget.simulateBot
-                                    ? 'Xác thực thất bại (Bot)'
-                                    : 'Xác minh thành công ✓',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      fontSize: 13.5,
-                      fontWeight: FontWeight.bold,
-                      color: (_isLoading || _isVerifying)
-                          ? const Color(0xFF334155)
-                          : _isWebviewFailed || widget.simulateBot
-                              ? const Color(0xFFDC2626)
-                              : const Color(0xFF15803D),
-                    ),
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    _isVerifying
-                        ? 'Đang kiểm tra token qua Cloudflare Worker'
-                        : _isLoading
-                            ? 'Kiểm tra an toàn Cloudflare Edge...'
-                            : _isWebviewFailed
-                                ? (_errorDetail ?? 'Kiểm tra kết nối internet và thử lại')
-                                : widget.simulateBot
-                                    ? 'Nghi ngờ tự động / Spam'
-                                    : 'Bảo vệ bởi Cloudflare Turnstile',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      fontSize: 10.5,
-                      color: _isWebviewFailed ? const Color(0xFFDC2626) : const Color(0xFF64748B),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(width: 8),
-            // ── Nút Thử lại khi lỗi ──
-            if (_isWebviewFailed)
-              GestureDetector(
-                onTap: _retry,
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF1976D2),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: const Text(
-                    'Thử lại',
-                    style: TextStyle(
-                      fontSize: 11,
-                      color: Colors.white,
-                      fontWeight: FontWeight.bold,
-                    ),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          SizedBox(
+            width: 28,
+            height: 28,
+            child: Center(child: iconWidget),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisAlignment: MainAxisAlignment.center,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  title,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: titleColor,
                   ),
                 ),
-              )
-            else
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.end,
-                mainAxisAlignment: MainAxisAlignment.center,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: const [
-                      Icon(Icons.cloud_outlined, color: Color(0xFFF97316), size: 15),
-                      SizedBox(width: 4),
-                      Text(
-                        'Turnstile',
-                        style: TextStyle(
-                          fontSize: 11.5,
-                          fontWeight: FontWeight.bold,
-                          color: Color(0xFF475569),
-                        ),
+                const SizedBox(height: 2),
+                Text(
+                  subtitle,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: 10.5,
+                    color: subtitleColor,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 8),
+          if (actionWidget != null)
+            actionWidget
+          else
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              mainAxisAlignment: MainAxisAlignment.center,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: const [
+                    Icon(Icons.cloud_outlined, color: Color(0xFFF97316), size: 14),
+                    SizedBox(width: 4),
+                    Text(
+                      'Turnstile',
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                        color: Color(0xFF475569),
                       ),
-                    ],
-                  ),
-                  const SizedBox(height: 2),
-                  const Text(
-                    'Bảo mật Cloudflare',
-                    style: TextStyle(fontSize: 9, color: Color(0xFF94A3B8)),
-                  ),
-                ],
-              ),
-          ],
-        ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 1),
+                const Text(
+                  'Bảo mật Cloudflare',
+                  style: TextStyle(fontSize: 8.5, color: Color(0xFF94A3B8)),
+                ),
+              ],
+            ),
+        ],
       ),
     );
   }
