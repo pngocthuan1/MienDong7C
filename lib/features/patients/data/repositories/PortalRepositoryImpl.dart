@@ -453,7 +453,13 @@ class PortalRepositoryImpl implements PortalRepository {
         phoneNumber: serverPhieu?.sdt ?? draft.phoneNumber,
         symptom: serverPhieu?.trieuChung ?? symptom,
         dangKyGiup: serverPhieu?.dangKyDum ?? draft.dangKyGiup,
+        doneStatus: serverPhieu?.done ?? 1,
+        coTheXoa: serverPhieu?.coTheXoa,
+        trangThai: serverPhieu?.trangThai,
+        soCcHc: serverPhieu?.soCcHc ?? draft.identifier,
+        ngayCap: serverPhieu?.ngayCap ?? draft.cccdIssueDate,
       );
+
 
       // Lưu lại vào cache địa phương để hiển thị lịch sử ngoại tuyến
       try {
@@ -524,7 +530,13 @@ class PortalRepositoryImpl implements PortalRepository {
           phoneNumber: dto.sdt,
           symptom: dto.trieuChung,
           dangKyGiup: dto.dangKyDum,
+          doneStatus: dto.done,
+          coTheXoa: dto.coTheXoa,
+          trangThai: dto.trangThai,
+          soCcHc: dto.soCcHc,
+          ngayCap: dto.ngayCap,
         );
+
       }).toList();
       // Ghi cache mới (fire-and-forget, không block UI)
       if (phone.isNotEmpty) {
@@ -809,6 +821,23 @@ class PortalRepositoryImpl implements PortalRepository {
       return Error(Exception(error.toString()), error.toString());
     }
   }
+
+  @override
+  Future<Result<DkkTimBenhNhanResponseDto?>> timBenhNhanByCccdHc(String soCcHc) async {
+    try {
+      final remote = _remoteDatasource ?? DatLichKhamRemoteDataSource(AppLocator.dioClient);
+      final dto = await remote.timBenhNhanByCccdHc(soCcHc);
+      return Ok(dto);
+    } on ApiException catch (e) {
+      return Error(e, e.message);
+    } on Exception catch (exception) {
+      return Error(exception, exception.toString());
+    } catch (error) {
+      return Error(Exception(error.toString()), error.toString());
+    }
+  }
+
+
 
   String _formatNgayKhamForServer(String ngayKham) {
     if (ngayKham.isEmpty) return ngayKham;

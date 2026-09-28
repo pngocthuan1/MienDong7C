@@ -28,6 +28,11 @@ class MedicalTicketEntity {
     this.clinic,
     this.isDeleted = false,
     bool isPast = false,
+    this.doneStatus,
+    this.coTheXoa,
+    this.trangThai,
+    this.soCcHc,
+    this.ngayCap,
   }) : _isPastExplicit = isPast;
 
   final String? id;
@@ -58,6 +63,17 @@ class MedicalTicketEntity {
   final String? clinic;
   final bool isDeleted;
   final bool _isPastExplicit;
+
+  /// Trạng thái từ server (done: -1, 0, 1, 2, 3)
+  final int? doneStatus;
+  /// Cờ server cho phép xóa
+  final bool? coTheXoa;
+  /// Tên trạng thái hoặc lý do lỗi từ server
+  final String? trangThai;
+  /// Số CCCD hoặc Hộ chiếu
+  final String? soCcHc;
+  /// Ngày cấp CCCD/HC
+  final String? ngayCap;
 
   bool get isToday {
     final d = parsedTicketDate;
@@ -130,6 +146,11 @@ class MedicalTicketEntity {
       'clinic': clinic,
       'isDeleted': isDeleted,
       'isPast': isPast,
+      'doneStatus': doneStatus,
+      'coTheXoa': coTheXoa,
+      'trangThai': trangThai,
+      'soCcHc': soCcHc,
+      'ngayCap': ngayCap,
     };
   }
 
@@ -163,8 +184,14 @@ class MedicalTicketEntity {
       clinic: json['clinic'] as String?,
       isDeleted: json['isDeleted'] as bool? ?? false,
       isPast: json['isPast'] as bool? ?? false,
+      doneStatus: (json['doneStatus'] as num?)?.toInt(),
+      coTheXoa: json['coTheXoa'] as bool?,
+      trangThai: json['trangThai'] as String?,
+      soCcHc: json['soCcHc'] as String?,
+      ngayCap: json['ngayCap'] as String?,
     );
   }
+
 
   MedicalTicketEntity copyWith({
     String? id,
@@ -195,6 +222,11 @@ class MedicalTicketEntity {
     String? clinic,
     bool? isDeleted,
     bool? isPast,
+    int? doneStatus,
+    bool? coTheXoa,
+    String? trangThai,
+    String? soCcHc,
+    String? ngayCap,
   }) {
     return MedicalTicketEntity(
       id: id ?? this.id,
@@ -225,8 +257,14 @@ class MedicalTicketEntity {
       clinic: clinic ?? this.clinic,
       isDeleted: isDeleted ?? this.isDeleted,
       isPast: isPast ?? this.isPast,
+      doneStatus: doneStatus ?? this.doneStatus,
+      coTheXoa: coTheXoa ?? this.coTheXoa,
+      trangThai: trangThai ?? this.trangThai,
+      soCcHc: soCcHc ?? this.soCcHc,
+      ngayCap: ngayCap ?? this.ngayCap,
     );
   }
+
 
   DateTime? get parsedTicketDate {
     if (selectedDate != null && selectedDate!.trim().isNotEmpty) {

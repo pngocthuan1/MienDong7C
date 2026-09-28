@@ -36,6 +36,75 @@ class DkkHoSoBenhNhanDto {
   }
 }
 
+// ---------------------------------------------------------------------------
+// DTO kết quả tìm bệnh nhân theo CCCD / Hộ chiếu (Luồng 1)
+// ---------------------------------------------------------------------------
+// TODO(endpoint): Điền tên endpoint và key JSON theo response thực tế khi có API.
+// Các field hiện ánh xạ theo tên quy ước — chỉnh sửa nếu server trả về tên khác.
+// ---------------------------------------------------------------------------
+class DkkTimBenhNhanResponseDto {
+  final String maBN;
+  final String maBhytHoacMaBn;
+  final String hoTen;
+  final String? gioiTinh;
+  final String? ngaySinh;    // ISO hoặc dd/MM/yyyy
+  final String? ngayCap;     // Ngày cấp CCCD/HC
+  final String? soCcHc;      // Số CCCD hoặc Hộ chiếu
+  final String? soDienThoai;
+  final String? tinhTp;      // Mã tỉnh/thành
+  final String? tinhTpTen;   // Tên tỉnh/thành
+  final String? phuongXa;    // Mã phường/xã
+  final String? phuongXaTen; // Tên phường/xã
+
+  const DkkTimBenhNhanResponseDto({
+    required this.maBN,
+    required this.maBhytHoacMaBn,
+    required this.hoTen,
+    this.gioiTinh,
+    this.ngaySinh,
+    this.ngayCap,
+    this.soCcHc,
+    this.soDienThoai,
+    this.tinhTp,
+    this.tinhTpTen,
+    this.phuongXa,
+    this.phuongXaTen,
+  });
+
+  // TODO(endpoint): Cập nhật key JSON khi có API thật.
+  factory DkkTimBenhNhanResponseDto.fromJson(Map<String, dynamic> json) {
+    return DkkTimBenhNhanResponseDto(
+      maBN: json['MaBN']?.toString() ?? json['MaBn']?.toString() ?? '',
+      maBhytHoacMaBn: json['MaBhytHoacMaBn']?.toString() ?? json['MaBN']?.toString() ?? '',
+      hoTen: json['HoTen']?.toString() ?? '',
+      gioiTinh: json['GioiTinh']?.toString(),
+      ngaySinh: json['NgaySinh']?.toString(),
+      ngayCap: json['NgayCap']?.toString(),
+      soCcHc: json['SoCcHc']?.toString() ?? json['Cccd']?.toString(),
+      soDienThoai: json['SoDienThoai']?.toString(),
+      tinhTp: json['TinhTp']?.toString() ?? json['MaTinh']?.toString(),
+      tinhTpTen: json['TinhTpTen']?.toString() ?? json['TenTinh']?.toString(),
+      phuongXa: json['PhuongXa']?.toString() ?? json['MaPhuong']?.toString(),
+      phuongXaTen: json['PhuongXaTen']?.toString() ?? json['TenPhuong']?.toString(),
+    );
+  }
+
+  Map<String, dynamic> toJson() => {
+        'MaBN': maBN,
+        'MaBhytHoacMaBn': maBhytHoacMaBn,
+        'HoTen': hoTen,
+        'GioiTinh': gioiTinh,
+        'NgaySinh': ngaySinh,
+        'NgayCap': ngayCap,
+        'SoCcHc': soCcHc,
+        'SoDienThoai': soDienThoai,
+        'TinhTp': tinhTp,
+        'TinhTpTen': tinhTpTen,
+        'PhuongXa': phuongXa,
+        'PhuongXaTen': phuongXaTen,
+      };
+}
+
 class DkkGioKhamDto {
   final String id;
   final String display;
@@ -141,6 +210,15 @@ class DkkSoKhamDto {
   final int? done;
   final String? trangThai;
   final String? bgColor;
+  // --- Fields mới (Luồng 2) ---
+  /// Cờ server cho phép xóa phiếu (nullable — server có thể chưa có field này).
+  final bool? coTheXoa;
+  /// Số CCCD hoặc Hộ chiếu
+  final String? soCcHc;
+  /// Ngày cấp CCCD/HC
+  final String? ngayCap;
+  /// Địa chỉ đầy đủ
+  final String? diaChi;
 
   DkkSoKhamDto({
     required this.id,
@@ -159,6 +237,10 @@ class DkkSoKhamDto {
     this.done,
     this.trangThai,
     this.bgColor,
+    this.coTheXoa,
+    this.soCcHc,
+    this.ngayCap,
+    this.diaChi,
   });
 
   factory DkkSoKhamDto.fromJson(Map<String, dynamic> json) {
@@ -179,6 +261,11 @@ class DkkSoKhamDto {
       done: (json['done'] as num?)?.toInt(),
       trangThai: json['TrangThai']?.toString(),
       bgColor: json['BgColor']?.toString(),
+      // Fields mới
+      coTheXoa: json['CoTheXoa'] as bool?,
+      soCcHc: json['SoCcHc']?.toString() ?? json['soCcHc']?.toString(),
+      ngayCap: json['NgayCap']?.toString() ?? json['ngayCap']?.toString(),
+      diaChi: json['DiaChi']?.toString() ?? json['diaChi']?.toString(),
     );
   }
 }

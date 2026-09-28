@@ -112,6 +112,48 @@ class DatLichKhamRemoteDataSource {
     }
   }
 
+  // ---------------------------------------------------------------------------
+  // Tìm bệnh nhân theo CCCD / Hộ chiếu (Luồng 1)
+  // ---------------------------------------------------------------------------
+  // TODO(endpoint): Thay [TBD_ENDPOINT] bằng tên path thực tế khi có API.
+  // Ví dụ: '/api/DatLichKham/TimBenhNhan'
+  // Tham số: soCcHc (String) — số CCCD (12 ký tự) hoặc Hộ chiếu (8 ký tự)
+  //
+  // Trả về:
+  //   DkkTimBenhNhanResponseDto  — nếu tìm thấy
+  //   null                        — nếu không tìm thấy (server 404 hoặc data rỗng)
+  //   throw ApiException          — nếu lỗi mạng / server 5xx
+  // ---------------------------------------------------------------------------
+  Future<DkkTimBenhNhanResponseDto?> timBenhNhanByCccdHc(String soCcHc) async {
+    // TODO(endpoint): BỎ COMMENT NÀY VÀ ĐIỀN ENDPOINT KHI CÓ API THẬT.
+    // Ví dụ implement thực tế:
+    //
+    // try {
+    //   final response = await _dioClient.dio.get(
+    //     '/api/DatLichKham/TimBenhNhan',          // <-- thay đổi tên path
+    //     queryParameters: {'soCcHc': soCcHc},     // <-- thay đổi tên param
+    //   );
+    //   final data = _extractData(response.data);
+    //   if (data == null) return null;
+    //   if (data is Map<String, dynamic>) {
+    //     return DkkTimBenhNhanResponseDto.fromJson(data);
+    //   }
+    //   return null;
+    // } on BusinessException catch (e) {
+    //   if (e.errorCode == 'NOT_FOUND' || e.message.contains('không tìm thấy')) return null;
+    //   rethrow;
+    // } on DioException catch (e) {
+    //   if (e.response?.statusCode == 404) return null;
+    //   throw ApiException.fromDioError(e);
+    // }
+
+    // --- MOCK PLACEHOLDER: giả lập chưa có API ---
+    // Luôn trả về null (chưa tìm thấy) để luồng không bị block.
+    // Thay bằng code thật ở trên khi có endpoint.
+    await Future.delayed(const Duration(milliseconds: 800)); // Giả lập network delay
+    return null;
+  }
+
   dynamic _extractData(dynamic body) {
     if (body is Map<String, dynamic>) {
       final responseDto = ApiResponseDto<dynamic>.fromJson(body, (data) => data);

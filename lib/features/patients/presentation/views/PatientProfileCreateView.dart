@@ -14,6 +14,8 @@ import 'package:benhvien7c/features/patients/domain/entities/PatientProfileDraft
 import 'package:benhvien7c/features/patients/presentation/viewmodels/PatientProfileCreateViewModel.dart';
 import 'package:benhvien7c/core/utils/CccdParserHelper.dart';
 import 'package:benhvien7c/features/patients/presentation/views/CccdScannerView.dart';
+import 'package:benhvien7c/features/patients/data/models/DatLichKhamDtos.dart';
+import 'package:benhvien7c/features/patients/presentation/views/DkkCompareView.dart';
 
 class PatientProfileCreateView extends StatefulWidget {
   const PatientProfileCreateView({super.key});
@@ -163,6 +165,8 @@ class _PatientProfileCreateViewState extends State<PatientProfileCreateView> {
     result.when(
       ok: (MedicalTicketEntity ticket) {
         _viewModel.continueCommand.clearResult();
+        // Refresh danh sách hồ sơ từ server sau khi đăng ký thành công
+        AppLocator.portalRepository.loadPatientProfiles();
         ScaffoldMessenger.of(context).clearSnackBars();
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -233,15 +237,256 @@ class _PatientProfileCreateViewState extends State<PatientProfileCreateView> {
     }
   }
 
+  // ---------------------------------------------------------------------------
+  // Luồng 1 — Tìm hồ sơ bệnh viện theo CCCD/HC
+  // ---------------------------------------------------------------------------
+
+  Future<void> _scanForCccdSearch() async {
+    final result = await Navigator.of(context).push(
+      MaterialPageRoute(builder: (context) => const CccdScannerView()),
+    );
+    if (!mounted) return;
+    if (result is CccdData) {
+      final code = result.cccdNumber.isNotEmpty ? result.cccdNumber : result.oldIdNumber;
+      if (code.isNotEmpty) {
+        _viewModel.cccdSearchController.text = code;
+        _performCccdSearch();
+      }
+    }
+  }
+
+  Future<void> _performCccdSearch() async {
+    final query = _viewModel.cccdSearchController.text.trim();
+    if (query.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Vui lòng nhập số CCCD hoặc Hộ chiếu để tìm kiếm.'),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      return;
+    }
+
+    // Kiểm tra định dạng: CCCD (12 chữ số) hoặc Hộ chiếu (8 ký tự)
+    final isCccd = RegExp(r'^\d{12}$').hasMatch(query);
+    final isPassport = RegExp(r'^[A-Za-z0-9]{8}$').hasMatch(query);
+    if (!isCccd && !isPassport) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Số CCCD phải đủ 12 chữ số, hoặc Hộ chiếu gồm 8 ký tự.'),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      return;
+    }
+
+    FocusScope.of(context).unfocus();
+    await _viewModel.searchByCccdCommand.execute(query);
+    if (!mounted) return;
+
+    final searchResult = _viewModel.searchByCccdCommand.result;
+    if (searchResult == null) return;
+    _viewModel.searchByCccdCommand.clearResult();
+
+    searchResult.when(
+
+      ok: (DkkTimBenhNhanResponseDto? dto) {
+        if (dto != null) {
+          // Trường hợp A: Tìm thấy hồ sơ bệnh viện
+          _showFoundPatientDialog(dto);
+        } else {
+          // Trường hợp B: Chưa có hồ sơ tại bệnh viện
+          _viewModel.enableManualEntry();
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Chưa có hồ sơ tại bệnh viện. Đã mở form để bạn nhập thông tin thủ công.'),
+              backgroundColor: Color(0xFF0D6EFD),
+              duration: Duration(seconds: 4),
+            ),
+          );
+        }
+      },
+      error: (err, msg) {
+        _showSearchErrorDialog(query, msg);
+      },
+    );
+  }
+
+  void _showFoundPatientDialog(DkkTimBenhNhanResponseDto dto) {
+    showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogCtx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Row(
+          children: const [
+            Icon(Icons.check_circle_rounded, color: Color(0xFF16A34A), size: 24),
+            SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                'Tìm thấy hồ sơ bệnh viện',
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+              ),
+            ),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Hệ thống tìm thấy hồ sơ gốc với thông tin sau:',
+              style: TextStyle(fontSize: 13, color: Color(0xFF64748B)),
+            ),
+            const SizedBox(height: 12),
+            _buildDialogRow('Mã BN', dto.maBN, isBold: true),
+            _buildDialogRow('Họ tên', dto.hoTen),
+            if (dto.ngaySinh != null && dto.ngaySinh!.isNotEmpty)
+              _buildDialogRow('Ngày sinh', dto.ngaySinh!),
+            if (dto.gioiTinh != null && dto.gioiTinh!.isNotEmpty)
+              _buildDialogRow('Giới tính', dto.gioiTinh!),
+            if (dto.soCcHc != null && dto.soCcHc!.isNotEmpty)
+              _buildDialogRow('CCCD/HC', dto.soCcHc!),
+            if (dto.soDienThoai != null && dto.soDienThoai!.isNotEmpty)
+              _buildDialogRow('Điện thoại', dto.soDienThoai!),
+            const SizedBox(height: 10),
+            const Text(
+              'Bạn có muốn điền thông tin này vào form đặt lịch không?',
+              style: TextStyle(fontSize: 12.5, fontStyle: FontStyle.italic, color: Color(0xFF334155)),
+            ),
+          ],
+        ),
+        actions: [
+          // Giữ nút Hủy (Q8)
+          TextButton(
+            onPressed: () => Navigator.of(dialogCtx).pop(),
+            child: const Text('Hủy', style: TextStyle(color: Color(0xFF64748B))),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.of(dialogCtx).pop();
+              _viewModel.fillFromHospitalRecord(dto);
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text('Đã điền hồ sơ bệnh nhân: ${dto.hoTen} (Mã BN: ${dto.maBN})'),
+                  backgroundColor: const Color(0xFF16A34A),
+                ),
+              );
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF0D6EFD),
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+            ),
+            child: const Text('Đồng ý', style: TextStyle(fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showSearchErrorDialog(String query, String errorMsg) {
+    showDialog<void>(
+      context: context,
+      builder: (dialogCtx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Row(
+          children: const [
+            Icon(Icons.error_outline_rounded, color: Colors.red, size: 24),
+            SizedBox(width: 8),
+            Text('Lỗi kết nối', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+          ],
+        ),
+        content: Text(
+          'Không thể tra cứu hồ sơ: $errorMsg\nVui lòng kiểm tra lại kết nối mạng.',
+          style: const TextStyle(fontSize: 13),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogCtx).pop(),
+            child: const Text('Đóng'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.of(dialogCtx).pop();
+              _performCccdSearch();
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF0D6EFD),
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('Thử lại'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDialogRow(String label, String value, {bool isBold = false}) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 4),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 80,
+            child: Text(
+              '$label:',
+              style: const TextStyle(fontSize: 13, color: Color(0xFF64748B)),
+            ),
+          ),
+          Expanded(
+            child: Text(
+              value,
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: isBold ? FontWeight.bold : FontWeight.w500,
+                color: const Color(0xFF0F172A),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ---------------------------------------------------------------------------
+  // Submit & Luồng 3 Đối Chiếu
+  // ---------------------------------------------------------------------------
+
   Future<void> _submit() async {
     try {
       FocusScope.of(context).unfocus();
       if (!_formKey.currentState!.validate()) {
         return;
       }
+
+      // Luồng 3: Kiểm tra đối chiếu trước khi đăng ký
+      if (_viewModel.needsComparisonCheck) {
+        final compareModel = await _viewModel.buildCompareModel();
+        if (compareModel != null && mounted) {
+          final draft = _viewModel.currentDraftForBooking;
+          await Navigator.pushNamed(
+            context,
+            RouteNames.dkkCompare,
+            arguments: DkkCompareArgs(
+              compareModel: compareModel,
+              userDraft: draft,
+              role: _viewModel.role,
+              department: _viewModel.selectedDepartment,
+              selectedDate: _viewModel.formattedSelectedDate,
+              selectedTime: _viewModel.selectedTime,
+              symptom: _viewModel.symptomController.text.trim(),
+            ),
+          );
+          return;
+        }
+      }
+
       await _viewModel.continueCommand.execute();
     } catch (_) {}
   }
+
 
   void _showDateTimePickerBottomSheet() {
     showModalBottomSheet(
@@ -474,7 +719,155 @@ class _PatientProfileCreateViewState extends State<PatientProfileCreateView> {
     );
   }
 
+  Widget _buildCccdSearchSection() {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 14),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: const Color(0xFF93C5FD)),
+        boxShadow: [
+          BoxShadow(
+            color: const Color(0xFF0D6EFD).withValues(alpha: 0.05),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: const [
+              Icon(Icons.person_search_rounded, color: Color(0xFF0D6EFD), size: 20),
+              SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  'TÌM HỒ SƠ BỆNH VIỆN',
+                  style: TextStyle(
+                    fontSize: 13.5,
+                    fontWeight: FontWeight.bold,
+                    color: Color(0xFF1E40AF),
+                    letterSpacing: 0.5,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          const Text(
+            'Nhập số CCCD (12 số) hoặc Hộ chiếu (8 ký tự) để tra cứu hồ sơ gốc tại Bệnh viện.',
+            style: TextStyle(fontSize: 12, color: Color(0xFF64748B)),
+          ),
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              Expanded(
+                child: TextFormField(
+                  controller: _viewModel.cccdSearchController,
+                  keyboardType: TextInputType.text,
+                  textInputAction: TextInputAction.search,
+                  onFieldSubmitted: (_) => _performCccdSearch(),
+                  decoration: InputDecoration(
+                    hintText: 'Nhập số CCCD / Hộ chiếu',
+                    hintStyle: const TextStyle(fontSize: 13, color: Color(0xFF94A3B8)),
+                    prefixIcon: const Icon(Icons.badge_outlined, size: 20),
+                    suffixIcon: IconButton(
+                      icon: const Icon(Icons.qr_code_scanner_rounded, color: Color(0xFF0D6EFD)),
+                      tooltip: 'Quét mã QR trên thẻ',
+                      onPressed: _scanForCccdSearch,
+                    ),
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              ListenableBuilder(
+                listenable: _viewModel.searchByCccdCommand,
+                builder: (context, _) {
+                  final isSearching = _viewModel.searchByCccdCommand.running;
+                  return SizedBox(
+                    height: 48,
+                    child: ElevatedButton(
+                      onPressed: isSearching ? null : _performCccdSearch,
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF0D6EFD),
+                        foregroundColor: Colors.white,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                        padding: const EdgeInsets.symmetric(horizontal: 16),
+                      ),
+                      child: isSearching
+                          ? const SizedBox(
+                              width: 18,
+                              height: 18,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                              ),
+                            )
+                          : const Text('Tìm kiếm', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                    ),
+                  );
+                },
+              ),
+            ],
+          ),
+          if (_viewModel.isFromHospitalRecord && _viewModel.maBN != null) ...[
+            const SizedBox(height: 10),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              decoration: BoxDecoration(
+                color: const Color(0xFFDCFCE7),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: const Color(0xFF86EFAC)),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.verified_rounded, size: 16, color: Color(0xFF16A34A)),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: Text(
+                      'Đang sử dụng hồ sơ bệnh viện: Mã BN ${_viewModel.maBN} (Bạn có thể điều chỉnh thông tin bên dưới)',
+                      style: const TextStyle(fontSize: 12, color: Color(0xFF166534), fontWeight: FontWeight.w500),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildReadOnlyBanner() {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF1F5F9),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: const Color(0xFFCBD5E1)),
+      ),
+      child: Row(
+        children: const [
+          Icon(Icons.lock_outline_rounded, size: 16, color: Color(0xFF64748B)),
+          SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              'Hồ sơ đã lưu đang ở chế độ chỉ đọc. Bấm icon [✕] trên chip để nhập hồ sơ mới.',
+              style: TextStyle(fontSize: 12, color: Color(0xFF475569)),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildSavedProfilesHeader() {
+
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
@@ -796,10 +1189,15 @@ class _PatientProfileCreateViewState extends State<PatientProfileCreateView> {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               _buildGuidanceBanner(),
+              _buildCccdSearchSection(),
               _buildSavedProfilesHeader(),
-              if (_viewModel.isExistingProfile && _viewModel.selectedProfileIdentifier != null)
+              if (_viewModel.isExistingProfile && _viewModel.selectedProfileIdentifier != null) ...[
                 _buildSelectedProfileChip(),
+                if (_viewModel.formIsReadOnly)
+                  _buildReadOnlyBanner(),
+              ],
               const SizedBox(height: 8),
+
 
               // Card 1: Thông tin cá nhân & CCCD
               _buildCardSection(

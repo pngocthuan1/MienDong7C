@@ -20,13 +20,24 @@ class _MedicalTicketViewState extends State<MedicalTicketView> {
   @override
   void initState() {
     super.initState();
-    _viewModel = MedicalTicketViewModel(widget.args.ticket);
+    _viewModel = MedicalTicketViewModel(
+      widget.args.ticket,
+      doneStatus: widget.args.ticket.doneStatus,
+      coTheXoa: widget.args.ticket.coTheXoa,
+      lyDoLoi: widget.args.ticket.trangThai,
+    );
+    _viewModel.addListener(_onViewModelChanged);
   }
 
   @override
   void dispose() {
+    _viewModel.removeListener(_onViewModelChanged);
     _viewModel.dispose();
     super.dispose();
+  }
+
+  void _onViewModelChanged() {
+    if (mounted) setState(() {});
   }
 
   void _confirmDelete() {
@@ -120,6 +131,15 @@ class _MedicalTicketViewState extends State<MedicalTicketView> {
   @override
   Widget build(BuildContext context) {
     final ticket = _viewModel.ticket;
+    final statusInfo = _viewModel.statusInfo;
+    final isExpanded = _viewModel.isExpanded;
+    final canDelete = _viewModel.canDelete;
+
+    // Địa chỉ hiển thị
+    final addressText = [ticket.ward, ticket.province]
+        .where((s) => s != null && s.isNotEmpty)
+        .join(', ');
+    final finalAddress = addressText.isNotEmpty ? addressText : ticket.address;
 
     return AppResponsiveContainer(
       appBar: AppBar(
@@ -180,7 +200,7 @@ class _MedicalTicketViewState extends State<MedicalTicketView> {
             clipBehavior: Clip.antiAlias,
             child: Column(
               children: [
-                // Top Header Banner (Pink ONLY if expired/past ticket, or light blue if active)
+                // Top Header Banner
                 Container(
                   width: double.infinity,
                   padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
@@ -223,7 +243,67 @@ class _MedicalTicketViewState extends State<MedicalTicketView> {
                           letterSpacing: 0.5,
                         ),
                       ),
-                      const SizedBox(height: 12),
+                      const SizedBox(height: 10),
+
+                      // Badge Trạng Thái (Luồng 2)
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+                        decoration: BoxDecoration(
+                          color: statusInfo.badgeColor,
+                          borderRadius: BorderRadius.circular(20),
+                          border: Border.all(
+                            color: statusInfo.textColor.withValues(alpha: 0.3),
+                            width: 1,
+                          ),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Container(
+                              width: 8,
+                              height: 8,
+                              decoration: BoxDecoration(
+                                color: statusInfo.textColor,
+                                shape: BoxShape.circle,
+                              ),
+                            ),
+                            const SizedBox(width: 6),
+                            Text(
+                              statusInfo.label,
+                              style: TextStyle(
+                                fontSize: 12.5,
+                                fontWeight: FontWeight.bold,
+                                color: statusInfo.textColor,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+
+                      // Lý do lỗi khi doneStatus = -1
+                      if (_viewModel.doneStatus == -1 &&
+                          _viewModel.lyDoLoi != null &&
+                          _viewModel.lyDoLoi!.trim().isNotEmpty) ...[
+                        const SizedBox(height: 8),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFFFECEF),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Text(
+                            'Lý do: ${_viewModel.lyDoLoi!}',
+                            style: const TextStyle(
+                              fontSize: 12,
+                              color: Color(0xFFDC2626),
+                              fontWeight: FontWeight.w500,
+                            ),
+                            textAlign: TextAlign.center,
+                          ),
+                        ),
+                      ],
+
+                      const SizedBox(height: 14),
 
                       // Large Sequence Number
                       Text(
@@ -237,13 +317,15 @@ class _MedicalTicketViewState extends State<MedicalTicketView> {
                       ),
                       const SizedBox(height: 20),
 
-                      // Patient Details List (: value format)
-                      _DetailRow(label: 'Ngày khám', value: ticket.scheduleText),
-                      if (ticket.clinic != null && ticket.clinic!.isNotEmpty)
-                        _DetailRow(label: 'Phòng khám', value: ticket.clinic!)
-                      else if (ticket.department != null && ticket.department!.isNotEmpty)
-                        _DetailRow(label: 'Phòng khám', value: ticket.department!),
+                      // --- CHẾ ĐỘ THU GỌN (MẶC ĐỊNH) ---
+                      // Thứ tự spec: HoTen -> SoCcHc -> NgayCap -> NgaySinh -> GioiTinh -> DiaChi -> DienThoai
                       _DetailRow(label: 'Họ tên', value: ticket.patientName),
+                      if (ticket.soCcHc != null && ticket.soCcHc!.isNotEmpty)
+                        _DetailRow(label: 'CCCD/HC', value: ticket.soCcHc!)
+                      else if (ticket.insuranceText.isNotEmpty)
+                        _DetailRow(label: 'Mã số/Thẻ', value: ticket.insuranceText),
+                      if (ticket.ngayCap != null && ticket.ngayCap!.isNotEmpty)
+                        _DetailRow(label: 'Ngày cấp', value: ticket.ngayCap!),
                       _DetailRow(
                         label: 'Ngày sinh',
                         value: (ticket.dateOfBirth != null && ticket.dateOfBirth!.isNotEmpty)
@@ -251,80 +333,115 @@ class _MedicalTicketViewState extends State<MedicalTicketView> {
                             : ticket.birthYear,
                       ),
                       _DetailRow(label: 'Giới tính', value: ticket.gender),
+                      if (finalAddress.isNotEmpty)
+                        _DetailRow(label: 'Địa chỉ', value: finalAddress),
                       if (ticket.phoneNumber != null && ticket.phoneNumber!.isNotEmpty)
                         _DetailRow(label: 'Điện thoại', value: ticket.phoneNumber!),
-                      if ((ticket.ward != null && ticket.ward!.isNotEmpty) || (ticket.province != null && ticket.province!.isNotEmpty))
-                        _DetailRow(
-                          label: 'Địa chỉ',
-                          value: [ticket.ward, ticket.province].where((s) => s != null && s.isNotEmpty).join(', '),
+
+                      // --- CHẾ ĐỘ ĐẦY ĐỦ (KHI BẤM "XEM CHI TIẾT") ---
+                      AnimatedSize(
+                        duration: const Duration(milliseconds: 300),
+                        curve: Curves.easeInOut,
+                        child: isExpanded
+                            ? Column(
+                                children: [
+                                  const SizedBox(height: 10),
+                                  const Divider(color: Color(0xFFE2E8F0), thickness: 1),
+                                  const SizedBox(height: 10),
+
+                                  _DetailRow(label: 'Ngày khám', value: ticket.scheduleText),
+                                  if (ticket.clinic != null && ticket.clinic!.isNotEmpty)
+                                    _DetailRow(label: 'Phòng khám', value: ticket.clinic!)
+                                  else if (ticket.department != null && ticket.department!.isNotEmpty)
+                                    _DetailRow(label: 'Phòng khám', value: ticket.department!),
+                                  if (ticket.symptom != null && ticket.symptom!.isNotEmpty)
+                                    _DetailRow(label: 'Triệu chứng', value: ticket.symptom!),
+
+                                  // Mã BN & Barcode
+                                  if (ticket.patientCode.trim().isNotEmpty) ...[
+                                    _DetailRow(label: 'Mã BN', value: ticket.patientCode),
+                                    const SizedBox(height: 8),
+                                    InkWell(
+                                      onTap: () => _showExpandedBarcodeDialog(context, ticket.patientCode),
+                                      borderRadius: BorderRadius.circular(8),
+                                      child: Padding(
+                                        padding: const EdgeInsets.symmetric(vertical: 4),
+                                        child: Column(
+                                          children: [
+                                            Center(
+                                              child: SizedBox(
+                                                width: 260,
+                                                height: 80,
+                                                child: MedicalTicketBarcode(seed: ticket.patientCode),
+                                              ),
+                                            ),
+                                            const SizedBox(height: 4),
+                                            const Text(
+                                              '(Chạm để phóng to mã vạch)',
+                                              style: TextStyle(
+                                                fontSize: 11,
+                                                color: Color(0xFF64748B),
+                                                fontStyle: FontStyle.italic,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    ),
+                                    const SizedBox(height: 10),
+                                  ],
+
+                                  _DetailRow(label: 'Đăng ký lúc', value: ticket.createdAtText),
+                                  if (ticket.dangKyGiup != null && ticket.dangKyGiup!.isNotEmpty)
+                                    _DetailRow(label: 'Đăng ký giúp', value: ticket.dangKyGiup!),
+                                ],
+                              )
+                            : const SizedBox.shrink(),
+                      ),
+
+                      const SizedBox(height: 12),
+
+                      // Nút Toggle Thu gọn / Đầy đủ
+                      TextButton.icon(
+                        onPressed: _viewModel.toggleExpand,
+                        icon: Icon(
+                          isExpanded ? Icons.keyboard_arrow_up_rounded : Icons.keyboard_arrow_down_rounded,
+                          size: 18,
+                          color: const Color(0xFF0D6EFD),
                         ),
-                      if (ticket.symptom != null && ticket.symptom!.isNotEmpty)
-                        _DetailRow(label: 'Triệu chứng', value: ticket.symptom!),
-
-                      const SizedBox(height: 14),
-                      const Divider(color: Color(0xFFE2E8F0), thickness: 1),
-                      const SizedBox(height: 14),
-
-                      // Mã BN & Barcode (Chỉ hiển thị khi Server đã cấp mã BN)
-                      if (ticket.patientCode.trim().isNotEmpty) ...[
-                        _DetailRow(label: 'Mã BN', value: ticket.patientCode),
-                        const SizedBox(height: 8),
-                        InkWell(
-                          onTap: () => _showExpandedBarcodeDialog(context, ticket.patientCode),
-                          borderRadius: BorderRadius.circular(8),
-                          child: Padding(
-                            padding: const EdgeInsets.symmetric(vertical: 4),
-                            child: Column(
-                              children: [
-                                Center(
-                                  child: SizedBox(
-                                    width: 260,
-                                    height: 80,
-                                    child: MedicalTicketBarcode(seed: ticket.patientCode),
-                                  ),
-                                ),
-                                const SizedBox(height: 4),
-                                const Text(
-                                  '(Chạm để phóng to mã vạch)',
-                                  style: TextStyle(
-                                    fontSize: 11,
-                                    color: Color(0xFF64748B),
-                                    fontStyle: FontStyle.italic,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                        const SizedBox(height: 14),
-                      ],
-
-                      // Info rows below barcode
-                      _DetailRow(label: 'Đăng ký lúc', value: ticket.createdAtText),
-                      _DetailRow(label: 'Đăng ký giúp', value: ticket.dangKyGiup ?? ''),
-
-                      const SizedBox(height: 24),
-
-                      // Center Red Delete Button
-                      SizedBox(
-                        width: 120,
-                        height: 38,
-                        child: ElevatedButton(
-                          onPressed: _confirmDelete,
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: const Color(0xFFEF4444),
-                            foregroundColor: Colors.white,
-                            elevation: 0,
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(6),
-                            ),
-                          ),
-                          child: const Text(
-                            'Xóa phiếu',
-                            style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
+                        label: Text(
+                          isExpanded ? 'Thu gọn' : 'Xem chi tiết',
+                          style: const TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.bold,
+                            color: Color(0xFF0D6EFD),
                           ),
                         ),
                       ),
+
+                      // Nút Xóa phiếu (chỉ hiện khi canDelete)
+                      if (canDelete) ...[
+                        const SizedBox(height: 12),
+                        SizedBox(
+                          width: 120,
+                          height: 38,
+                          child: ElevatedButton(
+                            onPressed: _confirmDelete,
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: const Color(0xFFEF4444),
+                              foregroundColor: Colors.white,
+                              elevation: 0,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(6),
+                              ),
+                            ),
+                            child: const Text(
+                              'Xóa phiếu',
+                              style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
+                            ),
+                          ),
+                        ),
+                      ],
                     ],
                   ),
                 ),
@@ -378,12 +495,14 @@ class _DetailRow extends StatelessWidget {
               ),
             ),
           ),
-          Text(
-            ':$value',
-            style: const TextStyle(
-              fontSize: 14,
-              color: Color(0xFF0F172A),
-              fontWeight: FontWeight.w500,
+          Expanded(
+            child: Text(
+              ': $value',
+              style: const TextStyle(
+                fontSize: 14,
+                color: Color(0xFF0F172A),
+                fontWeight: FontWeight.w500,
+              ),
             ),
           ),
         ],

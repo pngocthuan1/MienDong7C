@@ -9,6 +9,8 @@ import 'package:benhvien7c/core/session/AppSessionStore.dart';
 import 'package:benhvien7c/core/utils/Validators.dart';
 import 'package:benhvien7c/core/utils/CccdParserHelper.dart';
 import 'package:benhvien7c/core/utils/AddressHelper.dart';
+import 'package:benhvien7c/features/patients/data/models/DatLichKhamDtos.dart';
+import 'package:benhvien7c/features/patients/domain/entities/DkkThongTinKhamModel.dart';
 import 'package:benhvien7c/features/patients/domain/entities/MedicalTicketEntity.dart';
 import 'package:benhvien7c/features/patients/domain/entities/PatientProfileDraftEntity.dart';
 import 'package:benhvien7c/features/patients/domain/repositories/PortalRepository.dart';
@@ -24,6 +26,7 @@ class PatientProfileCreateViewModel extends BasePortalViewModel {
     birthYearController.text = '';
     continueCommand = Command0<MedicalTicketEntity>(_continueFlow);
     loadProfilesCommand = Command0<List<PatientProfileDraftEntity>>(_loadProfiles);
+    searchByCccdCommand = Command1<DkkTimBenhNhanResponseDto?, String>(_searchByCccd);
     _initAddressData();
     // Đọc thông tin cá nhân đã lưu NGAY LẬP TỨC (sync, không await) từ
     // SharedPreferences đã sẵn sàng trong AppLocator — điền vào form trước
@@ -35,6 +38,34 @@ class PatientProfileCreateViewModel extends BasePortalViewModel {
 
   bool isExistingProfile = false;
   String? selectedProfileIdentifier;
+
+  // ---------------------------------------------------------------------------
+  // Luồng 1 — Tìm hồ sơ bệnh viện theo CCCD/HC
+  // ---------------------------------------------------------------------------
+  /// TextField riêng để nhập số tìm kiếm CCCD/HC (tách khỏi identifierController)
+  final cccdSearchController = TextEditingController();
+
+  /// Snapshot hồ sơ gốc từ server (bất biến trong phiên; mất thì gọi lại)
+  DkkTimBenhNhanResponseDto? _hospitalSnapshot;
+  DkkTimBenhNhanResponseDto? get hospitalSnapshot => _hospitalSnapshot;
+
+  /// Đánh dấu form đến từ Luồng 1 (tìm theo CCCD — nguồn hệ thống)
+  bool _isFromHospitalRecord = false;
+  bool get isFromHospitalRecord => _isFromHospitalRecord;
+
+  /// Form chỉ đọc (khi chọn từ danh sách đã lưu)
+  bool _formIsReadOnly = false;
+  bool get formIsReadOnly => _formIsReadOnly;
+
+  /// MaBN tương ứng (dùng để gọi lại server nếu mất snapshot)
+  String? _maBN;
+  String? get maBN => _maBN;
+
+  /// Nguồn Thẻ 2 trong màn đối chiếu: true = hồ sơ đã lưu, false = nhập tay
+  bool _compareSourceIsSavedProfile = false;
+
+  late final Command1<DkkTimBenhNhanResponseDto?, String> searchByCccdCommand;
+
 
   final identifierController = TextEditingController();
   final cccdIssueDateController = TextEditingController();
@@ -328,7 +359,15 @@ class PatientProfileCreateViewModel extends BasePortalViewModel {
 
     selectedProfileIdentifier = key;
     isExistingProfile = true;
-    
+
+    // Hồ sơ đã lưu → form chỉ đọc
+    _formIsReadOnly = true;
+    _isFromHospitalRecord = false;
+    // Lưu MaBN để kích hoạt so sánh với hệ thống khi bấm Đăng ký
+    _maBN = (profile.maSo != null && profile.maSo!.isNotEmpty) ? profile.maSo : null;
+    _hospitalSnapshot = null; // Chưa có snapshot — sẽ fetch khi cần
+    _compareSourceIsSavedProfile = true;
+
     if (registerForSomeoneElse) {
       otherFullNameController.text = profile.fullName;
       otherDobController.text = profile.dateOfBirth ?? '';
@@ -343,7 +382,7 @@ class PatientProfileCreateViewModel extends BasePortalViewModel {
         clinicController.text = profile.clinic!;
         selectedDepartment = profile.clinic;
       }
-      
+
       otherFullNameError = null;
       otherBirthYearError = null;
       otherPhoneError = null;
@@ -361,7 +400,7 @@ class PatientProfileCreateViewModel extends BasePortalViewModel {
         clinicController.text = profile.clinic!;
         selectedDepartment = profile.clinic;
       }
-      
+
       fullNameError = null;
       birthYearError = null;
       phoneError = null;
@@ -370,9 +409,16 @@ class PatientProfileCreateViewModel extends BasePortalViewModel {
     notifyListeners();
   }
 
+
+
   void clearProfileSelection() {
     selectedProfileIdentifier = null;
     isExistingProfile = false;
+    _formIsReadOnly = false;
+    _isFromHospitalRecord = false;
+    _maBN = null;
+    _hospitalSnapshot = null;
+    _compareSourceIsSavedProfile = false;
     identifierController.clear();
     cccdIssueDateController.clear();
     fullNameController.text = session.user.fullName;
@@ -389,6 +435,209 @@ class PatientProfileCreateViewModel extends BasePortalViewModel {
     phoneError = null;
     notifyListeners();
   }
+
+  // ---------------------------------------------------------------------------
+  // Luồng 1 — Tìm hồ sơ bệnh viện theo CCCD/HC
+  // ---------------------------------------------------------------------------
+
+  /// Gọi API tìm bệnh nhân theo số CCCD/HC.
+  Future<Result<DkkTimBenhNhanResponseDto?>> _searchByCccd(String soCcHc) async {
+    return runSafely(() async {
+      final result = await portalRepository.timBenhNhanByCccdHc(soCcHc.trim());
+      return result;
+    });
+  }
+
+  /// Điền form từ hồ sơ gốc bệnh viện (Luồng 1 — Trường hợp A).
+  /// Gọi khi người dùng bấm [Đồng ý] trong dialog xác nhận.
+  void fillFromHospitalRecord(DkkTimBenhNhanResponseDto dto) {
+    _hospitalSnapshot = dto;
+    _isFromHospitalRecord = true;
+    _formIsReadOnly = false; // Được phép sửa sau khi đồng ý
+    _maBN = dto.maBN;
+    _compareSourceIsSavedProfile = false;
+    isExistingProfile = false;
+    selectedProfileIdentifier = null;
+
+    // Điền các field form
+    identifierController.text = dto.maBhytHoacMaBn.isNotEmpty ? dto.maBhytHoacMaBn : dto.maBN;
+    fullNameController.text = dto.hoTen;
+
+    // Ngày sinh
+    if (dto.ngaySinh != null && dto.ngaySinh!.isNotEmpty) {
+      final iso = DateTime.tryParse(dto.ngaySinh!);
+      if (iso != null) {
+        dobController.text = '${iso.day.toString().padLeft(2, '0')}/${iso.month.toString().padLeft(2, '0')}/${iso.year}';
+        birthYearController.text = iso.year.toString();
+      } else {
+        dobController.text = dto.ngaySinh!;
+      }
+    }
+
+    // Giới tính
+    final g = dto.gioiTinh?.trim().toLowerCase() ?? '';
+    if (g == 'nữ' || g == 'nu' || g == '1' || g == 'female') {
+      _gender = 'Nữ';
+    } else {
+      _gender = 'Nam';
+    }
+
+    // SĐT
+    if (dto.soDienThoai != null && dto.soDienThoai!.isNotEmpty) {
+      phoneController.text = dto.soDienThoai!;
+    }
+
+    // Ngày cấp
+    if (dto.ngayCap != null && dto.ngayCap!.isNotEmpty) {
+      final iso = DateTime.tryParse(dto.ngayCap!);
+      if (iso != null) {
+        cccdIssueDateController.text = '${iso.day.toString().padLeft(2, '0')}/${iso.month.toString().padLeft(2, '0')}/${iso.year}';
+      } else {
+        cccdIssueDateController.text = dto.ngayCap!;
+      }
+    }
+
+    // Tỉnh/Thành
+    final tinhTenDisplay = dto.tinhTpTen ?? dto.tinhTp ?? '';
+    if (tinhTenDisplay.isNotEmpty) {
+      provinceController.text = tinhTenDisplay;
+      // Cố gắng map sang mã tỉnh nếu có
+      if (provinces.isNotEmpty) {
+        final matched = provinces.where(
+          (p) => p.name == tinhTenDisplay || p.fullName == tinhTenDisplay,
+        );
+        if (matched.isNotEmpty) selectedProvinceCode = matched.first.code;
+      }
+    }
+
+    // Phường/Xã
+    final phuongTenDisplay = dto.phuongXaTen ?? dto.phuongXa ?? '';
+    if (phuongTenDisplay.isNotEmpty) wardController.text = phuongTenDisplay;
+
+    fullNameError = null;
+    birthYearError = null;
+    phoneError = null;
+    notifyListeners();
+  }
+
+  /// Luồng 1 Trường hợp B: không tìm thấy → mở form nhập tay đầy đủ.
+  void enableManualEntry() {
+    _isFromHospitalRecord = false;
+    _formIsReadOnly = false;
+    _maBN = null;
+    _hospitalSnapshot = null;
+    _compareSourceIsSavedProfile = false;
+    isExistingProfile = false;
+    selectedProfileIdentifier = null;
+    // Xóa form để người dùng nhập từ đầu
+    identifierController.clear();
+    cccdIssueDateController.clear();
+    fullNameController.text = session.user.fullName;
+    dobController.clear();
+    birthYearController.clear();
+    phoneController.text = session.user.phoneNumber;
+    provinceController.clear();
+    wardController.clear();
+    fullNameError = null;
+    birthYearError = null;
+    phoneError = null;
+    notifyListeners();
+  }
+
+  /// true nếu cần kiểm tra so sánh với hệ thống trước khi đăng ký
+  bool get needsComparisonCheck =>
+      _isFromHospitalRecord || (_maBN != null && _maBN!.isNotEmpty);
+
+  /// Tạo model đối chiếu cho Luồng 3.
+  /// Trả về null nếu không cần so sánh hoặc không có khác biệt.
+  Future<DkkThongTinKhamModel?> buildCompareModel() async {
+    if (!needsComparisonCheck) return null;
+
+    // Ưu tiên dùng snapshot trong phiên
+    var snapshot = _hospitalSnapshot;
+
+    // Nếu mất snapshot → gọi lại server bằng số CCCD đang lưu
+    if (snapshot == null) {
+      final soCcHc = cccdSearchController.text.trim();
+      if (soCcHc.isNotEmpty) {
+        try {
+          final result = await portalRepository.timBenhNhanByCccdHc(soCcHc);
+          result.when(
+            ok: (dto) => snapshot = dto,
+            error: (_, __) {},
+          );
+        } catch (_) {}
+      }
+    }
+
+    final validSnapshot = snapshot;
+    if (validSnapshot == null) return null;
+
+    final draft = _buildCurrentDraft();
+    final model = DkkThongTinKhamModel.compare(
+      system: validSnapshot,
+      user: draft,
+      isFromSavedProfile: _compareSourceIsSavedProfile,
+    );
+
+
+    return model.hasDiff ? model : null;
+  }
+
+  /// Build draft từ trạng thái form hiện tại
+  PatientProfileDraftEntity _buildCurrentDraft() {
+    final String inputName = fullNameController.text.trim();
+    final String inputDob = dobController.text.trim();
+    final String inputBirthYear = birthYearController.text.trim();
+    final String inputPhone = phoneController.text.trim();
+
+    String finalBirthYear = inputBirthYear;
+    if (inputDob.contains('/')) {
+      final parts = inputDob.split('/');
+      if (parts.length == 3 && parts[2].length == 4) {
+        finalBirthYear = parts[2];
+      }
+    }
+
+    return PatientProfileDraftEntity(
+      identifier: identifierController.text.trim(),
+      fullName: inputName.isNotEmpty ? inputName : session.user.fullName,
+      dateOfBirth: inputDob.isNotEmpty ? inputDob : null,
+      birthYear: finalBirthYear,
+      gender: _gender,
+      phoneNumber: inputPhone,
+      province: provinceController.text.trim().isNotEmpty ? provinceController.text.trim() : null,
+      ward: wardController.text.trim().isNotEmpty ? wardController.text.trim() : null,
+      clinic: clinicController.text.trim().isNotEmpty ? clinicController.text.trim() : selectedDepartment,
+      cccdIssueDate: cccdIssueDateController.text.trim().isNotEmpty ? cccdIssueDateController.text.trim() : null,
+      maSo: _maBN,
+    );
+  }
+
+  /// Draft hiện tại dùng cho đối chiếu Luồng 3
+  PatientProfileDraftEntity get currentDraftForBooking => _buildCurrentDraft();
+
+  /// Chuỗi ngày khám định dạng gửi sang DkkCompareArgs
+  String? get formattedSelectedDate {
+    if (selectedDate == null) return null;
+    final weekdayStr = selectedDate!.weekday == DateTime.monday
+        ? 'Thứ 2'
+        : selectedDate!.weekday == DateTime.tuesday
+            ? 'Thứ 3'
+            : selectedDate!.weekday == DateTime.wednesday
+                ? 'Thứ 4'
+                : selectedDate!.weekday == DateTime.thursday
+                    ? 'Thứ 5'
+                    : selectedDate!.weekday == DateTime.friday
+                        ? 'Thứ 6'
+                        : selectedDate!.weekday == DateTime.saturday
+                            ? 'Thứ 7'
+                            : 'Chủ nhật';
+    return '$weekdayStr, ${DateFormat('dd/MM/yyyy').format(selectedDate!)}';
+  }
+
+
+
 
   // Pre-fill fields from scanned CCCD QR code
   ParsedAddressResult fillFromCccd(CccdData data) {
@@ -737,7 +986,9 @@ class PatientProfileCreateViewModel extends BasePortalViewModel {
         ward: wardController.text.trim().isNotEmpty ? wardController.text.trim() : null,
         clinic: selectedClinicName,
         dangKyGiup: registerForSomeoneElse ? dangKyGiupController.text.trim() : null,
+        maSo: _maBN,
       );
+
 
       final weekdayStr = selectedDate!.weekday == DateTime.monday
           ? 'Thứ 2'
@@ -800,8 +1051,11 @@ class PatientProfileCreateViewModel extends BasePortalViewModel {
     otherDobController.dispose();
     otherBirthYearController.dispose();
     otherPhoneController.dispose();
+    cccdSearchController.dispose();
     continueCommand.dispose();
     loadProfilesCommand.dispose();
+    searchByCccdCommand.dispose();
     super.dispose();
   }
 }
+

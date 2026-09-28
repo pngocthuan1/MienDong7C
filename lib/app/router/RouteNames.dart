@@ -27,4 +27,6 @@ class RouteNames {
   static const String notificationRecipientStatus = '/notification-recipient-status';
   static const String personalProfile = '/personal-profile';
   static const String aboutApp = '/about-app';
+  static const String dkkCompare = '/dkk-compare';
 }
+

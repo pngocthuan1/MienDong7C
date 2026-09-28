@@ -107,6 +107,12 @@ abstract class PortalRepository {
   Future<Result<List<DkkHoSoBenhNhanDto>>> fetchHoSoByMaHS(String maHS);
   Future<Result<DkkSoKhamDto>> fetchPhieuSoKham(int id);
 
+  /// Tìm hồ sơ gốc bệnh viện theo CCCD hoặc Hộ chiếu (Luồng 1).
+  /// - Ok(dto)  → tìm thấy
+  /// - Ok(null) → không tìm thấy
+  /// - Error    → lỗi mạng / server
+  Future<Result<DkkTimBenhNhanResponseDto?>> timBenhNhanByCccdHc(String soCcHc);
+
   Future<Result<List<NotificationReadStatusEntity>>> loadNotificationReadStatus(
     String notificationId,
   );

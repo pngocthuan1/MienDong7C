@@ -54,6 +54,7 @@ import 'package:benhvien7c/features/patients/presentation/views/TypeFourDemoView
 import 'package:benhvien7c/features/patients/presentation/views/TypeFourProcessingView.dart';
 import 'package:benhvien7c/features/patients/presentation/views/TypeFourResultView.dart';
 import 'package:benhvien7c/features/patients/presentation/views/MedicalTicketView.dart';
+import 'package:benhvien7c/features/patients/presentation/views/DkkCompareView.dart';
 import 'package:benhvien7c/features/patients/presentation/views/CreateNotificationView.dart';
 import 'package:benhvien7c/features/patients/domain/entities/NotificationItemEntity.dart';
 import 'package:benhvien7c/core/services/FirebaseTokenService.dart';
@@ -269,7 +270,9 @@ class MyApp extends StatelessWidget {
         RouteNames.createNotification: (context) => const CreateNotificationView(),
         RouteNames.personalProfile: (context) => const PersonalProfileView(),
         RouteNames.aboutApp: (context) => const AboutAppView(),
+        RouteNames.dkkCompare: (context) => const DkkCompareView(),
       },
+
       onGenerateRoute: (settings) {
         if (settings.name == RouteNames.verifyOtp) {
           final args = settings.arguments as OtpViewArgs;
