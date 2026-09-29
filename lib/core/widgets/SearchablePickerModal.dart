@@ -21,11 +21,9 @@ class _SearchableItem<T> {
   final String normalizedSearchKey;
 
   _SearchableItem(this.item)
-      : normalizedSearchKey = item.searchKey != null && item.searchKey!.isNotEmpty
-            ? item.searchKey!.toLowerCase()
-            : removeVietnameseDiacritics(
-                '${item.title} ${item.subtitle ?? ''}',
-              ).toLowerCase();
+      : normalizedSearchKey = removeVietnameseDiacritics(
+          '${item.title} ${item.subtitle ?? ''} ${item.searchKey ?? ''}',
+        ).toLowerCase();
 }
 
 class SearchablePickerModal<T> extends StatefulWidget {

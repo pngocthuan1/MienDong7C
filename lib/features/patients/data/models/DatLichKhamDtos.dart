@@ -105,47 +105,163 @@ class DkkTimBenhNhanResponseDto {
       };
 }
 
-class DkkGioKhamDto {
+class DkkPhongKhamDto {
   final String id;
   final String display;
-
-  DkkGioKhamDto({required this.id, required this.display});
-
-  factory DkkGioKhamDto.fromJson(Map<String, dynamic> json) {
-    return DkkGioKhamDto(
-      id: json['Id']?.toString() ?? '',
-      display: json['Display']?.toString() ?? '',
-    );
-  }
+  DkkPhongKhamDto({required this.id, required this.display});
+  factory DkkPhongKhamDto.fromJson(Map<String, dynamic> json) => DkkPhongKhamDto(
+    id: json['Id']?.toString() ?? '',
+    display: json['Display']?.toString() ?? '',
+  );
 }
 
-class DkkThongTinKhamListMasterDto {
-  final List<DkkGioKhamDto> listGioKham;
-  final List<String> listNgayKham;
-  final int maxNgayKham;
+class DkkTinhDto {
+  final int id;
+  final String maByt;
+  final String display;
+  DkkTinhDto({required this.id, required this.maByt, required this.display});
+  factory DkkTinhDto.fromJson(Map<String, dynamic> json) => DkkTinhDto(
+    id: (json['Id'] as num?)?.toInt() ?? (json['id'] as num?)?.toInt() ?? 0,
+    maByt: json['ma_byt']?.toString() ??
+        json['Ma_byt']?.toString() ??
+        json['MaByt']?.toString() ??
+        json['maByt']?.toString() ??
+        '',
+    display: json['Display']?.toString() ??
+        json['display']?.toString() ??
+        json['Ten']?.toString() ??
+        json['ten']?.toString() ??
+        '',
+  );
+}
 
-  DkkThongTinKhamListMasterDto({
-    required this.listGioKham,
+class DkkPhuongDto {
+  final int id;
+  final String maByt;
+  final String maTinhByt;
+  final String display;
+  DkkPhuongDto({
+    required this.id,
+    required this.maByt,
+    required this.maTinhByt,
+    required this.display,
+  });
+  factory DkkPhuongDto.fromJson(Map<String, dynamic> json) => DkkPhuongDto(
+    id: (json['Id'] as num?)?.toInt() ?? (json['id'] as num?)?.toInt() ?? 0,
+    maByt: json['ma_byt']?.toString() ??
+        json['Ma_byt']?.toString() ??
+        json['MaByt']?.toString() ??
+        json['maByt']?.toString() ??
+        '',
+    maTinhByt: json['ma_tinh_byt']?.toString() ??
+        json['Ma_tinh_byt']?.toString() ??
+        json['MaTinhByt']?.toString() ??
+        json['maTinhByt']?.toString() ??
+        '',
+    display: json['Display']?.toString() ??
+        json['display']?.toString() ??
+        json['Ten']?.toString() ??
+        json['ten']?.toString() ??
+        '',
+  );
+}
+
+class DkkNgayKhamDto {
+  final String id;    // ISO datetime string e.g. "2026-09-30T00:00:00"
+  final String display; // e.g. "Thứ 4, 30/09/2026"
+  DkkNgayKhamDto({required this.id, required this.display});
+  factory DkkNgayKhamDto.fromJson(Map<String, dynamic> json) => DkkNgayKhamDto(
+    id: json['Id']?.toString() ?? json['id']?.toString() ?? '',
+    display: json['Display']?.toString() ?? json['display']?.toString() ?? '',
+  );
+}
+
+class DkkGioKhamSlotDto {
+  final int tuGio;
+  final int tuPhut;
+  final int denGio;
+  final int denPhut;
+  final String display;
+  DkkGioKhamSlotDto({required this.tuGio, required this.tuPhut, required this.denGio, required this.denPhut, required this.display});
+  factory DkkGioKhamSlotDto.fromJson(Map<String, dynamic> json) => DkkGioKhamSlotDto(
+    tuGio: (json['TuGio'] as num?)?.toInt() ?? (json['tuGio'] as num?)?.toInt() ?? 0,
+    tuPhut: (json['TuPhut'] as num?)?.toInt() ?? (json['tuPhut'] as num?)?.toInt() ?? 0,
+    denGio: (json['DenGio'] as num?)?.toInt() ?? (json['denGio'] as num?)?.toInt() ?? 0,
+    denPhut: (json['DenPhut'] as num?)?.toInt() ?? (json['denPhut'] as num?)?.toInt() ?? 0,
+    display: json['Display']?.toString() ?? json['display']?.toString() ?? '',
+  );
+}
+
+class DkkListMasterDto {
+  final List<DkkPhongKhamDto> listPhongKham;
+  final List<DkkTinhDto> listTinh;
+  final Map<String, List<DkkPhuongDto>> dicPhuong;
+  final List<DkkNgayKhamDto> listNgayKham;
+  final List<DkkGioKhamSlotDto> listGioKham;
+  final Map<String, List<String>> dicNgayGioKham;
+
+  DkkListMasterDto({
+    required this.listPhongKham,
+    required this.listTinh,
+    required this.dicPhuong,
     required this.listNgayKham,
-    required this.maxNgayKham,
+    required this.listGioKham,
+    required this.dicNgayGioKham,
   });
 
-  factory DkkThongTinKhamListMasterDto.fromJson(Map<String, dynamic> json) {
-    final gioList = (json['ListGioKham'] as List?)
-            ?.map((e) => DkkGioKhamDto.fromJson(e as Map<String, dynamic>))
-            .toList() ??
-        [];
-    final ngayList = (json['ListNgayKham'] as List?)
-            ?.map((e) => e.toString())
-            .toList() ??
-        [];
-    final maxDays = (json['MaxNgayKham'] as num?)?.toInt() ?? 20;
-
-    return DkkThongTinKhamListMasterDto(
-      listGioKham: gioList,
+  factory DkkListMasterDto.fromJson(Map<String, dynamic> json) {
+    final rawPhongKham = json['ListPhongKham'] ?? json['listPhongKham'];
+    final phongKhamList = (rawPhongKham as List?)
+        ?.map((e) => DkkPhongKhamDto.fromJson(e as Map<String, dynamic>))
+        .toList() ?? [];
+    final rawTinh = json['ListTinh'] ?? json['listTinh'];
+    final tinhList = (rawTinh as List?)
+        ?.map((e) => DkkTinhDto.fromJson(e as Map<String, dynamic>))
+        .toList() ?? [];
+    final Map<String, List<DkkPhuongDto>> dicPhuong = {};
+    final rawDicPhuong = json['DicPhuong'] ?? json['dicPhuong'];
+    if (rawDicPhuong is Map) {
+      rawDicPhuong.forEach((k, v) {
+        if (v is List) {
+          dicPhuong[k.toString()] = v.map((e) => DkkPhuongDto.fromJson(e as Map<String, dynamic>)).toList();
+        }
+      });
+    }
+    final rawNgay = json['ListNgayKham'] ?? json['listNgayKham'];
+    final ngayList = (rawNgay as List?)
+        ?.map((e) => DkkNgayKhamDto.fromJson(e as Map<String, dynamic>))
+        .toList() ?? [];
+    final rawGio = json['ListGioKham'] ?? json['listGioKham'];
+    final gioList = (rawGio as List?)
+        ?.map((e) => DkkGioKhamSlotDto.fromJson(e as Map<String, dynamic>))
+        .toList() ?? [];
+    final Map<String, List<String>> dicNgayGio = {};
+    final rawDicNgayGio = json['DicNgayGioKham'] ?? json['dicNgayGioKham'];
+    if (rawDicNgayGio is Map) {
+      rawDicNgayGio.forEach((k, v) {
+        if (v is List) {
+          dicNgayGio[k.toString()] = v.map((e) => e.toString()).toList();
+        }
+      });
+    }
+    return DkkListMasterDto(
+      listPhongKham: phongKhamList,
+      listTinh: tinhList,
+      dicPhuong: dicPhuong,
       listNgayKham: ngayList,
-      maxNgayKham: maxDays,
+      listGioKham: gioList,
+      dicNgayGioKham: dicNgayGio,
     );
+  }
+
+  /// Lấy danh sách giờ khám khả dụng cho một ngày cụ thể
+  List<String> getSlotsForDate(String ngayIso) {
+    final key = dicNgayGioKham.keys.firstWhere(
+      (k) => k == ngayIso || k.startsWith(ngayIso.substring(0, 10)),
+      orElse: () => '',
+    );
+    if (key.isEmpty) return listGioKham.map((e) => e.display).toList();
+    return dicNgayGioKham[key] ?? [];
   }
 }
 
@@ -155,10 +271,27 @@ class DangKyKhamRequestDto {
   final String? maBhytHoacMaBn;
   final String hoTen;
   final String gioiTinh;
-  final String namSinh;
-  final String soDienThoai;
+  // Ngày sinh ISO: "1995-05-15T00:00:00"
+  final String? ngaySinh;
+  // Ngày cấp CCCD ISO: "2021-10-20T00:00:00"
+  final String? ngayCap;
+  final String? soDienThoai;
+  // NgayKham: string lấy từ ListNgayKham.Display, ví dụ "Thứ 4, 30/09/2026"
   final String ngayKham;
+  // GioKham: string lấy từ ListGioKham.Display, ví dụ "07g00 - 07g30"
   final String gioKham;
+  // PhongKham: Id lấy từ ListPhongKham, ví dụ "49"
+  final String? phongKham;
+  // PhongKhamTen: Display lấy từ ListPhongKham
+  final String? phongKhamTen;
+  // TinhTp: MaByt lấy từ ListTinh
+  final String? tinhTp;
+  // TinhTpTen: Display lấy từ ListTinh
+  final String? tinhTpTen;
+  // PhuongXa: MaByt lấy từ DicPhuong
+  final String? phuongXa;
+  // PhuongXaTen: Display lấy từ DicPhuong
+  final String? phuongXaTen;
   final String? trieuChung;
   final String? dangKyDum;
 
@@ -168,10 +301,17 @@ class DangKyKhamRequestDto {
     this.maBhytHoacMaBn,
     required this.hoTen,
     required this.gioiTinh,
-    required this.namSinh,
-    required this.soDienThoai,
+    this.ngaySinh,
+    this.ngayCap,
+    this.soDienThoai,
     required this.ngayKham,
     required this.gioKham,
+    this.phongKham,
+    this.phongKhamTen,
+    this.tinhTp,
+    this.tinhTpTen,
+    this.phuongXa,
+    this.phuongXaTen,
     this.trieuChung,
     this.dangKyDum,
   });
@@ -183,10 +323,17 @@ class DangKyKhamRequestDto {
       'MaBhytHoacMaBn': maBhytHoacMaBn ?? '',
       'HoTen': hoTen,
       'GioiTinh': gioiTinh,
-      'NamSinh': namSinh,
-      'SoDienThoai': soDienThoai,
+      'NgaySinh': ngaySinh,
+      'NgayCap': ngayCap,
+      'SoDienThoai': soDienThoai ?? '',
       'NgayKham': ngayKham,
       'GioKham': gioKham,
+      'PhongKham': phongKham ?? '',
+      'PhongKhamTen': phongKhamTen ?? '',
+      'TinhTp': tinhTp ?? '',
+      'TinhTpTen': tinhTpTen ?? '',
+      'PhuongXa': phuongXa ?? '',
+      'PhuongXaTen': phuongXaTen ?? '',
       'TrieuChung': trieuChung ?? '',
       'DangKyDum': dangKyDum ?? '',
     };
@@ -219,6 +366,13 @@ class DkkSoKhamDto {
   final String? ngayCap;
   /// Địa chỉ đầy đủ
   final String? diaChi;
+  final String? ngaySinh;
+  final String? tinhTp;
+  final String? tinhTpTen;
+  final String? phuongXa;
+  final String? phuongXaTen;
+  final String? phongKham;
+  final String? phongKhamTen;
 
   DkkSoKhamDto({
     required this.id,
@@ -241,6 +395,13 @@ class DkkSoKhamDto {
     this.soCcHc,
     this.ngayCap,
     this.diaChi,
+    this.ngaySinh,
+    this.tinhTp,
+    this.tinhTpTen,
+    this.phuongXa,
+    this.phuongXaTen,
+    this.phongKham,
+    this.phongKhamTen,
   });
 
   factory DkkSoKhamDto.fromJson(Map<String, dynamic> json) {
@@ -266,6 +427,13 @@ class DkkSoKhamDto {
       soCcHc: json['SoCcHc']?.toString() ?? json['soCcHc']?.toString(),
       ngayCap: json['NgayCap']?.toString() ?? json['ngayCap']?.toString(),
       diaChi: json['DiaChi']?.toString() ?? json['diaChi']?.toString(),
+      ngaySinh: json['NgaySinh']?.toString() ?? json['ngaysinh']?.toString(),
+      tinhTp: json['TinhTp']?.toString() ?? json['tinhtp']?.toString(),
+      tinhTpTen: json['TinhTpTen']?.toString() ?? json['tinhtpten']?.toString(),
+      phuongXa: json['PhuongXa']?.toString() ?? json['phuongxa']?.toString(),
+      phuongXaTen: json['PhuongXaTen']?.toString() ?? json['phuongxaten']?.toString(),
+      phongKham: json['PhongKham']?.toString() ?? json['phongkham']?.toString(),
+      phongKhamTen: json['PhongKhamTen']?.toString() ?? json['phongkhamten']?.toString(),
     );
   }
 }

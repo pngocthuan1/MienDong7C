@@ -9,11 +9,27 @@ class DatLichKhamRemoteDataSource {
 
   DatLichKhamRemoteDataSource(this._dioClient);
 
-  Future<List<DkkHoSoBenhNhanDto>> getListHoSo(String maHS) async {
+  // API 1: Lấy danh mục Master (Phòng khám, Tỉnh, Phường, Ngày, Giờ)
+  Future<DkkListMasterDto> getListMaster() async {
     try {
+      final response = await _dioClient.dio.get('/api/DatLichKham/ListMaster');
+      final data = _extractData(response.data);
+      if (data is Map<String, dynamic>) {
+        return DkkListMasterDto.fromJson(data);
+      }
+      throw ApiException.validation('Dữ liệu ListMaster không hợp lệ');
+    } on DioException catch (e) {
+      throw ApiException.fromDioError(e);
+    }
+  }
+
+  // API 2: Lấy danh sách hồ sơ bệnh nhân đã liên kết
+  Future<List<DkkHoSoBenhNhanDto>> getListHoSo([String maHS = '']) async {
+    try {
+      final queryParams = maHS.isNotEmpty ? {'maHS': maHS} : null;
       final response = await _dioClient.dio.get(
         '/api/DatLichKham/ListHoSo',
-        queryParameters: {'maHS': maHS},
+        queryParameters: queryParams,
       );
       return _extractListData<DkkHoSoBenhNhanDto>(
         response.data,
@@ -24,19 +40,34 @@ class DatLichKhamRemoteDataSource {
     }
   }
 
-  Future<DkkThongTinKhamListMasterDto> getListNgayGioKham() async {
+  // API 3: Tìm bệnh nhân theo CCCD / Hộ chiếu
+  Future<DkkTimBenhNhanResponseDto?> timBenhNhanByCccdHc(String soCcHc) async {
     try {
-      final response = await _dioClient.dio.get('/api/DatLichKham/ListNgayGioKham');
+      final response = await _dioClient.dio.post(
+        '/api/DatLichKham/TimBenhNhan',
+        data: {'MaBhytHoacMaBn': soCcHc},
+      );
       final data = _extractData(response.data);
+      if (data == null) return null;
       if (data is Map<String, dynamic>) {
-        return DkkThongTinKhamListMasterDto.fromJson(data);
+        return DkkTimBenhNhanResponseDto.fromJson(data);
       }
-      throw ApiException.validation('Dữ liệu ngày giờ khám không hợp lệ');
+      return null;
+    } on BusinessException catch (e) {
+      // Server trả về lỗi "không tìm thấy" → coi như null
+      if (e.message.toLowerCase().contains('không tìm thấy') ||
+          e.message.toLowerCase().contains('not found') ||
+          e.errorCode?.toString() == 'NOT_FOUND') {
+        return null;
+      }
+      rethrow;
     } on DioException catch (e) {
+      if (e.response?.statusCode == 404) return null;
       throw ApiException.fromDioError(e);
     }
   }
 
+  // API 5: Đăng ký đặt lịch khám
   Future<int> dangKyKham(DangKyKhamRequestDto request) async {
     try {
       final response = await _dioClient.dio.post(
@@ -44,18 +75,15 @@ class DatLichKhamRemoteDataSource {
         data: request.toJson(),
       );
       final data = _extractData(response.data);
-      if (data is num) {
-        return data.toInt();
-      }
-      if (data is String) {
-        return int.tryParse(data) ?? 0;
-      }
+      if (data is num) return data.toInt();
+      if (data is String) return int.tryParse(data) ?? 0;
       return 0;
     } on DioException catch (e) {
       throw ApiException.fromDioError(e);
     }
   }
 
+  // API 6: Lấy danh sách lịch đã đặt
   Future<List<DkkSoKhamDto>> getListSoKham() async {
     try {
       final response = await _dioClient.dio.get('/api/DatLichKham/ListSoKham');
@@ -68,6 +96,7 @@ class DatLichKhamRemoteDataSource {
     }
   }
 
+  // API 7: Xem chi tiết 1 phiếu
   Future<DkkSoKhamDto> getPhieuSoKham(int id) async {
     try {
       final response = await _dioClient.dio.get(
@@ -78,26 +107,13 @@ class DatLichKhamRemoteDataSource {
       if (data is Map<String, dynamic>) {
         return DkkSoKhamDto.fromJson(data);
       }
-      throw ApiException.validation('Không tìm thấy phiếu sổ khám');
+      throw ApiException.validation('Không tìm thấy phiếu số khám');
     } on DioException catch (e) {
       throw ApiException.fromDioError(e);
     }
   }
 
-  Future<bool> xoaHoSo(String maHs) async {
-    try {
-      final response = await _dioClient.dio.delete(
-        '/api/DatLichKham/XoaHoSo',
-        queryParameters: {'maHs': maHs},
-      );
-      final data = _extractData(response.data);
-      if (data is bool) return data;
-      return true;
-    } on DioException catch (e) {
-      throw ApiException.fromDioError(e);
-    }
-  }
-
+  // API 8: Hủy/Xóa phiếu đã đặt
   Future<bool> xoaSoKham(int id) async {
     try {
       final response = await _dioClient.dio.delete(
@@ -112,46 +128,19 @@ class DatLichKhamRemoteDataSource {
     }
   }
 
-  // ---------------------------------------------------------------------------
-  // Tìm bệnh nhân theo CCCD / Hộ chiếu (Luồng 1)
-  // ---------------------------------------------------------------------------
-  // TODO(endpoint): Thay [TBD_ENDPOINT] bằng tên path thực tế khi có API.
-  // Ví dụ: '/api/DatLichKham/TimBenhNhan'
-  // Tham số: soCcHc (String) — số CCCD (12 ký tự) hoặc Hộ chiếu (8 ký tự)
-  //
-  // Trả về:
-  //   DkkTimBenhNhanResponseDto  — nếu tìm thấy
-  //   null                        — nếu không tìm thấy (server 404 hoặc data rỗng)
-  //   throw ApiException          — nếu lỗi mạng / server 5xx
-  // ---------------------------------------------------------------------------
-  Future<DkkTimBenhNhanResponseDto?> timBenhNhanByCccdHc(String soCcHc) async {
-    // TODO(endpoint): BỎ COMMENT NÀY VÀ ĐIỀN ENDPOINT KHI CÓ API THẬT.
-    // Ví dụ implement thực tế:
-    //
-    // try {
-    //   final response = await _dioClient.dio.get(
-    //     '/api/DatLichKham/TimBenhNhan',          // <-- thay đổi tên path
-    //     queryParameters: {'soCcHc': soCcHc},     // <-- thay đổi tên param
-    //   );
-    //   final data = _extractData(response.data);
-    //   if (data == null) return null;
-    //   if (data is Map<String, dynamic>) {
-    //     return DkkTimBenhNhanResponseDto.fromJson(data);
-    //   }
-    //   return null;
-    // } on BusinessException catch (e) {
-    //   if (e.errorCode == 'NOT_FOUND' || e.message.contains('không tìm thấy')) return null;
-    //   rethrow;
-    // } on DioException catch (e) {
-    //   if (e.response?.statusCode == 404) return null;
-    //   throw ApiException.fromDioError(e);
-    // }
-
-    // --- MOCK PLACEHOLDER: giả lập chưa có API ---
-    // Luôn trả về null (chưa tìm thấy) để luồng không bị block.
-    // Thay bằng code thật ở trên khi có endpoint.
-    await Future.delayed(const Duration(milliseconds: 800)); // Giả lập network delay
-    return null;
+  // API 9: Xóa liên kết hồ sơ bệnh nhân
+  Future<bool> xoaHoSo(String maHs) async {
+    try {
+      final response = await _dioClient.dio.delete(
+        '/api/DatLichKham/XoaHoSo',
+        queryParameters: {'maHs': maHs},
+      );
+      final data = _extractData(response.data);
+      if (data is bool) return data;
+      return true;
+    } on DioException catch (e) {
+      throw ApiException.fromDioError(e);
+    }
   }
 
   dynamic _extractData(dynamic body) {

@@ -14,6 +14,7 @@ import 'package:benhvien7c/features/patients/domain/entities/PatientProfileDraft
 import 'package:benhvien7c/features/patients/presentation/viewmodels/PatientProfileCreateViewModel.dart';
 import 'package:benhvien7c/core/utils/CccdParserHelper.dart';
 import 'package:benhvien7c/features/patients/presentation/views/CccdScannerView.dart';
+import 'package:benhvien7c/core/utils/DateTimeConverter.dart';
 import 'package:benhvien7c/features/patients/data/models/DatLichKhamDtos.dart';
 import 'package:benhvien7c/features/patients/presentation/views/DkkCompareView.dart';
 
@@ -88,6 +89,32 @@ class _PatientProfileCreateViewState extends State<PatientProfileCreateView> {
   }
 
   Future<void> _selectProvince() async {
+    final apiList = _viewModel.apiProvinces;
+    if (apiList.isNotEmpty) {
+      final items = apiList
+          .map((p) => PickerItem<DkkTinhDto>(
+                title: p.display,
+                searchKey: p.display,
+                value: p,
+              ))
+          .toList();
+      final currentSelected = apiList
+          .where((p) => p.display.toLowerCase() == _viewModel.provinceController.text.toLowerCase().trim())
+          .firstOrNull;
+
+      final selected = await SearchablePickerModal.show<DkkTinhDto>(
+        context: context,
+        title: 'Chọn Tỉnh / Thành phố',
+        items: items,
+        selectedItem: currentSelected,
+      );
+      if (selected != null) {
+        _viewModel.selectProvinceFromApi(selected);
+      }
+      return;
+    }
+
+    // Fallback nếu API chưa tải xong
     final items = _viewModel.provinces
         .map((p) => PickerItem<String>(
               title: p.name,
@@ -108,6 +135,39 @@ class _PatientProfileCreateViewState extends State<PatientProfileCreateView> {
   }
 
   Future<void> _selectWard() async {
+    if (_viewModel.provinceController.text.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Vui lòng chọn Tỉnh / Thành phố trước')),
+      );
+      return;
+    }
+
+    final apiWards = _viewModel.getWardsForSelectedProvince();
+    if (apiWards.isNotEmpty) {
+      final items = apiWards
+          .map((w) => PickerItem<DkkPhuongDto>(
+                title: w.display,
+                searchKey: w.display,
+                value: w,
+              ))
+          .toList();
+      final currentSelected = apiWards
+          .where((w) => w.display.toLowerCase() == _viewModel.wardController.text.toLowerCase().trim())
+          .firstOrNull;
+
+      final selected = await SearchablePickerModal.show<DkkPhuongDto>(
+        context: context,
+        title: 'Chọn Phường / Xã',
+        items: items,
+        selectedItem: currentSelected,
+      );
+      if (selected != null) {
+        _viewModel.selectWardFromApi(selected);
+      }
+      return;
+    }
+
+    // Fallback nếu API chưa tải xong
     final wards = AddressHelper.instance.getWardsForProvince(_viewModel.provinceController.text);
     final items = wards
         .map((w) => PickerItem<String>(
@@ -313,6 +373,35 @@ class _PatientProfileCreateViewState extends State<PatientProfileCreateView> {
   }
 
   void _showFoundPatientDialog(DkkTimBenhNhanResponseDto dto) {
+    final searchedQuery = _viewModel.cccdSearchController.text.trim();
+    final displayCcHc = (searchedQuery.isNotEmpty && searchedQuery != dto.maBN)
+        ? searchedQuery
+        : (dto.soCcHc != null && dto.soCcHc!.isNotEmpty && dto.soCcHc != dto.maBN)
+            ? dto.soCcHc!
+            : (dto.maBhytHoacMaBn.isNotEmpty && dto.maBhytHoacMaBn != dto.maBN)
+                ? dto.maBhytHoacMaBn
+                : searchedQuery;
+
+    final ngayCapStr = DateTimeConverter.toVnDate(dto.ngayCap) ?? 'Chưa có thông tin';
+    final ngaySinhStr = DateTimeConverter.toVnDate(dto.ngaySinh) ?? 'Chưa có thông tin';
+    final hoTenStr = dto.hoTen.isNotEmpty ? dto.hoTen : 'Chưa có thông tin';
+    final gioiTinhStr = (dto.gioiTinh != null && dto.gioiTinh!.isNotEmpty && dto.gioiTinh != 'null')
+        ? dto.gioiTinh!
+        : 'Chưa có thông tin';
+    final sdtStr = (dto.soDienThoai != null && dto.soDienThoai!.isNotEmpty && dto.soDienThoai != 'null')
+        ? dto.soDienThoai!
+        : 'Chưa có thông tin';
+    final tinhStr = (dto.tinhTpTen != null && dto.tinhTpTen!.isNotEmpty && dto.tinhTpTen != 'null')
+        ? dto.tinhTpTen!
+        : ((dto.tinhTp != null && dto.tinhTp!.isNotEmpty && dto.tinhTp != 'null')
+            ? dto.tinhTp!
+            : 'Chưa có thông tin');
+    final phuongStr = (dto.phuongXaTen != null && dto.phuongXaTen!.isNotEmpty && dto.phuongXaTen != 'null')
+        ? dto.phuongXaTen!
+        : ((dto.phuongXa != null && dto.phuongXa!.isNotEmpty && dto.phuongXa != 'null')
+            ? dto.phuongXa!
+            : 'Chưa có thông tin');
+
     showDialog<void>(
       context: context,
       barrierDismissible: false,
@@ -324,48 +413,64 @@ class _PatientProfileCreateViewState extends State<PatientProfileCreateView> {
             SizedBox(width: 8),
             Expanded(
               child: Text(
-                'Tìm thấy hồ sơ bệnh viện',
-                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                'Xác nhận!',
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Color(0xFF0F172A)),
               ),
             ),
           ],
         ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              'Hệ thống tìm thấy hồ sơ gốc với thông tin sau:',
-              style: TextStyle(fontSize: 13, color: Color(0xFF64748B)),
-            ),
-            const SizedBox(height: 12),
-            _buildDialogRow('Mã BN', dto.maBN, isBold: true),
-            _buildDialogRow('Họ tên', dto.hoTen),
-            if (dto.ngaySinh != null && dto.ngaySinh!.isNotEmpty)
-              _buildDialogRow('Ngày sinh', dto.ngaySinh!),
-            if (dto.gioiTinh != null && dto.gioiTinh!.isNotEmpty)
-              _buildDialogRow('Giới tính', dto.gioiTinh!),
-            if (dto.soCcHc != null && dto.soCcHc!.isNotEmpty)
-              _buildDialogRow('CCCD/HC', dto.soCcHc!),
-            if (dto.soDienThoai != null && dto.soDienThoai!.isNotEmpty)
-              _buildDialogRow('Điện thoại', dto.soDienThoai!),
-            const SizedBox(height: 10),
-            const Text(
-              'Bạn có muốn điền thông tin này vào form đặt lịch không?',
-              style: TextStyle(fontSize: 12.5, fontStyle: FontStyle.italic, color: Color(0xFF334155)),
-            ),
-          ],
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text.rich(
+                TextSpan(
+                  style: const TextStyle(fontSize: 13.5, color: Color(0xFF334155), height: 1.4),
+                  children: [
+                    const TextSpan(text: 'Tìm thấy thông tin bệnh nhân với mã số '),
+                    TextSpan(
+                      text: '[${dto.maBN}]',
+                      style: const TextStyle(fontWeight: FontWeight.bold, color: Color(0xFFDC2626)),
+                    ),
+                    const TextSpan(text: '. Bạn có muốn lấy thông tin như bên dưới?'),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 12),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF8FAFC),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: const Color(0xFFE2E8F0)),
+                ),
+                child: Column(
+                  children: [
+                    _buildDialogRow('Mã BN', dto.maBN, isBold: true),
+                    _buildDialogRow('Số CC/HC', displayCcHc.isNotEmpty ? displayCcHc : 'Chưa có thông tin'),
+                    _buildDialogRow('Ngày cấp', ngayCapStr),
+                    _buildDialogRow('Họ tên', hoTenStr, isBold: true),
+                    _buildDialogRow('Ngày sinh', ngaySinhStr),
+                    _buildDialogRow('Giới tính', gioiTinhStr),
+                    _buildDialogRow('Số điện thoại', sdtStr),
+                    _buildDialogRow('Tỉnh/TP', tinhStr),
+                    _buildDialogRow('Phường/Xã', phuongStr),
+                  ],
+                ),
+              ),
+            ],
+          ),
         ),
         actions: [
-          // Giữ nút Hủy (Q8)
           TextButton(
             onPressed: () => Navigator.of(dialogCtx).pop(),
-            child: const Text('Hủy', style: TextStyle(color: Color(0xFF64748B))),
+            child: const Text('HỦY', style: TextStyle(color: Color(0xFF64748B), fontWeight: FontWeight.bold)),
           ),
           ElevatedButton(
             onPressed: () {
               Navigator.of(dialogCtx).pop();
-              _viewModel.fillFromHospitalRecord(dto);
+              _viewModel.fillFromHospitalRecord(dto, searchedNumber: displayCcHc);
               ScaffoldMessenger.of(context).showSnackBar(
                 SnackBar(
                   content: Text('Đã điền hồ sơ bệnh nhân: ${dto.hoTen} (Mã BN: ${dto.maBN})'),
@@ -374,11 +479,12 @@ class _PatientProfileCreateViewState extends State<PatientProfileCreateView> {
               );
             },
             style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFF0D6EFD),
+              backgroundColor: const Color(0xFFE11D48),
               foregroundColor: Colors.white,
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+              padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
             ),
-            child: const Text('Đồng ý', style: TextStyle(fontWeight: FontWeight.bold)),
+            child: const Text('ĐỒNG Ý', style: TextStyle(fontWeight: FontWeight.bold)),
           ),
         ],
       ),
@@ -424,16 +530,13 @@ class _PatientProfileCreateViewState extends State<PatientProfileCreateView> {
 
   Widget _buildDialogRow(String label, String value, {bool isBold = false}) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: 4),
+      padding: const EdgeInsets.symmetric(vertical: 2.5),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          SizedBox(
-            width: 80,
-            child: Text(
-              '$label:',
-              style: const TextStyle(fontSize: 13, color: Color(0xFF64748B)),
-            ),
+          Text(
+            '- $label: ',
+            style: const TextStyle(fontSize: 13, color: Color(0xFF475569)),
           ),
           Expanded(
             child: Text(
@@ -1044,6 +1147,7 @@ class _PatientProfileCreateViewState extends State<PatientProfileCreateView> {
   Widget _buildSummaryCard() {
     final name = _viewModel.fullNameController.text.trim();
     final cccd = _viewModel.identifierController.text.trim();
+    final patientCode = _viewModel.patientCodeController.text.trim();
     final clinic = _viewModel.clinicController.text.trim().isNotEmpty
         ? _viewModel.clinicController.text.trim()
         : (_viewModel.selectedDepartment ?? 'Chưa chọn');
@@ -1093,6 +1197,8 @@ class _PatientProfileCreateViewState extends State<PatientProfileCreateView> {
           const SizedBox(height: 14),
 
           _buildSummaryRow(Icons.person_rounded, 'Bệnh nhân', name.isNotEmpty ? name : 'Chưa nhập'),
+          if (patientCode.isNotEmpty)
+            _buildSummaryRow(Icons.fingerprint_rounded, 'Mã bệnh nhân', patientCode),
           _buildSummaryRow(Icons.badge_rounded, 'Số CCCD', cccd.isNotEmpty ? cccd : 'Chưa nhập'),
           _buildSummaryRow(Icons.local_hospital_rounded, 'Phòng khám', clinic),
           _buildSummaryRow(Icons.event_rounded, 'Lịch khám', '$dateStr ($timeStr)'),
@@ -1286,7 +1392,7 @@ class _PatientProfileCreateViewState extends State<PatientProfileCreateView> {
                       validator: (v) => Validators.validateFullDate(v, isRequired: true, fieldName: 'Ngày sinh'),
                     ),
                     child2: DropdownButtonFormField<String>(
-                      value: _viewModel.gender,
+                      initialValue: _viewModel.gender,
                       decoration: InputDecoration(
                         label: _buildRequiredLabel('Giới tính'),
                         filled: _viewModel.isExistingProfile,

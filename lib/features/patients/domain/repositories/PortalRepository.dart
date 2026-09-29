@@ -61,6 +61,11 @@ abstract class PortalRepository {
     UserRole role,
     PatientProfileDraftEntity draft, {
     String? department,
+    String? departmentId,  // ID phòng khám từ server
+    String? provinceCode,  // Mã tỉnh từ server API
+    String? provinceName,  // Tên tỉnh từ server API
+    String? wardCode,      // Mã phường/xã từ server API
+    String? wardName,      // Tên phường/xã từ server API
     String? selectedDate,
     String? selectedTime,
     String? symptom,
@@ -103,7 +108,9 @@ abstract class PortalRepository {
   );
 
   // --- Real Backend DatLichKham API Integration ---
-  Future<Result<DkkThongTinKhamListMasterDto>> fetchNgayGioKham();
+  /// Lấy toàn bộ dữ liệu Master: Phòng khám, Tỉnh/Xã, Ngày/Giờ khám
+  Future<Result<DkkListMasterDto>> fetchListMaster();
+
   Future<Result<List<DkkHoSoBenhNhanDto>>> fetchHoSoByMaHS(String maHS);
   Future<Result<DkkSoKhamDto>> fetchPhieuSoKham(int id);
 
