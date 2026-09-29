@@ -50,21 +50,35 @@ class _CloudflareTurnstileState extends State<CloudflareTurnstile> {
   void didUpdateWidget(covariant CloudflareTurnstile oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (widget.hasError && !oldWidget.hasError) {
-      setState(() {
-        _isLoading = false;
-        _isVerifying = false;
-        _isSuccess = false;
-        _isWebviewFailed = true;
-        _errorDetail = widget.errorMessage ?? 'Xác thực CAPTCHA thất bại hoặc nghi ngờ Spam Bot';
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          setState(() {
+            _isLoading = false;
+            _isVerifying = false;
+            _isSuccess = false;
+            _isWebviewFailed = true;
+            _errorDetail = widget.errorMessage ?? 'Xác thực CAPTCHA thất bại hoặc nghi ngờ Spam Bot';
+          });
+        }
       });
       return;
     }
     if (!widget.hasError && oldWidget.hasError) {
-      _retry();
+      if (_isWebviewFailed) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted && _isWebviewFailed) {
+            _retry();
+          }
+        });
+      }
       return;
     }
     if (widget.simulateBot != oldWidget.simulateBot || widget.siteKey != oldWidget.siteKey) {
-      _initTurnstile();
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          _initTurnstile();
+        }
+      });
     }
   }
 
@@ -334,6 +348,7 @@ class _CloudflareTurnstileState extends State<CloudflareTurnstile> {
   }
 
   void _retry() {
+    if (!mounted) return;
     setState(() {
       _isLoading = true;
       _isVerifying = false;
@@ -342,8 +357,13 @@ class _CloudflareTurnstileState extends State<CloudflareTurnstile> {
       _webViewController = null;
       _errorDetail = null;
     });
-    widget.onRetry?.call();
-    _initTurnstile();
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        widget.onRetry?.call();
+        _initTurnstile();
+      }
+    });
   }
 
   @override

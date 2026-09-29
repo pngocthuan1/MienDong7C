@@ -1202,7 +1202,7 @@ class _PatientProfileCreateViewState extends State<PatientProfileCreateView> {
               // Card 1: Thông tin cá nhân & CCCD
               _buildCardSection(
                 icon: Icons.person_pin_rounded,
-                title: '1. Thông tin cá nhân & CCCD',
+                title: '1. Thông tin hành chính',
                 trailing: TextButton.icon(
                   onPressed: _viewModel.isExistingProfile ? null : _startCccdScanning,
                   icon: const Icon(Icons.qr_code_scanner_rounded, size: 14, color: Color(0xFF0D6EFD)),
@@ -1218,8 +1218,8 @@ class _PatientProfileCreateViewState extends State<PatientProfileCreateView> {
                   _buildResponsivePair(
                     child1: AppTextField(
                       controller: _viewModel.identifierController,
-                      label: 'Số CCCD *',
-                      hintText: 'Nhập 12 số CCCD',
+                      label: 'Số CCCD / Hộ Chiếu*',
+                      hintText: 'Nhập 12 số CCCD / Hộ chiếu 8 số',
                       prefixIcon: Icons.badge_outlined,
                       validator: (v) => Validators.validateCccdOrTempCode(v, isOptional: false),
                       textInputAction: TextInputAction.next,
@@ -1231,7 +1231,7 @@ class _PatientProfileCreateViewState extends State<PatientProfileCreateView> {
                       keyboardType: TextInputType.datetime,
                       readOnly: _viewModel.isExistingProfile,
                       decoration: InputDecoration(
-                        labelText: 'Ngày cấp CCCD',
+                        labelText: 'Ngày cấp',
                         hintText: 'DD/MM/YYYY',
                         filled: _viewModel.isExistingProfile,
                         fillColor: _viewModel.isExistingProfile ? const Color(0xFFF1F5F9) : null,
@@ -1485,7 +1485,7 @@ class _PatientProfileCreateViewState extends State<PatientProfileCreateView> {
                   AppTextField(
                     controller: _viewModel.symptomController,
                     label: 'Triệu chứng',
-                    hintText: 'Mô tả ngắn gọn triệu chứng (không bắt buộc)',
+                    hintText: 'Mô tả triệu chứng (không bắt buộc)',
                     prefixIcon: Icons.medical_services_outlined,
                     textInputAction: TextInputAction.done,
                   ),

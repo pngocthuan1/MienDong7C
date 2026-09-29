@@ -96,7 +96,9 @@ class _LoginViewState extends State<LoginView> with WidgetsBindingObserver {
           await AppLocator.secureStorage.saveBiometricCredentials(phone, password);
         }
         _viewModel.loginCommand.clearResult();
-        AppNavigator.resetToNamed(context, RouteNames.home);
+        if (mounted) {
+          AppNavigator.resetToNamed(context, RouteNames.home);
+        }
       },
       failure: (exception) {
         if (_viewModel.captchaToken == null) {
@@ -151,7 +153,7 @@ class _LoginViewState extends State<LoginView> with WidgetsBindingObserver {
         _viewModel.updateRole(UserRole.customer);
       }
 
-      _viewModel.captchaToken = _captchaToken ?? 'cf-token-mock-biometric-${DateTime.now().millisecondsSinceEpoch}';
+      _viewModel.captchaToken = _captchaToken;
       
       await _viewModel.loginCommand.execute();
     } catch (e) {
@@ -255,8 +257,10 @@ class _LoginViewState extends State<LoginView> with WidgetsBindingObserver {
               await prefs.remove('custom_base_url');
               Environment.setCustomBaseUrl(null);
               AppLocator.dioClient.dio.options.baseUrl = Environment.baseUrl;
-              if (mounted) {
+              if (ctx.mounted) {
                 Navigator.of(ctx).pop();
+              }
+              if (mounted) {
                 ScaffoldMessenger.of(context).showSnackBar(
                   SnackBar(
                     content: Text('Đã khôi phục Server mặc định: ${Environment.baseUrl}'),
@@ -275,8 +279,10 @@ class _LoginViewState extends State<LoginView> with WidgetsBindingObserver {
                 await prefs.setString('custom_base_url', newUrl);
                 Environment.setCustomBaseUrl(newUrl);
                 AppLocator.dioClient.dio.options.baseUrl = Environment.baseUrl;
-                if (mounted) {
+                if (ctx.mounted) {
                   Navigator.of(ctx).pop();
+                }
+                if (mounted) {
                   ScaffoldMessenger.of(context).showSnackBar(
                     SnackBar(
                       content: Text('Đã cập nhật Server API thành: ${Environment.baseUrl}'),
