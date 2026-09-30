@@ -67,8 +67,26 @@ class DatLichKhamRemoteDataSource {
     }
   }
 
+  // API 4: Kiểm tra sai lệch thông tin bệnh nhân
+  Future<DkkKiemTraBenhNhanResponseDto?> kiemTraBenhNhan(DangKyKhamRequestDto request) async {
+    try {
+      final response = await _dioClient.dio.post(
+        '/api/DatLichKham/KiemTraBenhNhan',
+        data: request.toJson(),
+      );
+      final data = _extractData(response.data);
+      if (data is Map<String, dynamic>) {
+        return DkkKiemTraBenhNhanResponseDto.fromJson(data);
+      }
+      return null;
+    } on DioException catch (e) {
+      throw ApiException.fromDioError(e);
+    }
+  }
+
   // API 5: Đăng ký đặt lịch khám
   Future<int> dangKyKham(DangKyKhamRequestDto request) async {
+
     try {
       final response = await _dioClient.dio.post(
         '/api/DatLichKham/DangKy',

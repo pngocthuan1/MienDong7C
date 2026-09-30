@@ -32,6 +32,14 @@ class _PatientProfileCreateViewState extends State<PatientProfileCreateView> {
   String? _captchaToken;
   bool _initializedArgs = false;
 
+  // Quản lý FocusNode tường minh để chuyển focus mượt mà, không chớp tắt bàn phím
+  final _identifierFocus = FocusNode();
+  final _cccdIssueDateFocus = FocusNode();
+  final _fullNameFocus = FocusNode();
+  final _dobFocus = FocusNode();
+  final _phoneFocus = FocusNode();
+  final _symptomFocus = FocusNode();
+
   @override
   void initState() {
     super.initState();
@@ -77,18 +85,34 @@ class _PatientProfileCreateViewState extends State<PatientProfileCreateView> {
 
     if (picked != null) {
       final formatted = DateFormat('dd/MM/yyyy').format(picked);
-      setState(() {
-        controller.text = formatted;
-        if (isOther) {
-          _viewModel.otherBirthYearController.text = picked.year.toString();
-        } else {
-          _viewModel.birthYearController.text = picked.year.toString();
-        }
-      });
+      controller.text = formatted;
+      if (isOther) {
+        _viewModel.otherBirthYearController.text = picked.year.toString();
+      } else {
+        _viewModel.birthYearController.text = picked.year.toString();
+      }
     }
   }
 
   Future<void> _selectProvince() async {
+    final cached = _viewModel.cachedProvincePickerItems;
+    if (cached.isNotEmpty) {
+      final currentSelected = _viewModel.apiProvinces
+          .where((p) => p.display.toLowerCase() == _viewModel.provinceController.text.toLowerCase().trim())
+          .firstOrNull;
+
+      final selected = await SearchablePickerModal.show<DkkTinhDto>(
+        context: context,
+        title: 'Chọn Tỉnh / Thành phố',
+        items: cached,
+        selectedItem: currentSelected,
+      );
+      if (selected != null) {
+        _viewModel.selectProvinceFromApi(selected);
+      }
+      return;
+    }
+
     final apiList = _viewModel.apiProvinces;
     if (apiList.isNotEmpty) {
       final items = apiList
@@ -139,6 +163,24 @@ class _PatientProfileCreateViewState extends State<PatientProfileCreateView> {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Vui lòng chọn Tỉnh / Thành phố trước')),
       );
+      return;
+    }
+
+    final cachedWards = _viewModel.getCachedWardPickerItems();
+    if (cachedWards.isNotEmpty) {
+      final currentSelected = _viewModel.getWardsForSelectedProvince()
+          .where((w) => w.display.toLowerCase() == _viewModel.wardController.text.toLowerCase().trim())
+          .firstOrNull;
+
+      final selected = await SearchablePickerModal.show<DkkPhuongDto>(
+        context: context,
+        title: 'Chọn Phường / Xã',
+        items: cachedWards,
+        selectedItem: currentSelected,
+      );
+      if (selected != null) {
+        _viewModel.selectWardFromApi(selected);
+      }
       return;
     }
 
@@ -207,6 +249,12 @@ class _PatientProfileCreateViewState extends State<PatientProfileCreateView> {
 
   @override
   void dispose() {
+    _identifierFocus.dispose();
+    _cccdIssueDateFocus.dispose();
+    _fullNameFocus.dispose();
+    _dobFocus.dispose();
+    _phoneFocus.dispose();
+    _symptomFocus.dispose();
     _viewModel.continueCommand.removeListener(_onContinueChanged);
     _viewModel.dispose();
     super.dispose();
@@ -1290,12 +1338,13 @@ class _PatientProfileCreateViewState extends State<PatientProfileCreateView> {
       child: Form(
         key: _formKey,
         child: SingleChildScrollView(
+          keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
           padding: const EdgeInsets.all(16),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              _buildGuidanceBanner(),
-              _buildCccdSearchSection(),
+              RepaintBoundary(child: _buildGuidanceBanner()),
+              RepaintBoundary(child: _buildCccdSearchSection()),
               _buildSavedProfilesHeader(),
               if (_viewModel.isExistingProfile && _viewModel.selectedProfileIdentifier != null) ...[
                 _buildSelectedProfileChip(),
@@ -1324,20 +1373,25 @@ class _PatientProfileCreateViewState extends State<PatientProfileCreateView> {
                   _buildResponsivePair(
                     child1: AppTextField(
                       controller: _viewModel.identifierController,
-                      label: 'Số CCCD / Hộ Chiếu*',
-                      hintText: 'Nhập 12 số CCCD / Hộ chiếu 8 số',
+                      label: 'Số CCCD / Hộ Chiếu *',
+                      hintText: 'Nhập 12 số CCCD hoặc Hộ chiếu',
                       prefixIcon: Icons.badge_outlined,
-                      validator: (v) => Validators.validateCccdOrTempCode(v, isOptional: false),
+                      validator: (v) => Validators.validateCccdOrPassport(v, isOptional: false),
+                      focusNode: _identifierFocus,
                       textInputAction: TextInputAction.next,
+                      onFieldSubmitted: (_) => FocusScope.of(context).requestFocus(_cccdIssueDateFocus),
                       readOnly: _viewModel.isExistingProfile,
                       onChanged: (_) => _viewModel.refreshFormState(),
                     ),
                     child2: TextFormField(
                       controller: _viewModel.cccdIssueDateController,
+                      focusNode: _cccdIssueDateFocus,
                       keyboardType: TextInputType.datetime,
+                      textInputAction: TextInputAction.next,
+                      onFieldSubmitted: (_) => FocusScope.of(context).requestFocus(_fullNameFocus),
                       readOnly: _viewModel.isExistingProfile,
                       decoration: InputDecoration(
-                        labelText: 'Ngày cấp',
+                        labelText: 'Ngày cấp *',
                         hintText: 'DD/MM/YYYY',
                         filled: _viewModel.isExistingProfile,
                         fillColor: _viewModel.isExistingProfile ? const Color(0xFFF1F5F9) : null,
@@ -1350,7 +1404,7 @@ class _PatientProfileCreateViewState extends State<PatientProfileCreateView> {
                         ),
                         border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
                       ),
-                      validator: (v) => Validators.validateFullDate(v, isRequired: false, fieldName: 'Ngày cấp CCCD'),
+                      validator: (v) => Validators.validateFullDate(v, isRequired: true, fieldName: 'Ngày cấp CCCD'),
                     ),
                   ),
                   const SizedBox(height: 14),
@@ -1362,7 +1416,9 @@ class _PatientProfileCreateViewState extends State<PatientProfileCreateView> {
                     hintText: 'Nhập đầy đủ họ tên',
                     prefixIcon: Icons.person_outline_rounded,
                     validator: _viewModel.checkFullName,
+                    focusNode: _fullNameFocus,
                     textInputAction: TextInputAction.next,
+                    onFieldSubmitted: (_) => FocusScope.of(context).requestFocus(_dobFocus),
                     readOnly: _viewModel.isExistingProfile,
                     onChanged: _viewModel.updateFullNameError,
                   ),
@@ -1373,7 +1429,10 @@ class _PatientProfileCreateViewState extends State<PatientProfileCreateView> {
                     breakpoint: 380,
                     child1: TextFormField(
                       controller: _viewModel.dobController,
+                      focusNode: _dobFocus,
                       keyboardType: TextInputType.datetime,
+                      textInputAction: TextInputAction.next,
+                      onFieldSubmitted: (_) => FocusScope.of(context).requestFocus(_phoneFocus),
                       readOnly: _viewModel.isExistingProfile,
                       decoration: InputDecoration(
                         label: _buildRequiredLabel('Ngày sinh'),
@@ -1418,7 +1477,9 @@ class _PatientProfileCreateViewState extends State<PatientProfileCreateView> {
                       keyboardType: TextInputType.phone,
                       prefixIcon: Icons.phone_android_rounded,
                       validator: (v) => Validators.validatePhoneNumber(v, isOptional: true),
+                      focusNode: _phoneFocus,
                       textInputAction: TextInputAction.next,
+                      onFieldSubmitted: (_) => FocusScope.of(context).requestFocus(_symptomFocus),
                       readOnly: _viewModel.isExistingProfile,
                       onChanged: _viewModel.updatePhoneError,
                     ),
@@ -1593,19 +1654,26 @@ class _PatientProfileCreateViewState extends State<PatientProfileCreateView> {
                     label: 'Triệu chứng',
                     hintText: 'Mô tả triệu chứng (không bắt buộc)',
                     prefixIcon: Icons.medical_services_outlined,
+                    focusNode: _symptomFocus,
                     textInputAction: TextInputAction.done,
                   ),
                 ],
               ),
 
-              // Captcha
+              // Captcha — cô lập WebView trong RepaintBoundary + SizedBox cố định
+              // để tránh re-composite native Surface khi bàn phím animate
               Center(
-                child: CloudflareTurnstile(
-                  onVerified: (token) {
-                    setState(() {
-                      _captchaToken = token;
-                    });
-                  },
+                child: SizedBox(
+                  height: 70,
+                  child: RepaintBoundary(
+                    child: CloudflareTurnstile(
+                      onVerified: (token) {
+                        setState(() {
+                          _captchaToken = token;
+                        });
+                      },
+                    ),
+                  ),
                 ),
               ),
               const SizedBox(height: 16),

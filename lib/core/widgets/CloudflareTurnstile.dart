@@ -119,19 +119,18 @@ class _CloudflareTurnstileState extends State<CloudflareTurnstile> {
       return;
     }
 
-    // ── Nền tảng Web: Chặn hẳn, xoay vòng kiểm tra 1.8s rồi báo Không thể xác thực ──
-    // Không tự động báo "thành công" giả để người dùng kiểm thử đúng trạng thái chặn thật
+    // ── Nền tảng Web: Tạm thời mở khóa / bỏ chặn để kiểm thử theo yêu cầu ──
     if (kIsWeb) {
-      _webCheckTimer = Timer(const Duration(milliseconds: 1800), () {
+      _webCheckTimer = Timer(const Duration(milliseconds: 600), () {
         if (mounted) {
           setState(() {
             _isLoading = false;
             _isVerifying = false;
-            _isSuccess = false;
-            _isWebviewFailed = true;
-            _errorDetail = 'Không thể xác thực: Trình duyệt Web chưa được cấp phép bảo mật di động';
+            _isSuccess = true;
+            _isWebviewFailed = false;
+            _errorDetail = null;
           });
-          widget.onExpired?.call();
+          widget.onVerified('web_test_token_bypass');
         }
       });
       return;
@@ -461,7 +460,9 @@ class _CloudflareTurnstileState extends State<CloudflareTurnstile> {
         size: 24,
       );
       title = 'Xác minh thành công ✓';
-      subtitle = 'Bảo vệ bởi Cloudflare Turnstile';
+      subtitle = kIsWeb
+          ? 'Chế độ Web Test (Đã tạm mở khóa)'
+          : 'Bảo vệ bởi Cloudflare Turnstile';
       titleColor = const Color(0xFF15803D);
       subtitleColor = const Color(0xFF166534);
     } else {

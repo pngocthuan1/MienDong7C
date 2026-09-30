@@ -105,7 +105,58 @@ class DkkTimBenhNhanResponseDto {
       };
 }
 
+// ---------------------------------------------------------------------------
+// DTO phản hồi API Kiểm tra sai lệch thông tin bệnh nhân (API 4: KiemTraBenhNhan)
+// ---------------------------------------------------------------------------
+class DkkKiemTraBenhNhanResponseDto {
+  final String? maBN;
+  final String? soDienThoai;
+  final bool? soDienThoaiDiff;
+  final bool? hoTenDiff;
+  final bool? gioiTinhDiff;
+  final bool? ngaySinhDiff;
+  final bool? ngayCapDiff;
+  final bool? tinhTpDiff;
+  final bool? phuongXaDiff;
+
+  const DkkKiemTraBenhNhanResponseDto({
+    this.maBN,
+    this.soDienThoai,
+    this.soDienThoaiDiff,
+    this.hoTenDiff,
+    this.gioiTinhDiff,
+    this.ngaySinhDiff,
+    this.ngayCapDiff,
+    this.tinhTpDiff,
+    this.phuongXaDiff,
+  });
+
+  factory DkkKiemTraBenhNhanResponseDto.fromJson(Map<String, dynamic> json) {
+    return DkkKiemTraBenhNhanResponseDto(
+      maBN: json['MaBN']?.toString() ?? json['mabn']?.toString(),
+      soDienThoai: json['SoDienThoai']?.toString() ?? json['sdt']?.toString(),
+      soDienThoaiDiff: json['SoDienThoaiDiff'] as bool? ?? json['soDienThoaiDiff'] as bool?,
+      hoTenDiff: json['HoTenDiff'] as bool? ?? json['hoTenDiff'] as bool?,
+      gioiTinhDiff: json['GioiTinhDiff'] as bool? ?? json['gioiTinhDiff'] as bool?,
+      ngaySinhDiff: json['NgaySinhDiff'] as bool? ?? json['ngaySinhDiff'] as bool?,
+      ngayCapDiff: json['NgayCapDiff'] as bool? ?? json['ngayCapDiff'] as bool?,
+      tinhTpDiff: json['TinhTpDiff'] as bool? ?? json['tinhTpDiff'] as bool?,
+      phuongXaDiff: json['PhuongXaDiff'] as bool? ?? json['phuongXaDiff'] as bool?,
+    );
+  }
+
+  bool get hasDiff =>
+      (soDienThoaiDiff ?? false) ||
+      (hoTenDiff ?? false) ||
+      (gioiTinhDiff ?? false) ||
+      (ngaySinhDiff ?? false) ||
+      (ngayCapDiff ?? false) ||
+      (tinhTpDiff ?? false) ||
+      (phuongXaDiff ?? false);
+}
+
 class DkkPhongKhamDto {
+
   final String id;
   final String display;
   DkkPhongKhamDto({required this.id, required this.display});

@@ -56,4 +56,33 @@ class DateTimeConverter {
 
     return null;
   }
+
+  /// Chuyển chuỗi ngày (dd/MM/yyyy hoặc chuỗi DateTime parseable) sang chuẩn ISO của server: "yyyy-MM-ddT00:00:00"
+  static String? toServerIsoString(dynamic date) {
+    if (date == null) return null;
+    final clean = date.toString().trim();
+    if (clean.isEmpty || clean.toLowerCase() == 'null') return null;
+
+    // Nếu chứa dấu gạch chéo dd/MM/yyyy
+    if (clean.contains('/')) {
+      final parts = clean.split('/');
+      if (parts.length >= 3) {
+        final d = int.tryParse(parts[0]);
+        final m = int.tryParse(parts[1]);
+        final yearPart = parts[2].split(' ')[0].split('T')[0];
+        final y = int.tryParse(yearPart);
+        if (d != null && m != null && y != null) {
+          return '${y.toString().padLeft(4, '0')}-${m.toString().padLeft(2, '0')}-${d.toString().padLeft(2, '0')}T00:00:00';
+        }
+      }
+    }
+
+    // Nếu đã là hoặc có thể parse sang DateTime ISO
+    final parsed = DateTime.tryParse(clean);
+    if (parsed != null) {
+      return '${parsed.year.toString().padLeft(4, '0')}-${parsed.month.toString().padLeft(2, '0')}-${parsed.day.toString().padLeft(2, '0')}T00:00:00';
+    }
+
+    return null;
+  }
 }

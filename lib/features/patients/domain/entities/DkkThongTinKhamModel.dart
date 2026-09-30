@@ -170,6 +170,54 @@ class DkkThongTinKhamModel {
     );
   }
 
+  /// Factory: kết hợp kết quả kiểm tra sai lệch từ API KiemTraBenhNhan của server
+  factory DkkThongTinKhamModel.fromServerCheck({
+    required DkkTimBenhNhanResponseDto system,
+    required PatientProfileDraftEntity user,
+    required bool isFromSavedProfile,
+    DkkKiemTraBenhNhanResponseDto? serverDiff,
+  }) {
+    final clientCompare = DkkThongTinKhamModel.compare(
+      system: system,
+      user: user,
+      isFromSavedProfile: isFromSavedProfile,
+    );
+    if (serverDiff == null) return clientCompare;
+
+    return DkkThongTinKhamModel(
+      maBN: serverDiff.maBN ?? system.maBN,
+      maBhytHoacMaBn: system.maBhytHoacMaBn,
+      systemHoTen: system.hoTen,
+      userHoTen: user.fullName,
+      hoTenDiff: serverDiff.hoTenDiff ?? clientCompare.hoTenDiff,
+      systemGioiTinh: clientCompare.systemGioiTinh,
+      userGioiTinh: clientCompare.userGioiTinh,
+      gioiTinhDiff: serverDiff.gioiTinhDiff ?? clientCompare.gioiTinhDiff,
+      systemNgaySinh: clientCompare.systemNgaySinh,
+      userNgaySinh: clientCompare.userNgaySinh,
+      ngaySinhDiff: serverDiff.ngaySinhDiff ?? clientCompare.ngaySinhDiff,
+      systemNgayCap: clientCompare.systemNgayCap,
+      userNgayCap: clientCompare.userNgayCap,
+      ngayCapDiff: serverDiff.ngayCapDiff ?? clientCompare.ngayCapDiff,
+      systemSoDienThoai: clientCompare.systemSoDienThoai,
+      userSoDienThoai: clientCompare.userSoDienThoai,
+      soDienThoaiDiff: serverDiff.soDienThoaiDiff ?? clientCompare.soDienThoaiDiff,
+      systemTinhTp: clientCompare.systemTinhTp,
+      systemTinhTpTen: clientCompare.systemTinhTpTen,
+      userTinhTp: clientCompare.userTinhTp,
+      userTinhTpTen: clientCompare.userTinhTpTen,
+      tinhTpDiff: serverDiff.tinhTpDiff ?? clientCompare.tinhTpDiff,
+      systemPhuongXa: clientCompare.systemPhuongXa,
+      systemPhuongXaTen: clientCompare.systemPhuongXaTen,
+      userPhuongXa: clientCompare.userPhuongXa,
+      userPhuongXaTen: clientCompare.userPhuongXaTen,
+      phuongXaDiff: serverDiff.phuongXaDiff ?? clientCompare.phuongXaDiff,
+      isFromSavedProfile: isFromSavedProfile,
+      systemSnapshot: system,
+    );
+  }
+
+
   // ---------------------------------------------------------------------------
   // Helper so sánh nội bộ
   // ---------------------------------------------------------------------------

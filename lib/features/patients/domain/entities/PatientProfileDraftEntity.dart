@@ -11,6 +11,8 @@ class PatientProfileDraftEntity {
     this.ward,
     this.clinic,
     this.maSo,
+    this.maHS,
+    this.maBN,
     this.dangKyGiup,
     this.isDeleted = false,
   });
@@ -26,6 +28,8 @@ class PatientProfileDraftEntity {
   final String? ward;
   final String? clinic;
   final String? maSo;
+  final String? maHS;
+  final String? maBN;
   final String? dangKyGiup;
   final bool isDeleted;
 
@@ -42,6 +46,8 @@ class PatientProfileDraftEntity {
       'ward': ward,
       'clinic': clinic,
       'maSo': maSo,
+      'maHS': maHS,
+      'maBN': maBN,
       'dangKyGiup': dangKyGiup,
       'isDeleted': isDeleted,
     };
@@ -60,12 +66,15 @@ class PatientProfileDraftEntity {
       ward: json['ward'] as String?,
       clinic: json['clinic'] as String?,
       maSo: json['maSo'] as String?,
+      maHS: json['maHS'] as String?,
+      maBN: json['maBN'] as String?,
       dangKyGiup: json['dangKyGiup'] as String?,
       isDeleted: json['isDeleted'] as bool? ?? false,
     );
   }
 
   PatientProfileDraftEntity copyWith({
+
     String? identifier,
     String? fullName,
     String? birthYear,

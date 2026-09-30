@@ -665,12 +665,12 @@ class _PersonalProfileViewState extends State<PersonalProfileView> {
                       TextFormField(
                         controller: _identifierController,
                         decoration: InputDecoration(
-                          label: _buildRequiredLabel('Số CCCD'),
-                          hintText: 'Nhập 12 số CCCD',
+                          label: _buildRequiredLabel('Số CCCD / Hộ chiếu'),
+                          hintText: 'Nhập 12 số CCCD hoặc Hộ chiếu',
                           prefixIcon: const Icon(Icons.badge_outlined),
                           border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
                         ),
-                        validator: (v) => Validators.validateCccdOrTempCode(v, isOptional: false),
+                        validator: (v) => Validators.validateCccdOrPassport(v, isOptional: false),
                       ),
                       const SizedBox(height: 14),
 

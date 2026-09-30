@@ -120,6 +120,10 @@ abstract class PortalRepository {
   /// - Error    → lỗi mạng / server
   Future<Result<DkkTimBenhNhanResponseDto?>> timBenhNhanByCccdHc(String soCcHc);
 
+  /// Kiểm tra sai lệch thông tin bệnh nhân so với dữ liệu lưu trên hệ thống bệnh viện (API 4).
+  Future<Result<DkkKiemTraBenhNhanResponseDto?>> kiemTraBenhNhan(DangKyKhamRequestDto request);
+
+
   Future<Result<List<NotificationReadStatusEntity>>> loadNotificationReadStatus(
     String notificationId,
   );

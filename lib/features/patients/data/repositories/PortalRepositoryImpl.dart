@@ -375,22 +375,7 @@ class PortalRepositoryImpl implements PortalRepository {
 
   /// Convert từ định dạng dd/MM/yyyy hoặc yyyy-MM-dd sang ISO 8601 DateTime string
   String? _toIsoDateTime(String? dateStr) {
-    if (dateStr == null || dateStr.trim().isEmpty) return null;
-    final clean = dateStr.trim();
-    // Nếu đã là ISO
-    final iso = DateTime.tryParse(clean);
-    if (iso != null) return '${iso.year.toString().padLeft(4,'0')}-${iso.month.toString().padLeft(2,'0')}-${iso.day.toString().padLeft(2,'0')}T00:00:00';
-    // Nếu định dạng dd/MM/yyyy
-    final parts = clean.split('/');
-    if (parts.length == 3) {
-      final d = int.tryParse(parts[0]);
-      final m = int.tryParse(parts[1]);
-      final y = int.tryParse(parts[2]);
-      if (d != null && m != null && y != null) {
-        return '${y.toString().padLeft(4,'0')}-${m.toString().padLeft(2,'0')}-${d.toString().padLeft(2,'0')}T00:00:00';
-      }
-    }
-    return null;
+    return DateTimeConverter.toServerIsoString(dateStr);
   }
 
   @override
@@ -410,14 +395,26 @@ class PortalRepositoryImpl implements PortalRepository {
     try {
       final remote = _remoteDatasource ?? DatLichKhamRemoteDataSource(AppLocator.dioClient);
       final identifier = draft.identifier.trim();
-      String maBN = (draft.maSo != null && draft.maSo!.trim().isNotEmpty && draft.maSo != 'N/A')
-          ? draft.maSo!.trim()
-          : '';
-      if (maBN.isEmpty && identifier.length == 8) {
-        maBN = identifier;
+      // Quy tắc chuẩn:
+      // 1. Hồ sơ đã lưu (ListHoSo): MaHS = MaSo của hồ sơ. MaBN = MaSo (nếu là mã thật 8 số, không bắt đầu bằng T), ngược lại rỗng.
+      // 2. Tìm bệnh nhân (TimBenhNhan - Luồng 1 A): MaHS = '', MaBN = mã BN tìm được.
+      // 3. Nhập tay mới (Luồng 1 B): MaHS = '', MaBN = ''.
+      String maHS = draft.maHS ?? '';
+      String maBN = draft.maBN ?? '';
+
+      if (maHS.isEmpty && draft.maSo != null && draft.maSo!.isNotEmpty && draft.maSo != 'N/A') {
+        final rawMaSo = draft.maSo!.trim();
+        maHS = rawMaSo;
+        // PHÂN BIỆT RÕ MÃ BỆNH NHÂN VÀ HỘ CHIẾU:
+        // rawMaSo chỉ được coi là Mã bệnh nhân (MaBN) nếu:
+        // 1. Không bắt đầu bằng 'T' (mã tạm)
+        // 2. KHÁC với số CCCD / Hộ chiếu (identifier) — không được nhầm Hộ chiếu 8 số thành MaBN!
+        if (!rawMaSo.toUpperCase().startsWith('T') && rawMaSo != identifier) {
+          maBN = rawMaSo;
+        }
       }
-      String maHS = maBN.isNotEmpty ? maBN : (identifier.length == 21 || identifier.startsWith('T') ? identifier : '');
       String maBhytHoacMaBn = identifier.isNotEmpty ? identifier : maBN;
+
 
       final formattedNgayKham = _formatNgayKhamForServer(selectedDate ?? '');
       final formattedGioKham = _formatGioKhamForServer(selectedTime ?? '');
@@ -680,9 +677,18 @@ class PortalRepositoryImpl implements PortalRepository {
             ? dto.maSo!.trim()
             : null;
 
+        // Phân biệt rõ MaBN và Hộ chiếu/CCCD:
+        // MaBN chỉ được thiết lập nếu maSoClean khác với identifier (CCCD/Hộ chiếu)
+        // và không phải mã tạm 'T...'
+        final isRealMaBn = maSoClean != null &&
+            !maSoClean.toUpperCase().startsWith('T') &&
+            maSoClean != identifier;
+
         return PatientProfileDraftEntity(
           identifier: identifier,
           maSo: maSoClean,
+          maHS: maSoClean,
+          maBN: isRealMaBn ? maSoClean : null,
           fullName: dto.hoTen ?? '',
           birthYear: dto.namSinh ?? '',
           gender: _mapServerGender(dto.gioiTinh, 'Nam'),
@@ -927,6 +933,22 @@ class PortalRepositoryImpl implements PortalRepository {
       return Error(Exception(error.toString()), error.toString());
     }
   }
+
+  @override
+  Future<Result<DkkKiemTraBenhNhanResponseDto?>> kiemTraBenhNhan(DangKyKhamRequestDto request) async {
+    try {
+      final remote = _remoteDatasource ?? DatLichKhamRemoteDataSource(AppLocator.dioClient);
+      final dto = await remote.kiemTraBenhNhan(request);
+      return Ok(dto);
+    } on ApiException catch (e) {
+      return Error(e, e.message);
+    } on Exception catch (exception) {
+      return Error(exception, exception.toString());
+    } catch (error) {
+      return Error(Exception(error.toString()), error.toString());
+    }
+  }
+
 
 
 

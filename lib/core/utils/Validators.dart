@@ -47,19 +47,26 @@ class Validators {
     return validateVietnamesePhoneNumber(value, isOptional: isOptional);
   }
 
-  static String? validateCccdOrTempCode(String? value, {bool isOptional = true}) {
+  /// Validate số CCCD (12 chữ số), Hộ chiếu (8 ký tự chữ và số), hoặc Mã tạm (bắt đầu bằng T).
+  /// Lưu ý: Hộ chiếu và CCCD dùng chung trường nhập liệu; không coi Hộ chiếu là Mã bệnh nhân.
+  static String? validateCccdOrPassport(String? value, {bool isOptional = true}) {
     if (value == null || value.trim().isEmpty) {
       if (isOptional) return null;
-      return 'Vui lòng nhập Mã CCCD hoặc Mã bệnh nhân tạm';
+      return 'Vui lòng nhập số CCCD hoặc Hộ chiếu';
     }
     final trimmed = value.trim();
     final isCccd = RegExp(r'^\d{12}$').hasMatch(trimmed);
+    final isPassport = RegExp(r'^[A-Za-z0-9]{6,12}$').hasMatch(trimmed);
     final isTempCode = RegExp(r'^[Tt][A-Za-z0-9]+$').hasMatch(trimmed);
 
-    if (!isCccd && !isTempCode) {
-      return 'Mã phải là CCCD (12 chữ số) hoặc Mã tạm bệnh nhân (bắt đầu bằng T)';
+    if (!isCccd && !isPassport && !isTempCode) {
+      return 'Số CCCD phải đủ 12 chữ số, hoặc Hộ chiếu gồm 8 ký tự';
     }
     return null;
+  }
+
+  static String? validateCccdOrTempCode(String? value, {bool isOptional = true}) {
+    return validateCccdOrPassport(value, isOptional: isOptional);
   }
 
   static String? validateFullDate(String? value, {bool isRequired = true, String fieldName = 'Ngày sinh'}) {

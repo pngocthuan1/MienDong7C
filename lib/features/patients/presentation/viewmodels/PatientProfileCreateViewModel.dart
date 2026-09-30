@@ -14,6 +14,7 @@ import 'package:benhvien7c/features/patients/domain/entities/DkkThongTinKhamMode
 import 'package:benhvien7c/features/patients/domain/entities/MedicalTicketEntity.dart';
 import 'package:benhvien7c/features/patients/domain/entities/PatientProfileDraftEntity.dart';
 import 'package:benhvien7c/features/patients/presentation/viewmodels/BasePortalViewModel.dart';
+import 'package:benhvien7c/core/widgets/SearchablePickerModal.dart';
 
 class PatientProfileCreateViewModel extends BasePortalViewModel {
   PatientProfileCreateViewModel(
@@ -62,10 +63,19 @@ class PatientProfileCreateViewModel extends BasePortalViewModel {
   String? _maBN;
   String? get maBN => _maBN;
 
+  /// MaHS của hồ sơ được chọn từ ListHoSo
+  String? _selectedMaHS;
+  String? get selectedMaHS => _selectedMaHS;
+
+  /// Cờ xác định hồ sơ có MaBN thật (8 số, không bắt đầu bằng T)
+  bool _hasRealMaBN = false;
+  bool get hasRealMaBN => _hasRealMaBN;
+
   /// Nguồn Thẻ 2 trong màn đối chiếu: true = hồ sơ đã lưu, false = nhập tay
   bool _compareSourceIsSavedProfile = false;
 
   late final Command1<DkkTimBenhNhanResponseDto?, String> searchByCccdCommand;
+
 
 
   final identifierController = TextEditingController();
@@ -161,9 +171,24 @@ class PatientProfileCreateViewModel extends BasePortalViewModel {
       if (draft.province != null) provinceController.text = draft.province!;
       if (draft.ward != null) wardController.text = draft.ward!;
       if (draft.clinic != null) clinicController.text = draft.clinic!;
-      if (draft.maSo != null && draft.maSo!.isNotEmpty && draft.maSo != 'N/A') {
-        patientCodeController.text = draft.maSo!;
-        _maBN = draft.maSo;
+      if (draft.identifier.isNotEmpty && draft.identifier != 'N/A') {
+        identifierController.text = draft.identifier;
+      }
+      final savedMaSo = (draft.maSo != null && draft.maSo!.isNotEmpty && draft.maSo != 'N/A')
+          ? draft.maSo!.trim()
+          : null;
+      final savedIdentifier = draft.identifier.trim();
+      // Phân biệt rõ: Chỉ gán Mã bệnh nhân nếu khác với số CCCD/Hộ chiếu và không phải mã tạm 'T...'
+      if (savedMaSo != null &&
+          savedMaSo != savedIdentifier &&
+          !savedMaSo.toUpperCase().startsWith('T')) {
+        patientCodeController.text = savedMaSo;
+        _maBN = savedMaSo;
+        _hasRealMaBN = true;
+      } else {
+        patientCodeController.clear();
+        _maBN = null;
+        _hasRealMaBN = false;
       }
     } catch (_) {
       // Bỏ qua lỗi parse — _loadProfiles() async vẫn sẽ thử lại
@@ -174,8 +199,33 @@ class PatientProfileCreateViewModel extends BasePortalViewModel {
   String? selectedWardCode;
   String? selectedWardName;
 
+  List<PickerItem<DkkTinhDto>> _cachedProvincePickerItems = [];
+  List<PickerItem<DkkTinhDto>> get cachedProvincePickerItems => _cachedProvincePickerItems;
+  final Map<String, List<PickerItem<DkkPhuongDto>>> _cachedWardPickerItems = {};
+
   /// Danh sách Tỉnh từ API server
   List<DkkTinhDto> get apiProvinces => masterData?.listTinh ?? [];
+
+  /// Lấy danh sách `PickerItem<DkkPhuongDto>` đã cache và pre-compute search key
+  List<PickerItem<DkkPhuongDto>> getCachedWardPickerItems() {
+    final key = selectedProvinceCode ?? provinceController.text.trim();
+    if (key.isEmpty) return [];
+    if (_cachedWardPickerItems.containsKey(key)) {
+      return _cachedWardPickerItems[key]!;
+    }
+    final rawWards = getWardsForSelectedProvince();
+    final items = rawWards.map((w) {
+      final item = PickerItem<DkkPhuongDto>(
+        title: w.display,
+        searchKey: w.display,
+        value: w,
+      );
+      item.preComputeSearchKey();
+      return item;
+    }).toList();
+    _cachedWardPickerItems[key] = items;
+    return items;
+  }
 
   /// Chọn Tỉnh từ API
   void selectProvinceFromApi(DkkTinhDto tinh) {
@@ -299,6 +349,18 @@ class PatientProfileCreateViewModel extends BasePortalViewModel {
       result.when(
         ok: (data) {
           masterData = data;
+          // Pre-compute và cache PickerItem cho Tỉnh một lần duy nhất
+          _cachedProvincePickerItems = data.listTinh.map((p) {
+            final item = PickerItem<DkkTinhDto>(
+              title: p.display,
+              searchKey: p.display,
+              value: p,
+            );
+            item.preComputeSearchKey();
+            return item;
+          }).toList();
+          _cachedWardPickerItems.clear();
+
           // Cập nhật departments từ server
           if (data.listPhongKham.isNotEmpty) {
             _serverPhongKhamList = data.listPhongKham;
@@ -375,13 +437,31 @@ class PatientProfileCreateViewModel extends BasePortalViewModel {
     return true;
   }
 
-  // Field validation error states
-  String? fullNameError;
-  String? birthYearError;
-  String? phoneError;
-  String? otherFullNameError;
-  String? otherBirthYearError;
-  String? otherPhoneError;
+  // Field validation error notifiers — tách nhỏ state để tránh rebuild toàn form khi gõ
+  final fullNameErrorNotifier = ValueNotifier<String?>(null);
+  final birthYearErrorNotifier = ValueNotifier<String?>(null);
+  final phoneErrorNotifier = ValueNotifier<String?>(null);
+  final otherFullNameErrorNotifier = ValueNotifier<String?>(null);
+  final otherBirthYearErrorNotifier = ValueNotifier<String?>(null);
+  final otherPhoneErrorNotifier = ValueNotifier<String?>(null);
+
+  String? get fullNameError => fullNameErrorNotifier.value;
+  set fullNameError(String? val) => fullNameErrorNotifier.value = val;
+
+  String? get birthYearError => birthYearErrorNotifier.value;
+  set birthYearError(String? val) => birthYearErrorNotifier.value = val;
+
+  String? get phoneError => phoneErrorNotifier.value;
+  set phoneError(String? val) => phoneErrorNotifier.value = val;
+
+  String? get otherFullNameError => otherFullNameErrorNotifier.value;
+  set otherFullNameError(String? val) => otherFullNameErrorNotifier.value = val;
+
+  String? get otherBirthYearError => otherBirthYearErrorNotifier.value;
+  set otherBirthYearError(String? val) => otherBirthYearErrorNotifier.value = val;
+
+  String? get otherPhoneError => otherPhoneErrorNotifier.value;
+  set otherPhoneError(String? val) => otherPhoneErrorNotifier.value = val;
 
   // 1. Full name validation logic
   String? checkFullName(String? value) {
@@ -392,9 +472,8 @@ class PatientProfileCreateViewModel extends BasePortalViewModel {
   // 2. Full name error update
   void updateFullNameError(String? value) {
     final error = checkFullName(value);
-    if (fullNameError != error) {
-      fullNameError = error;
-      notifyListeners();
+    if (fullNameErrorNotifier.value != error) {
+      fullNameErrorNotifier.value = error;
     }
   }
 
@@ -407,9 +486,8 @@ class PatientProfileCreateViewModel extends BasePortalViewModel {
   // 2. Birth year error update
   void updateBirthYearError(String? value) {
     final error = checkBirthYear(value);
-    if (birthYearError != error) {
-      birthYearError = error;
-      notifyListeners();
+    if (birthYearErrorNotifier.value != error) {
+      birthYearErrorNotifier.value = error;
     }
   }
 
@@ -424,9 +502,8 @@ class PatientProfileCreateViewModel extends BasePortalViewModel {
   // 2. Phone error update
   void updatePhoneError(String? value) {
     final error = checkPhone(value);
-    if (phoneError != error) {
-      phoneError = error;
-      notifyListeners();
+    if (phoneErrorNotifier.value != error) {
+      phoneErrorNotifier.value = error;
     }
   }
 
@@ -439,9 +516,8 @@ class PatientProfileCreateViewModel extends BasePortalViewModel {
   // 2. Other Full name error update
   void updateOtherFullNameError(String? value) {
     final error = checkOtherFullName(value);
-    if (otherFullNameError != error) {
-      otherFullNameError = error;
-      notifyListeners();
+    if (otherFullNameErrorNotifier.value != error) {
+      otherFullNameErrorNotifier.value = error;
     }
   }
 
@@ -454,9 +530,8 @@ class PatientProfileCreateViewModel extends BasePortalViewModel {
   // 2. Other Birth year error update
   void updateOtherBirthYearError(String? value) {
     final error = checkOtherBirthYear(value);
-    if (otherBirthYearError != error) {
-      otherBirthYearError = error;
-      notifyListeners();
+    if (otherBirthYearErrorNotifier.value != error) {
+      otherBirthYearErrorNotifier.value = error;
     }
   }
 
@@ -469,9 +544,8 @@ class PatientProfileCreateViewModel extends BasePortalViewModel {
   // 2. Other Phone error update
   void updateOtherPhoneError(String? value) {
     final error = checkOtherPhone(value);
-    if (otherPhoneError != error) {
-      otherPhoneError = error;
-      notifyListeners();
+    if (otherPhoneErrorNotifier.value != error) {
+      otherPhoneErrorNotifier.value = error;
     }
   }
 
@@ -527,18 +601,42 @@ class PatientProfileCreateViewModel extends BasePortalViewModel {
     // Hồ sơ đã lưu → form chỉ đọc
     _formIsReadOnly = true;
     _isFromHospitalRecord = false;
-    // Lưu MaBN để kích hoạt so sánh với hệ thống khi bấm Đăng ký
-    _maBN = (profile.maSo != null && profile.maSo!.isNotEmpty && profile.maSo != 'N/A') ? profile.maSo : null;
+
+    // Lưu MaHS của hồ sơ được chọn từ ListHoSo
+    _selectedMaHS = (profile.maSo != null && profile.maSo!.isNotEmpty && profile.maSo != 'N/A')
+        ? profile.maSo!.trim()
+        : null;
+
+    // PHÂN BIỆT RÕ MÃ BỆNH NHÂN (MaBN) VÀ SỐ HỘ CHIẾU/CCCD:
+    // - Trường "Số CCCD / Hộ Chiếu" (identifierController): chứa CCCD hoặc Hộ chiếu (kể cả Hộ chiếu 8 số/ký tự).
+    // - Trường "Mã bệnh nhân" (patientCodeController): chứa MaBN do bệnh viện cấp.
+    // - Tuyệt đối KHÔNG coi Hộ chiếu 8 số là Mã bệnh nhân!
+    // - Chỉ coi là MaBN thật khi:
+    //   1. Có mã từ profile.maBN hoặc _selectedMaHS
+    //   2. Không bắt đầu bằng 'T' (mã tạm)
+    //   3. KHÁC với số CCCD/Hộ chiếu (profile.identifier)
+    final candidateMa = (profile.maBN != null && profile.maBN!.trim().isNotEmpty)
+        ? profile.maBN!.trim()
+        : (_selectedMaHS ?? '');
+    final cccdOrPassport = (profile.identifier.isNotEmpty && profile.identifier != 'N/A')
+        ? profile.identifier.trim()
+        : '';
+
+    final isReal = candidateMa.isNotEmpty &&
+        !candidateMa.toUpperCase().startsWith('T') &&
+        candidateMa != cccdOrPassport;
+    _hasRealMaBN = isReal;
+    _maBN = isReal ? candidateMa : null;
     _hospitalSnapshot = null; // Chưa có snapshot — sẽ fetch khi cần
     _compareSourceIsSavedProfile = true;
 
     // Gán mã bệnh nhân vào đúng controller ô Mã BN
     patientCodeController.text = _maBN ?? '';
 
-    // Số CCCD / Hộ chiếu: Chỉ gán nếu khác maSo (tránh dữ liệu cũ bị gán nhầm MaBN vào ô CCCD)
-    final cccdVal = (profile.identifier.isNotEmpty && profile.identifier != 'N/A' && profile.identifier != profile.maSo)
+    // Số CCCD / Hộ chiếu: Luôn gán đúng vào ô Số CCCD / Hộ Chiếu (trừ khi trùng với MaBN)
+    final cccdVal = (profile.identifier.isNotEmpty && profile.identifier != 'N/A' && profile.identifier != _maBN)
         ? profile.identifier
-        : '';
+        : ((profile.identifier.isNotEmpty && profile.identifier != 'N/A' && !isReal) ? profile.identifier : '');
 
     final formattedDob = (profile.dateOfBirth != null && profile.dateOfBirth!.isNotEmpty)
         ? (DateTimeConverter.toVnDate(profile.dateOfBirth) ?? profile.dateOfBirth!)
@@ -598,6 +696,8 @@ class PatientProfileCreateViewModel extends BasePortalViewModel {
     _formIsReadOnly = false;
     _isFromHospitalRecord = false;
     _maBN = null;
+    _selectedMaHS = null;
+    _hasRealMaBN = false;
     _hospitalSnapshot = null;
     _compareSourceIsSavedProfile = false;
     identifierController.clear();
@@ -745,6 +845,8 @@ class PatientProfileCreateViewModel extends BasePortalViewModel {
     _isFromHospitalRecord = false;
     _formIsReadOnly = false;
     _maBN = null;
+    _selectedMaHS = null;
+    _hasRealMaBN = false;
     _hospitalSnapshot = null;
     _compareSourceIsSavedProfile = false;
     isExistingProfile = false;
@@ -776,19 +878,37 @@ class PatientProfileCreateViewModel extends BasePortalViewModel {
     notifyListeners();
   }
 
-  /// true nếu cần kiểm tra so sánh với hệ thống trước khi đăng ký
+  /// true nếu cần kiểm tra so sánh với hệ thống trước khi đăng ký:
+  /// Chỉ gọi khi bệnh nhân có MaBN thật (hồ sơ từ TimBenhNhan hoặc hồ sơ đã lưu có MaBN 8 số).
+  /// Không gọi khi bệnh nhân mới (không có MaBN hoặc mã tạm T...).
   bool get needsComparisonCheck =>
-      _isFromHospitalRecord || (_maBN != null && _maBN!.isNotEmpty);
+      _isFromHospitalRecord || _hasRealMaBN;
 
   /// Tạo model đối chiếu cho Luồng 3.
-  /// Trả về null nếu không cần so sánh hoặc không có khác biệt.
+  /// Sử dụng API KiemTraBenhNhan từ server để kiểm tra sai lệch.
+  /// Trả về null nếu không cần so sánh hoặc không có khác biệt (server xác nhận hasDiff == false).
   Future<DkkThongTinKhamModel?> buildCompareModel() async {
     if (!needsComparisonCheck) return null;
 
-    // Ưu tiên dùng snapshot trong phiên
-    var snapshot = _hospitalSnapshot;
+    final req = _buildDangKyKhamRequestDto();
+    DkkKiemTraBenhNhanResponseDto? serverDiff;
 
-    // Nếu mất snapshot → gọi lại server bằng số CCCD hoặc Mã BN đang lưu
+    try {
+      final res = await portalRepository.kiemTraBenhNhan(req);
+      res.when(
+        ok: (dto) => serverDiff = dto,
+        error: (err, msg) {},
+      );
+    } catch (_) {}
+
+    // Nếu server kiểm tra và xác nhận không có bất kỳ sai lệch nào -> cho đăng ký thẳng!
+    final diffResult = serverDiff;
+    if (diffResult != null && !diffResult.hasDiff) {
+      return null;
+    }
+
+    // Nếu có sai lệch (hoặc serverDiff lỗi tạm thời), lấy snapshot hệ thống để hiển thị màn đối chiếu
+    var snapshot = _hospitalSnapshot;
     if (snapshot == null) {
       final queryKey = cccdSearchController.text.trim().isNotEmpty
           ? cccdSearchController.text.trim()
@@ -810,22 +930,104 @@ class PatientProfileCreateViewModel extends BasePortalViewModel {
     if (validSnapshot == null) return null;
 
     final draft = _buildCurrentDraft();
-    final model = DkkThongTinKhamModel.compare(
+    final model = DkkThongTinKhamModel.fromServerCheck(
       system: validSnapshot,
       user: draft,
       isFromSavedProfile: _compareSourceIsSavedProfile,
+      serverDiff: serverDiff,
     );
-
 
     return model.hasDiff ? model : null;
   }
 
+  /// Xây dựng request DTO đăng ký khám chuẩn (17 trường) để gửi kiểm tra hoặc đăng ký
+  DangKyKhamRequestDto _buildDangKyKhamRequestDto() {
+    final String finalFullName = registerForSomeoneElse
+        ? otherFullNameController.text.trim()
+        : fullNameController.text.trim();
+    final String finalDob = registerForSomeoneElse
+        ? otherDobController.text.trim()
+        : dobController.text.trim();
+    final String finalGender = registerForSomeoneElse ? otherGender : _gender;
+    final String finalPhone = registerForSomeoneElse
+        ? otherPhoneController.text.trim()
+        : phoneController.text.trim();
+    final String finalCccdIssueDate = registerForSomeoneElse
+        ? (otherCccdIssueDateController.text.trim().isNotEmpty
+            ? otherCccdIssueDateController.text.trim()
+            : cccdIssueDateController.text.trim())
+        : cccdIssueDateController.text.trim();
+
+    final selectedClinicName = clinicController.text.trim().isNotEmpty
+        ? clinicController.text.trim()
+        : selectedDepartment;
+
+    final weekdayStr = selectedDate != null
+        ? (selectedDate!.weekday == DateTime.monday
+            ? 'Thứ 2'
+            : selectedDate!.weekday == DateTime.tuesday
+                ? 'Thứ 3'
+                : selectedDate!.weekday == DateTime.wednesday
+                    ? 'Thứ 4'
+                    : selectedDate!.weekday == DateTime.thursday
+                        ? 'Thứ 5'
+                        : selectedDate!.weekday == DateTime.friday
+                            ? 'Thứ 6'
+                            : selectedDate!.weekday == DateTime.saturday
+                                ? 'Thứ 7'
+                                : 'Chủ nhật')
+        : '';
+    final dateStr = selectedDate != null
+        ? '$weekdayStr, ${DateFormat('dd/MM/yyyy').format(selectedDate!)}'
+        : '';
+
+    final effectiveMaHS = _isFromHospitalRecord ? '' : (_selectedMaHS ?? '');
+    final effectiveMaBN = _hasRealMaBN ? (_maBN ?? '') : (_isFromHospitalRecord ? (_maBN ?? '') : '');
+
+    return DangKyKhamRequestDto(
+      maHS: effectiveMaHS,
+      maBN: effectiveMaBN,
+      maBhytHoacMaBn: identifierController.text.trim().isNotEmpty
+          ? identifierController.text.trim()
+          : effectiveMaBN,
+      hoTen: finalFullName.isNotEmpty ? finalFullName : session.user.fullName,
+      gioiTinh: (finalGender.trim().toLowerCase() == 'nữ' || finalGender.trim().toLowerCase() == 'nu') ? 'Nữ' : 'Nam',
+      ngaySinh: DateTimeConverter.toServerIsoString(finalDob),
+      ngayCap: DateTimeConverter.toServerIsoString(finalCccdIssueDate),
+      soDienThoai: finalPhone.isNotEmpty ? finalPhone : session.user.phoneNumber,
+      ngayKham: dateStr,
+      gioKham: selectedTime ?? '',
+      phongKham: selectedClinicId ?? '',
+      phongKhamTen: selectedClinicName ?? '',
+      tinhTp: selectedProvinceCode ?? '',
+      tinhTpTen: selectedProvinceName ?? provinceController.text.trim(),
+      phuongXa: selectedWardCode ?? '',
+      phuongXaTen: selectedWardName ?? wardController.text.trim(),
+      trieuChung: symptomController.text.trim(),
+      dangKyDum: registerForSomeoneElse ? dangKyGiupController.text.trim() : '',
+    );
+  }
+
   /// Build draft từ trạng thái form hiện tại
   PatientProfileDraftEntity _buildCurrentDraft() {
-    final String inputName = fullNameController.text.trim();
-    final String inputDob = dobController.text.trim();
-    final String inputBirthYear = birthYearController.text.trim();
-    final String inputPhone = phoneController.text.trim();
+    final String inputName = registerForSomeoneElse
+        ? otherFullNameController.text.trim()
+        : fullNameController.text.trim();
+    final String inputDob = registerForSomeoneElse
+        ? otherDobController.text.trim()
+        : dobController.text.trim();
+    final String inputBirthYear = registerForSomeoneElse
+        ? otherBirthYearController.text.trim()
+        : birthYearController.text.trim();
+    final String inputPhone = registerForSomeoneElse
+        ? otherPhoneController.text.trim()
+        : phoneController.text.trim();
+    final String inputCccdIssueDate = registerForSomeoneElse
+        ? (otherCccdIssueDateController.text.trim().isNotEmpty
+            ? otherCccdIssueDateController.text.trim()
+            : cccdIssueDateController.text.trim())
+        : cccdIssueDateController.text.trim();
+    final String currentGender = registerForSomeoneElse ? otherGender : _gender;
 
     String finalBirthYear = inputBirthYear;
     if (inputDob.contains('/')) {
@@ -840,13 +1042,15 @@ class PatientProfileCreateViewModel extends BasePortalViewModel {
       fullName: inputName.isNotEmpty ? inputName : session.user.fullName,
       dateOfBirth: inputDob.isNotEmpty ? inputDob : null,
       birthYear: finalBirthYear,
-      gender: _gender,
+      gender: currentGender,
       phoneNumber: inputPhone,
       province: provinceController.text.trim().isNotEmpty ? provinceController.text.trim() : null,
       ward: wardController.text.trim().isNotEmpty ? wardController.text.trim() : null,
       clinic: clinicController.text.trim().isNotEmpty ? clinicController.text.trim() : selectedDepartment,
-      cccdIssueDate: cccdIssueDateController.text.trim().isNotEmpty ? cccdIssueDateController.text.trim() : null,
-      maSo: _maBN,
+      cccdIssueDate: inputCccdIssueDate.isNotEmpty ? inputCccdIssueDate : null,
+      maSo: _hasRealMaBN ? _maBN : _selectedMaHS,
+      maHS: _isFromHospitalRecord ? '' : _selectedMaHS,
+      maBN: _hasRealMaBN ? _maBN : (_isFromHospitalRecord ? _maBN : null),
     );
   }
 
@@ -1175,7 +1379,7 @@ class PatientProfileCreateViewModel extends BasePortalViewModel {
             }
             if (draft.birthYear.isNotEmpty) birthYearController.text = draft.birthYear;
             if (draft.phoneNumber.isNotEmpty) phoneController.text = draft.phoneNumber;
-            if (draft.identifier.isNotEmpty && draft.identifier != draft.maSo) {
+            if (draft.identifier.isNotEmpty && draft.identifier != 'N/A') {
               identifierController.text = draft.identifier;
             }
             if (draft.cccdIssueDate != null && draft.cccdIssueDate!.isNotEmpty) {
@@ -1185,9 +1389,21 @@ class PatientProfileCreateViewModel extends BasePortalViewModel {
             if (draft.province != null) provinceController.text = draft.province!;
             if (draft.ward != null) wardController.text = draft.ward!;
             if (draft.clinic != null) clinicController.text = draft.clinic!;
-            if (draft.maSo != null && draft.maSo!.isNotEmpty && draft.maSo != 'N/A') {
-              patientCodeController.text = draft.maSo!;
-              _maBN = draft.maSo;
+            final savedMaSo = (draft.maSo != null && draft.maSo!.isNotEmpty && draft.maSo != 'N/A')
+                ? draft.maSo!.trim()
+                : null;
+            final savedIdentifier = draft.identifier.trim();
+            // Phân biệt rõ: Chỉ gán Mã bệnh nhân nếu khác với số CCCD/Hộ chiếu và không phải mã tạm 'T...'
+            if (savedMaSo != null &&
+                savedMaSo != savedIdentifier &&
+                !savedMaSo.toUpperCase().startsWith('T')) {
+              patientCodeController.text = savedMaSo;
+              _maBN = savedMaSo;
+              _hasRealMaBN = true;
+            } else {
+              patientCodeController.clear();
+              _maBN = null;
+              _hasRealMaBN = false;
             }
           }
         }
@@ -1393,8 +1609,12 @@ class PatientProfileCreateViewModel extends BasePortalViewModel {
         ward: wardController.text.trim().isNotEmpty ? wardController.text.trim() : null,
         clinic: selectedClinicName,
         dangKyGiup: registerForSomeoneElse ? dangKyGiupController.text.trim() : null,
-        cccdIssueDate: cccdIssueDateController.text.trim().isNotEmpty ? cccdIssueDateController.text.trim() : null,
-        maSo: _maBN,
+        cccdIssueDate: (registerForSomeoneElse && otherCccdIssueDateController.text.trim().isNotEmpty)
+            ? otherCccdIssueDateController.text.trim()
+            : (cccdIssueDateController.text.trim().isNotEmpty ? cccdIssueDateController.text.trim() : null),
+        maSo: _hasRealMaBN ? _maBN : _selectedMaHS,
+        maHS: _isFromHospitalRecord ? '' : _selectedMaHS,
+        maBN: _hasRealMaBN ? _maBN : (_isFromHospitalRecord ? _maBN : null),
       );
 
 
@@ -1465,6 +1685,12 @@ class PatientProfileCreateViewModel extends BasePortalViewModel {
     otherBirthYearController.dispose();
     otherPhoneController.dispose();
     cccdSearchController.dispose();
+    fullNameErrorNotifier.dispose();
+    birthYearErrorNotifier.dispose();
+    phoneErrorNotifier.dispose();
+    otherFullNameErrorNotifier.dispose();
+    otherBirthYearErrorNotifier.dispose();
+    otherPhoneErrorNotifier.dispose();
     continueCommand.dispose();
     loadProfilesCommand.dispose();
     searchByCccdCommand.dispose();

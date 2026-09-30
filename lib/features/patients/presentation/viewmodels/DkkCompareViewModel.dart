@@ -64,6 +64,8 @@ class DkkCompareViewModel extends ChangeNotifier {
           province: sys.tinhTpTen ?? sys.tinhTp,
           ward: sys.phuongXaTen ?? sys.phuongXa,
           maSo: sys.maBN,
+          maHS: '',
+          maBN: sys.maBN,
         );
       } else {
         // Dùng thông tin người dùng

@@ -14,6 +14,8 @@ class AppTextField extends StatelessWidget {
     this.inputFormatters,
     this.textInputAction,
     this.onChanged,
+    this.focusNode,
+    this.onFieldSubmitted,
     this.readOnly = false,
     this.readOnlyMessage,
     this.autovalidateMode,
@@ -29,6 +31,8 @@ class AppTextField extends StatelessWidget {
   final List<TextInputFormatter>? inputFormatters;
   final TextInputAction? textInputAction;
   final ValueChanged<String>? onChanged;
+  final FocusNode? focusNode;
+  final ValueChanged<String>? onFieldSubmitted;
   final bool readOnly;
   final String? readOnlyMessage;
   final AutovalidateMode? autovalidateMode;
@@ -66,6 +70,8 @@ class AppTextField extends StatelessWidget {
       autovalidateMode: autovalidateMode,
       inputFormatters: inputFormatters,
       textInputAction: textInputAction,
+      focusNode: focusNode,
+      onFieldSubmitted: onFieldSubmitted,
       onChanged: onChanged,
       readOnly: readOnly,
       onTap: () {
