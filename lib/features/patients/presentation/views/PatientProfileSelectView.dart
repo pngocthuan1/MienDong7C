@@ -17,6 +17,8 @@ class _PatientProfileSelectViewState extends State<PatientProfileSelectView> {
   List<PatientProfileDraftEntity> _profiles = [];
   List<PatientProfileDraftEntity> _filteredProfiles = [];
   bool _isLoading = true;
+  String? _errorMessage;
+  bool _isNetworkError = false;
   String _searchQuery = '';
   final TextEditingController _searchController = TextEditingController();
 
@@ -33,7 +35,11 @@ class _PatientProfileSelectViewState extends State<PatientProfileSelectView> {
   }
 
   Future<void> _loadProfiles() async {
-    setState(() => _isLoading = true);
+    setState(() {
+      _isLoading = true;
+      _errorMessage = null;
+      _isNetworkError = false;
+    });
     final result = await _repository.loadPatientProfiles();
     result.when(
       ok: (list) {
@@ -42,12 +48,22 @@ class _PatientProfileSelectViewState extends State<PatientProfileSelectView> {
             _profiles = list;
             _applySearch();
             _isLoading = false;
+            _errorMessage = null;
+            _isNetworkError = false;
           });
         }
       },
-      error: (_, __) {
+      error: (e, message) {
         if (mounted) {
-          setState(() => _isLoading = false);
+          final isNet = message.toLowerCase().contains('mạng') ||
+              message.toLowerCase().contains('kết nối') ||
+              message.toLowerCase().contains('quá hạn') ||
+              message.toLowerCase().contains('timeout');
+          setState(() {
+            _isLoading = false;
+            _errorMessage = message;
+            _isNetworkError = isNet;
+          });
         }
       },
     );
@@ -90,8 +106,27 @@ class _PatientProfileSelectViewState extends State<PatientProfileSelectView> {
     );
 
     if (confirm == true) {
-      await _repository.softDeletePatientProfile(profile);
-      await _loadProfiles();
+      final delRes = await _repository.softDeletePatientProfile(profile);
+      if (!mounted) return;
+      delRes.when(
+        ok: (_) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Đã xóa hồ sơ: ${profile.fullName}'),
+              backgroundColor: const Color(0xFF16A34A),
+            ),
+          );
+          _loadProfiles();
+        },
+        error: (_, msg) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Xóa hồ sơ thất bại: $msg'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        },
+      );
     }
   }
 
@@ -191,38 +226,81 @@ class _PatientProfileSelectViewState extends State<PatientProfileSelectView> {
           Expanded(
             child: _isLoading
                 ? const Center(child: CircularProgressIndicator())
-                : _filteredProfiles.isEmpty
-                    ? RefreshIndicator(
-                        onRefresh: _loadProfiles,
-                        child: SingleChildScrollView(
-                          physics: const AlwaysScrollableScrollPhysics(),
-                          child: SizedBox(
-                            height: 300,
-                            child: Center(
-                              child: Column(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  const Icon(Icons.folder_off_outlined, size: 48, color: Colors.grey),
-                                  const SizedBox(height: 12),
-                                  Text(
-                                    _searchQuery.isNotEmpty
-                                        ? 'Không tìm thấy hồ sơ phù hợp'
-                                        : 'Chưa có hồ sơ nào được lưu',
-                                    style: const TextStyle(color: Colors.grey, fontSize: 14),
-                                  ),
-                                ],
+                : _errorMessage != null
+                    // TRẠNG THÁI LỖI (MẠNG HOẶC SERVER)
+                    ? Center(
+                        child: Padding(
+                          padding: const EdgeInsets.all(24),
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(
+                                _isNetworkError ? Icons.wifi_off_rounded : Icons.error_outline_rounded,
+                                size: 56,
+                                color: _isNetworkError ? const Color(0xFFDC2626) : Colors.orange,
                               ),
-                            ),
+                              const SizedBox(height: 14),
+                              Text(
+                                _isNetworkError
+                                    ? 'Không có kết nối mạng'
+                                    : 'Không thể tải danh sách hồ sơ',
+                                style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Color(0xFF1E293B)),
+                              ),
+                              const SizedBox(height: 6),
+                              Text(
+                                _errorMessage!,
+                                textAlign: TextAlign.center,
+                                style: const TextStyle(fontSize: 13, color: Color(0xFF64748B)),
+                              ),
+                              const SizedBox(height: 18),
+                              ElevatedButton.icon(
+                                onPressed: _loadProfiles,
+                                icon: const Icon(Icons.refresh_rounded, size: 18),
+                                label: const Text('Thử lại'),
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: const Color(0xFF0D6EFD),
+                                  foregroundColor: Colors.white,
+                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                                ),
+                              ),
+                            ],
                           ),
                         ),
                       )
+                    : _filteredProfiles.isEmpty
+                        // TRẠNG THÁI RỖNG (EMPTY)
+                        ? RefreshIndicator(
+                            onRefresh: _loadProfiles,
+                            child: SingleChildScrollView(
+                              physics: const AlwaysScrollableScrollPhysics(),
+                              child: SizedBox(
+                                height: 300,
+                                child: Center(
+                                  child: Column(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: [
+                                      const Icon(Icons.folder_off_outlined, size: 48, color: Colors.grey),
+                                      const SizedBox(height: 12),
+                                      Text(
+                                        _searchQuery.isNotEmpty
+                                            ? 'Không tìm thấy hồ sơ phù hợp'
+                                            : 'Chưa có hồ sơ nào được lưu',
+                                        style: const TextStyle(color: Colors.grey, fontSize: 14),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ),
+                          )
                     : RefreshIndicator(
                         onRefresh: _loadProfiles,
                         child: ListView.separated(
                           physics: const AlwaysScrollableScrollPhysics(),
                           padding: const EdgeInsets.all(16),
                           itemCount: _filteredProfiles.length,
-                          separatorBuilder: (_, __) => const SizedBox(height: 16),
+                          separatorBuilder: (_, _) => const SizedBox(height: 16),
                           itemBuilder: (context, index) {
                             final profile = _filteredProfiles[index];
 

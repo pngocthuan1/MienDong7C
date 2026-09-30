@@ -428,36 +428,40 @@ class _LoginForm extends StatelessWidget {
             );
           },
         ),
-        ListenableBuilder(
-          listenable: viewModel,
-          builder: (context, _) {
-            final hasCaptchaError = viewModel.message != null &&
-                viewModel.message!.contains('CAPTCHA');
-            return Center(
-              child: CloudflareTurnstile(
-                siteKey: Environment.turnstileSiteKey,
-                hasError: hasCaptchaError,
-                errorMessage: viewModel.message,
-                onRetry: () {
-                  viewModel.clearMessage();
-                  onResetCaptcha();
-                },
-                onVerified: (token) {
-                  viewModel.clearMessage();
-                  onCaptchaVerified(token);
-                },
-              ),
-            );
-          },
-        ),
-        const SizedBox(height: AppSizes.itemSpacing),
+        if (!(kIsWeb && Environment.disableTurnstileOnWeb)) ...[
+          ListenableBuilder(
+            listenable: viewModel,
+            builder: (context, _) {
+              final hasCaptchaError = viewModel.message != null &&
+                  viewModel.message!.contains('CAPTCHA');
+              return Center(
+                child: CloudflareTurnstile(
+                  siteKey: Environment.turnstileSiteKey,
+                  hasError: hasCaptchaError,
+                  errorMessage: viewModel.message,
+                  onRetry: () {
+                    viewModel.clearMessage();
+                    onResetCaptcha();
+                  },
+                  onVerified: (token) {
+                    viewModel.clearMessage();
+                    onCaptchaVerified(token);
+                  },
+                ),
+              );
+            },
+          ),
+          const SizedBox(height: AppSizes.itemSpacing),
+        ],
         Row(
           children: [
             Expanded(
               child: ListenableBuilder(
                 listenable: viewModel.loginCommand,
                 builder: (context, _) {
-                  final isCaptchaVerified = captchaToken != null;
+                  final isCaptchaVerified =
+                      (kIsWeb && Environment.disableTurnstileOnWeb) ||
+                      captchaToken != null;
                   return AppButton(
                     label: 'Đăng nhập',
                     icon: Icons.login_rounded,

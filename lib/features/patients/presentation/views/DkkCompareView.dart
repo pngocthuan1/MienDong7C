@@ -168,28 +168,60 @@ class _DkkCompareViewState extends State<DkkCompareView> {
               ),
               const SizedBox(height: 16),
 
-              if (errorMsg != null)
+              if (errorMsg != null) ...[
                 Container(
-                  padding: const EdgeInsets.all(12),
+                  padding: const EdgeInsets.all(14),
                   margin: const EdgeInsets.only(bottom: 16),
                   decoration: BoxDecoration(
-                    color: const Color(0xFFFFECEF),
-                    borderRadius: BorderRadius.circular(10),
-                    border: Border.all(color: const Color(0xFFDC2626).withValues(alpha: 0.3)),
+                    color: const Color(0xFFFEF2F2),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: const Color(0xFFFCA5A5)),
                   ),
-                  child: Row(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Icon(Icons.error_outline, color: Color(0xFFDC2626), size: 18),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          errorMsg,
-                          style: const TextStyle(color: Color(0xFFDC2626), fontSize: 13),
-                        ),
+                      Row(
+                        children: [
+                          Icon(
+                            (errorMsg.toLowerCase().contains('mạng') || errorMsg.toLowerCase().contains('kết nối'))
+                                ? Icons.wifi_off_rounded
+                                : ((errorMsg.toLowerCase().contains('quá hạn') || errorMsg.toLowerCase().contains('timeout'))
+                                    ? Icons.timer_off_outlined
+                                    : Icons.error_outline_rounded),
+                            color: const Color(0xFFDC2626),
+                            size: 22,
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              (errorMsg.toLowerCase().contains('mạng') || errorMsg.toLowerCase().contains('kết nối'))
+                                  ? 'Lỗi kết nối mạng'
+                                  : ((errorMsg.toLowerCase().contains('quá hạn') || errorMsg.toLowerCase().contains('timeout'))
+                                      ? 'Hết thời gian chờ phản hồi'
+                                      : 'Lỗi đăng ký đặt lịch'),
+                              style: const TextStyle(
+                                color: Color(0xFF991B1B),
+                                fontSize: 14,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 6),
+                      Text(
+                        errorMsg,
+                        style: const TextStyle(color: Color(0xFFB91C1C), fontSize: 13, height: 1.35),
+                      ),
+                      const SizedBox(height: 8),
+                      const Text(
+                        'Thông tin bạn đã nhập được bảo lưu an toàn. Bạn có thể chọn xác nhận lại hoặc bấm "Về lại" bên dưới.',
+                        style: TextStyle(color: Color(0xFF64748B), fontSize: 11.5, fontStyle: FontStyle.italic),
                       ),
                     ],
                   ),
                 ),
+              ],
 
               // Nút Về lại
               OutlinedButton.icon(

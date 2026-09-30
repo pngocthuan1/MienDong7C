@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'package:benhvien7c/core/network/ErrorCode.dart';
 import 'package:dio/dio.dart';
 
@@ -16,16 +17,23 @@ sealed class ApiException implements Exception {
   ErrorCategory get category => errorCode?.category ?? ErrorCategory.unknown;
 
   /// true nếu lỗi này nên bắt người dùng đăng nhập lại
-
   bool get shouldForceLogout => this is UnauthorizedException;
 
   factory ApiException.fromDioError(DioException error) {
+    // 1. Kiểm tra SocketException sâu bên trong (kể cả khi Dio bọc ngoài)
+    if (error.error is SocketException) {
+      return const NetworkException(
+        'Không có kết nối mạng. Vui lòng kiểm tra lại Wifi hoặc 4G/5G.',
+        isNoInternet: true,
+      );
+    }
+
     switch (error.type) {
       case DioExceptionType.connectionTimeout:
       case DioExceptionType.sendTimeout:
       case DioExceptionType.receiveTimeout:
-        return const NetworkException(
-          'Kết nối đến server quá hạn. Vui lòng thử lại.',
+        return const TimeoutNetworkException(
+          'Kết nối đến máy chủ quá hạn (timeout). Vui lòng thử lại.',
         );
 
       case DioExceptionType.badResponse:
@@ -84,8 +92,13 @@ sealed class ApiException implements Exception {
               errorCode: errorCode,
             );
           case 500:
+          case 502:
+          case 503:
+          case 504:
             return ServerException(
-              errorMessage,
+              errorMessage.isNotEmpty && errorMessage != 'Đã xảy ra lỗi từ hệ thống.'
+                  ? errorMessage
+                  : 'Máy chủ bệnh viện đang bận hoặc gặp sự cố (Mã: $statusCode). Vui lòng thử lại sau.',
               statusCode: statusCode,
               errorCode: errorCode,
             );
@@ -101,18 +114,18 @@ sealed class ApiException implements Exception {
         return const UnauthorizedException('Yêu cầu bị hủy');
       case DioExceptionType.connectionError:
         return const NetworkException(
-          'Không thể kết nối đến máy chủ. Vui lòng kiểm tra lại mạng.',
+          'Không có kết nối mạng. Vui lòng kiểm tra lại kết nối Wifi hoặc 4G/5G.',
+          isNoInternet: true,
         );
       default:
-        return const UnauthorizedException(
-          'Đã xảy ra lỗi kết nối mạng không mong muốn',
+        return const NetworkException(
+          'Không thể kết nối đến máy chủ. Vui lòng kiểm tra lại đường truyền mạng.',
         );
     }
   }
 
   /// Dùng khi backend trả HTTP 200 nhưng body chứa ErrorCode nghiệp vụ != 0
   /// (kiểu response phổ biến ở hệ thống HIS cũ: luôn 200, tự quản lý mã lỗi riêng)
-
   factory ApiException.fromBusinessErrorCode(int code, {int? statusCode}) {
     final errorCode = ErrorCode.fromValue(code);
     return BusinessException(
@@ -152,7 +165,22 @@ class ServerException extends ApiException {
 }
 
 class NetworkException extends ApiException {
-  const NetworkException(super.message, {super.statusCode, super.errorCode});
+  final bool isNoInternet;
+  final bool isTimeout;
+
+  const NetworkException(
+    super.message, {
+    this.isNoInternet = false,
+    this.isTimeout = false,
+    super.statusCode,
+    super.errorCode,
+  });
+}
+
+class TimeoutNetworkException extends NetworkException {
+  const TimeoutNetworkException([
+    super.message = 'Kết nối đến máy chủ quá hạn (timeout). Vui lòng kiểm tra lại mạng và thử lại.',
+  ]) : super(isTimeout: true);
 }
 
 /// Lỗi nghiệp vụ HIS trả về dù HTTP status vẫn là 200

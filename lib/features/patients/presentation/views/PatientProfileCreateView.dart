@@ -1,5 +1,7 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:benhvien7c/core/config/environment.dart';
 import 'package:benhvien7c/core/widgets/AppResponsiveContainer.dart';
 import 'package:benhvien7c/app/router/RouteNames.dart';
 import 'package:benhvien7c/core/dio/AppLocator.dart';
@@ -540,36 +542,57 @@ class _PatientProfileCreateViewState extends State<PatientProfileCreateView> {
   }
 
   void _showSearchErrorDialog(String query, String errorMsg) {
+    final isNetwork = errorMsg.toLowerCase().contains('mạng') ||
+        errorMsg.toLowerCase().contains('kết nối') ||
+        errorMsg.toLowerCase().contains('internet');
+    final isTimeout = errorMsg.toLowerCase().contains('quá hạn') ||
+        errorMsg.toLowerCase().contains('timeout');
+
     showDialog<void>(
       context: context,
       builder: (dialogCtx) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         title: Row(
-          children: const [
-            Icon(Icons.error_outline_rounded, color: Colors.red, size: 24),
-            SizedBox(width: 8),
-            Text('Lỗi kết nối', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+          children: [
+            Icon(
+              isNetwork ? Icons.wifi_off_rounded : (isTimeout ? Icons.timer_off_outlined : Icons.error_outline_rounded),
+              color: Colors.red,
+              size: 24,
+            ),
+            const SizedBox(width: 8),
+            Text(
+              isNetwork
+                  ? 'Mất kết nối mạng'
+                  : (isTimeout ? 'Hết thời gian chờ' : 'Lỗi tra cứu hồ sơ'),
+              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+            ),
           ],
         ),
         content: Text(
-          'Không thể tra cứu hồ sơ: $errorMsg\nVui lòng kiểm tra lại kết nối mạng.',
-          style: const TextStyle(fontSize: 13),
+          isNetwork
+              ? 'Không có kết nối mạng. Vui lòng kiểm tra lại kết nối Wifi hoặc 4G/5G và bấm Thử lại.'
+              : (isTimeout
+                  ? 'Máy chủ phản hồi quá lâu (timeout). Vui lòng bấm Thử lại.'
+                  : errorMsg),
+          style: const TextStyle(fontSize: 13, height: 1.4),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(dialogCtx).pop(),
-            child: const Text('Đóng'),
+            child: const Text('Đóng', style: TextStyle(color: Colors.grey)),
           ),
-          ElevatedButton(
+          ElevatedButton.icon(
             onPressed: () {
               Navigator.of(dialogCtx).pop();
               _performCccdSearch();
             },
+            icon: const Icon(Icons.refresh_rounded, size: 16),
+            label: const Text('Thử lại'),
             style: ElevatedButton.styleFrom(
               backgroundColor: const Color(0xFF0D6EFD),
               foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
             ),
-            child: const Text('Thử lại'),
           ),
         ],
       ),
@@ -867,6 +890,77 @@ class _PatientProfileCreateViewState extends State<PatientProfileCreateView> {
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildMasterErrorBanner() {
+    return ListenableBuilder(
+      listenable: _viewModel.loadMasterCommand,
+      builder: (context, _) {
+        final error = _viewModel.masterError;
+        if (error == null) return const SizedBox.shrink();
+        final isLoading = _viewModel.loadMasterCommand.running;
+
+        final isNetwork = error.toLowerCase().contains('mạng') ||
+            error.toLowerCase().contains('kết nối') ||
+            error.toLowerCase().contains('internet');
+        final isTimeout = error.toLowerCase().contains('quá hạn') ||
+            error.toLowerCase().contains('timeout');
+
+        return Container(
+          margin: const EdgeInsets.only(bottom: 12),
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: const Color(0xFFFEF2F2),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: const Color(0xFFFCA5A5)),
+          ),
+          child: Row(
+            children: [
+              Icon(
+                isNetwork ? Icons.wifi_off_rounded : (isTimeout ? Icons.timer_off_outlined : Icons.error_outline_rounded),
+                color: const Color(0xFFDC2626),
+                size: 24,
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      isNetwork
+                          ? 'Lỗi kết nối mạng'
+                          : (isTimeout ? 'Hết thời gian chờ' : 'Lỗi tải danh mục khám'),
+                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Color(0xFF991B1B)),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      error,
+                      style: const TextStyle(fontSize: 12, color: Color(0xFFB91C1C)),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              ElevatedButton.icon(
+                onPressed: isLoading ? null : () => _viewModel.loadMasterCommand.execute(),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFFDC2626),
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  minimumSize: Size.zero,
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                ),
+                icon: isLoading
+                    ? const SizedBox(width: 12, height: 12, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                    : const Icon(Icons.refresh_rounded, size: 14),
+                label: const Text('Thử lại', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+              ),
+            ],
+          ),
+        );
+      },
     );
   }
 
@@ -1259,7 +1353,9 @@ class _PatientProfileCreateViewState extends State<PatientProfileCreateView> {
           ListenableBuilder(
             listenable: _viewModel.continueCommand,
             builder: (context, _) {
-              final isCaptchaVerified = _captchaToken != null;
+              final isCaptchaVerified =
+                  (kIsWeb && Environment.disableTurnstileOnWeb) ||
+                  _captchaToken != null;
               final canSubmit = _viewModel.canContinue && isCaptchaVerified;
               return SizedBox(
                 width: double.infinity,
@@ -1344,6 +1440,7 @@ class _PatientProfileCreateViewState extends State<PatientProfileCreateView> {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               RepaintBoundary(child: _buildGuidanceBanner()),
+              _buildMasterErrorBanner(),
               RepaintBoundary(child: _buildCccdSearchSection()),
               _buildSavedProfilesHeader(),
               if (_viewModel.isExistingProfile && _viewModel.selectedProfileIdentifier != null) ...[
@@ -1662,21 +1759,24 @@ class _PatientProfileCreateViewState extends State<PatientProfileCreateView> {
 
               // Captcha — cô lập WebView trong RepaintBoundary + SizedBox cố định
               // để tránh re-composite native Surface khi bàn phím animate
-              Center(
-                child: SizedBox(
-                  height: 70,
-                  child: RepaintBoundary(
-                    child: CloudflareTurnstile(
-                      onVerified: (token) {
-                        setState(() {
-                          _captchaToken = token;
-                        });
-                      },
+              // (Tạm thời ẩn trên Web nếu bật cờ disableTurnstileOnWeb để test)
+              if (!(kIsWeb && Environment.disableTurnstileOnWeb)) ...[
+                Center(
+                  child: SizedBox(
+                    height: 70,
+                    child: RepaintBoundary(
+                      child: CloudflareTurnstile(
+                        onVerified: (token) {
+                          setState(() {
+                            _captchaToken = token;
+                          });
+                        },
+                      ),
                     ),
                   ),
                 ),
-              ),
-              const SizedBox(height: 16),
+                const SizedBox(height: 16),
+              ],
 
               _buildSummaryCard(),
             ],

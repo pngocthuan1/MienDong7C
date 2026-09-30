@@ -43,6 +43,14 @@ class _CloudflareTurnstileState extends State<CloudflareTurnstile> {
   @override
   void initState() {
     super.initState();
+    if (kIsWeb && Environment.disableTurnstileOnWeb) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          widget.onVerified('web_test_token_bypass');
+        }
+      });
+      return;
+    }
     _initTurnstile();
   }
 
@@ -120,16 +128,9 @@ class _CloudflareTurnstileState extends State<CloudflareTurnstile> {
     }
 
     // ── Nền tảng Web: Tạm thời mở khóa / bỏ chặn để kiểm thử theo yêu cầu ──
-    if (kIsWeb) {
-      _webCheckTimer = Timer(const Duration(milliseconds: 600), () {
+    if (kIsWeb && Environment.disableTurnstileOnWeb) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) {
-          setState(() {
-            _isLoading = false;
-            _isVerifying = false;
-            _isSuccess = true;
-            _isWebviewFailed = false;
-            _errorDetail = null;
-          });
           widget.onVerified('web_test_token_bypass');
         }
       });
@@ -367,6 +368,10 @@ class _CloudflareTurnstileState extends State<CloudflareTurnstile> {
 
   @override
   Widget build(BuildContext context) {
+    if (kIsWeb && Environment.disableTurnstileOnWeb) {
+      return const SizedBox.shrink();
+    }
+
     final isFailed = _isWebviewFailed || widget.simulateBot || widget.hasError;
 
     // ── Hiển thị WebView khi đang load Turnstile trên Mobile ──

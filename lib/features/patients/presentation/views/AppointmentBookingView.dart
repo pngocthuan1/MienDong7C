@@ -97,8 +97,19 @@ class _AppointmentBookingViewState extends State<AppointmentBookingView> {
     required String emptyMessage,
     bool isDeletedTab = false,
   }) {
-    if (tickets.isEmpty) {
-      final isFiltered = _viewModel.hasActiveFilter;
+    // 1. TRẠNG THÁI LOADING (Lần đầu mở màn hình)
+    if (_viewModel.loadTicketsCommand.running && _viewModel.allTickets.isEmpty) {
+      return const Center(child: CircularProgressIndicator());
+    }
+
+    // 2. TRẠNG THÁI LỖI (Mạng hoặc Server khi chưa có dữ liệu)
+    if (_viewModel.message != null && _viewModel.allTickets.isEmpty) {
+      final msg = _viewModel.message!;
+      final isNetwork = msg.toLowerCase().contains('mạng') ||
+          msg.toLowerCase().contains('kết nối') ||
+          msg.toLowerCase().contains('quá hạn') ||
+          msg.toLowerCase().contains('timeout');
+
       return Center(
         child: Padding(
           padding: const EdgeInsets.all(24.0),
@@ -106,42 +117,98 @@ class _AppointmentBookingViewState extends State<AppointmentBookingView> {
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               Icon(
-                isFiltered ? Icons.search_off_rounded : Icons.receipt_long_rounded,
-                size: 64,
-                color: Colors.grey[300],
+                isNetwork ? Icons.wifi_off_rounded : Icons.error_outline_rounded,
+                size: 56,
+                color: isNetwork ? const Color(0xFFDC2626) : Colors.orange,
               ),
-              const SizedBox(height: 12),
+              const SizedBox(height: 14),
               Text(
-                isFiltered ? 'Không tìm thấy phiếu đăng ký nào phù hợp' : emptyMessage,
-                textAlign: TextAlign.center,
-                style: const TextStyle(color: Color(0xFF64748B), fontSize: 14, fontWeight: FontWeight.w600),
+                isNetwork ? 'Không có kết nối mạng' : 'Lỗi tải lịch khám',
+                style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Color(0xFF1E293B)),
               ),
-              if (isFiltered) ...[
-                const SizedBox(height: 16),
-                OutlinedButton.icon(
-                  onPressed: () {
-                    _searchController.clear();
-                    _viewModel.clearFilters();
-                  },
-                  icon: const Icon(Icons.refresh_rounded, size: 16),
-                  label: const Text('Xóa bộ lọc'),
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: const Color(0xFF0D6EFD),
-                    side: const BorderSide(color: Color(0xFF0D6EFD)),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                  ),
+              const SizedBox(height: 6),
+              Text(
+                msg,
+                textAlign: TextAlign.center,
+                style: const TextStyle(fontSize: 13, color: Color(0xFF64748B)),
+              ),
+              const SizedBox(height: 18),
+              ElevatedButton.icon(
+                onPressed: () => _viewModel.loadTicketsCommand.execute(),
+                icon: const Icon(Icons.refresh_rounded, size: 18),
+                label: const Text('Thử lại'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF0D6EFD),
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
                 ),
-              ],
+              ),
             ],
           ),
         ),
       );
     }
 
-    return ListView.builder(
-      padding: const EdgeInsets.fromLTRB(16, 12, 16, 96),
-      itemCount: tickets.length,
-      itemBuilder: (context, index) {
+    // 3. TRẠNG THÁI RỖNG (EMPTY)
+    if (tickets.isEmpty) {
+      final isFiltered = _viewModel.hasActiveFilter;
+      return RefreshIndicator(
+        onRefresh: () => _viewModel.loadTicketsCommand.execute(),
+        child: SingleChildScrollView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          child: SizedBox(
+            height: 350,
+            child: Center(
+              child: Padding(
+                padding: const EdgeInsets.all(24.0),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(
+                      isFiltered ? Icons.search_off_rounded : Icons.receipt_long_rounded,
+                      size: 64,
+                      color: Colors.grey[300],
+                    ),
+                    const SizedBox(height: 12),
+                    Text(
+                      isFiltered ? 'Không tìm thấy phiếu đăng ký nào phù hợp' : emptyMessage,
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(color: Color(0xFF64748B), fontSize: 14, fontWeight: FontWeight.w600),
+                    ),
+                    if (isFiltered) ...[
+                      const SizedBox(height: 16),
+                      OutlinedButton.icon(
+                        onPressed: () {
+                          _searchController.clear();
+                          _viewModel.clearFilters();
+                        },
+                        icon: const Icon(Icons.refresh_rounded, size: 16),
+                        label: const Text('Xóa bộ lọc'),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: const Color(0xFF0D6EFD),
+                          side: const BorderSide(color: Color(0xFF0D6EFD)),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+
+    // 4. TRẠNG THÁI SUCCESS (CÓ DỮ LIỆU)
+    return RefreshIndicator(
+      onRefresh: () => _viewModel.loadTicketsCommand.execute(),
+      child: ListView.builder(
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: const EdgeInsets.fromLTRB(16, 12, 16, 96),
+        itemCount: tickets.length,
+        itemBuilder: (context, index) {
         final ticket = tickets[index];
         return Container(
           margin: const EdgeInsets.only(bottom: 14),
@@ -151,7 +218,7 @@ class _AppointmentBookingViewState extends State<AppointmentBookingView> {
             border: Border.all(color: const Color(0xFFE2E8F0)),
             boxShadow: [
               BoxShadow(
-                color: Colors.black.withOpacity(0.03),
+                color: Colors.black.withValues(alpha: 0.03),
                 blurRadius: 8,
                 offset: const Offset(0, 2),
               ),
@@ -359,8 +426,9 @@ class _AppointmentBookingViewState extends State<AppointmentBookingView> {
           ),
         );
       },
-    );
-  }
+    ),
+  );
+}
 
   Future<void> _openTicketDetail(MedicalTicketEntity ticket) async {
     await AppNavigator.pushNamed(

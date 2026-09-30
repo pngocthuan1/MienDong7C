@@ -1,4 +1,6 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:benhvien7c/core/config/environment.dart';
 import 'package:benhvien7c/core/theme/AppSizes.dart';
 import 'package:benhvien7c/core/dio/AppLocator.dart';
 import 'package:benhvien7c/core/navigation/AppNavigator.dart';
@@ -141,19 +143,23 @@ class _ForgotPasswordViewState extends State<ForgotPasswordView> {
                       const SizedBox(height: AppSizes.itemSpacing),
                       AuthFeedbackBanner(message: _viewModel.message!),
                     ],
-                    const SizedBox(height: AppSizes.itemSpacing),
-                    CloudflareTurnstile(
-                      onVerified: (token) {
-                        setState(() {
-                          _captchaToken = token;
-                        });
-                      },
-                    ),
+                    if (!(kIsWeb && Environment.disableTurnstileOnWeb)) ...[
+                      const SizedBox(height: AppSizes.itemSpacing),
+                      CloudflareTurnstile(
+                        onVerified: (token) {
+                          setState(() {
+                            _captchaToken = token;
+                          });
+                        },
+                      ),
+                    ],
                     const SizedBox(height: AppSizes.sectionSpacing),
                     ListenableBuilder(
                       listenable: _viewModel.requestOtpCommand,
                       builder: (context, _) {
-                        final isCaptchaVerified = _captchaToken != null;
+                        final isCaptchaVerified =
+                            (kIsWeb && Environment.disableTurnstileOnWeb) ||
+                            _captchaToken != null;
                         return AppButton(
                           label: 'Gửi mã OTP',
                           icon: Icons.sms_outlined,

@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/gestures.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -195,15 +196,17 @@ class _RegisterViewState extends State<RegisterView> {
                   );
                 },
               ),
-              const SizedBox(height: AppSizes.itemSpacing),
-              CloudflareTurnstile(
-                siteKey: Environment.turnstileSiteKey,
-                onVerified: (token) {
-                  setState(() {
-                    _captchaToken = token;
-                  });
-                },
-              ),
+              if (!(kIsWeb && Environment.disableTurnstileOnWeb)) ...[
+                const SizedBox(height: AppSizes.itemSpacing),
+                CloudflareTurnstile(
+                  siteKey: Environment.turnstileSiteKey,
+                  onVerified: (token) {
+                    setState(() {
+                      _captchaToken = token;
+                    });
+                  },
+                ),
+              ],
               const SizedBox(height: 12),
                   Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -274,7 +277,9 @@ class _RegisterViewState extends State<RegisterView> {
                   ListenableBuilder(
                     listenable: _viewModel.registerCommand,
                     builder: (context, _) {
-                      final isCaptchaVerified = _captchaToken != null;
+                      final isCaptchaVerified =
+                          (kIsWeb && Environment.disableTurnstileOnWeb) ||
+                          _captchaToken != null;
                       return AppButton(
                         label: 'Đăng ký',
                         icon: Icons.verified_user_outlined,

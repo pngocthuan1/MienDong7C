@@ -441,10 +441,52 @@ class PortalRepositoryImpl implements PortalRepository {
             ? draft.dangKyGiup!.trim()
             : (role == UserRole.customer ? '' : draft.fullName),
       );
-      final bookingId = await remote.dangKyKham(req);
-
+      int bookingId = 0;
       DkkSoKhamDto? serverPhieu;
-      if (bookingId > 0) {
+
+      try {
+        bookingId = await remote.dangKyKham(req);
+      } on TimeoutNetworkException catch (timeoutEx) {
+        // NẾU TIMEOUT XẢY RA KHI ĐĂNG KÝ:
+        // Request có thể đã tới server nhưng phản hồi bị timeout trên đường về.
+        // Tự động kiểm tra ListSoKham để xem phiếu đã tạo hay chưa trước khi báo lỗi.
+        try {
+          final recentTickets = await remote.getListSoKham();
+          final reqCccd = req.maBhytHoacMaBn?.trim() ?? '';
+          final reqName = req.hoTen.trim().toLowerCase();
+          final reqDatePrefix = req.ngayKham.length >= 10 ? req.ngayKham.substring(0, 10) : '';
+          final matched = recentTickets.where((t) {
+            final tCccd = t.soCcHc?.trim() ?? '';
+            final tThe = t.maThe?.trim() ?? '';
+            final sameCccd = reqCccd.isNotEmpty && (tCccd == reqCccd || tThe == reqCccd);
+            final sameName = t.hoTen != null && t.hoTen!.trim().toLowerCase() == reqName;
+            final sameDate = reqDatePrefix.isNotEmpty && (t.ngayGioKham?.contains(reqDatePrefix) ?? false);
+            return (sameCccd || sameName) && (sameDate || reqDatePrefix.isEmpty);
+          }).firstOrNull;
+
+          if (matched != null && matched.id > 0) {
+            // Server ĐÃ TẠO phiếu thành công! Cứu được phiếu của người dùng
+            bookingId = matched.id;
+            serverPhieu = matched;
+          } else {
+            return Error(
+              timeoutEx,
+              'Yêu cầu đăng ký quá thời gian chờ (timeout). Hệ thống đã kiểm tra và chưa ghi nhận phiếu khám. Bạn có thể an tâm bấm đăng ký lại.',
+            );
+          }
+        } catch (_) {
+          return Error(
+            timeoutEx,
+            'Kết nối quá hạn (timeout). Vui lòng kiểm tra mục "Lịch khám đã đặt" để xem phiếu đã tạo hay chưa trước khi đăng ký lại.',
+          );
+        }
+      } on NetworkException catch (netEx) {
+        return Error(netEx, netEx.message);
+      } on ApiException catch (apiEx) {
+        return Error(apiEx, apiEx.message);
+      }
+
+      if (bookingId > 0 && serverPhieu == null) {
         try {
           serverPhieu = await remote.getPhieuSoKham(bookingId);
         } catch (_) {}
@@ -602,8 +644,10 @@ class PortalRepositoryImpl implements PortalRepository {
         _writeTicketsCache(phone, entities);
       }
       return Ok(entities);
+    } on ApiException catch (e) {
+      return Error(e, e.message);
     } on Exception catch (exception) {
-      return Error(exception, exception.toString());
+      return Error(exception, exception.toString().replaceAll('Exception: ', ''));
     } catch (error) {
       return Error(Exception(error.toString()), error.toString());
     }
@@ -751,8 +795,10 @@ class PortalRepositoryImpl implements PortalRepository {
       }
 
       return Ok(profileMap.values.toList());
+    } on ApiException catch (e) {
+      return Error(e, e.message);
     } on Exception catch (exception) {
-      return Error(exception, exception.toString());
+      return Error(exception, exception.toString().replaceAll('Exception: ', ''));
     } catch (error) {
       return Error(Exception(error.toString()), error.toString());
     }
@@ -886,8 +932,10 @@ class PortalRepositoryImpl implements PortalRepository {
       final remote = _remoteDatasource ?? DatLichKhamRemoteDataSource(AppLocator.dioClient);
       final master = await remote.getListMaster();
       return Ok(master);
+    } on ApiException catch (e) {
+      return Error(e, e.message);
     } on Exception catch (exception) {
-      return Error(exception, exception.toString());
+      return Error(exception, exception.toString().replaceAll('Exception: ', ''));
     } catch (error) {
       return Error(Exception(error.toString()), error.toString());
     }
@@ -899,8 +947,10 @@ class PortalRepositoryImpl implements PortalRepository {
       final remote = _remoteDatasource ?? DatLichKhamRemoteDataSource(AppLocator.dioClient);
       final list = await remote.getListHoSo(maHS);
       return Ok(list);
+    } on ApiException catch (e) {
+      return Error(e, e.message);
     } on Exception catch (exception) {
-      return Error(exception, exception.toString());
+      return Error(exception, exception.toString().replaceAll('Exception: ', ''));
     } catch (error) {
       return Error(Exception(error.toString()), error.toString());
     }
@@ -912,8 +962,10 @@ class PortalRepositoryImpl implements PortalRepository {
       final remote = _remoteDatasource ?? DatLichKhamRemoteDataSource(AppLocator.dioClient);
       final dto = await remote.getPhieuSoKham(id);
       return Ok(dto);
+    } on ApiException catch (e) {
+      return Error(e, e.message);
     } on Exception catch (exception) {
-      return Error(exception, exception.toString());
+      return Error(exception, exception.toString().replaceAll('Exception: ', ''));
     } catch (error) {
       return Error(Exception(error.toString()), error.toString());
     }

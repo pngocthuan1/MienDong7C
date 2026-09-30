@@ -124,6 +124,13 @@ class Environment {
   /// là áp dụng toàn app.
   static Duration get apiTimeout => const Duration(seconds: 20);
 
+  // ==================== CỜ CẤU HÌNH TẠM THỜI (TESTING) ====================
+  // TẠM TẮT ĐỂ TEST TRÊN WEB - PHẢI BẬT LẠI (ĐỔI THÀNH false) TRƯỚC KHI RELEASE WEB PRODUCTION
+  // - true: Tắt Cloudflare Turnstile trên Web (ẩn widget, không chờ verify token).
+  // - false: Bật lại xác thực Cloudflare Turnstile bình thường trên Web.
+  // LƯU Ý: Trên Mobile (Android/iOS) luôn luôn xác thực thật qua Cloudflare, cờ này KHÔNG ảnh hưởng Mobile.
+  static const bool disableTurnstileOnWeb = true;
+
   // Cloudflare Turnstile Configuration (Chỉ giữ SiteKey công khai, SecretKey lưu tại Cloudflare Worker)
   static const String turnstileSiteKey = '0x4AAAAAADvG0YDfYPtUpuix';
 
