@@ -4,7 +4,6 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 import 'package:benhvien7c/core/config/environment.dart';
-import 'package:benhvien7c/core/services/TurnstileVerifyService.dart';
 
 class CloudflareTurnstile extends StatefulWidget {
   const CloudflareTurnstile({
@@ -27,10 +26,10 @@ class CloudflareTurnstile extends StatefulWidget {
   final String? siteKey;
 
   @override
-  State<CloudflareTurnstile> createState() => _CloudflareTurnstileState();
+  State<CloudflareTurnstile> createState() => CloudflareTurnstileState();
 }
 
-class _CloudflareTurnstileState extends State<CloudflareTurnstile> {
+class CloudflareTurnstileState extends State<CloudflareTurnstile> {
   WebViewController? _webViewController;
   bool _isLoading = true;
   bool _isVerifying = false;
@@ -40,15 +39,30 @@ class _CloudflareTurnstileState extends State<CloudflareTurnstile> {
   Timer? _timeoutTimer;
   Timer? _webCheckTimer;
 
+  /// Đặt lại trạng thái CAPTCHA và tải lại thử thách mới từ Cloudflare
+  void reset() {
+    if (!mounted) return;
+    _timeoutTimer?.cancel();
+    _webCheckTimer?.cancel();
+    setState(() {
+      _isLoading = true;
+      _isVerifying = false;
+      _isSuccess = false;
+      _isWebviewFailed = false;
+      _errorDetail = null;
+      _webViewController = null;
+    });
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        _initTurnstile();
+      }
+    });
+  }
+
   @override
   void initState() {
     super.initState();
     if (kIsWeb && Environment.disableTurnstileOnWeb) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) {
-          widget.onVerified('web_test_token_bypass');
-        }
-      });
       return;
     }
     _initTurnstile();
@@ -129,11 +143,6 @@ class _CloudflareTurnstileState extends State<CloudflareTurnstile> {
 
     // ── Nền tảng Web: Tạm thời mở khóa / bỏ chặn để kiểm thử theo yêu cầu ──
     if (kIsWeb && Environment.disableTurnstileOnWeb) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) {
-          widget.onVerified('web_test_token_bypass');
-        }
-      });
       return;
     }
 
@@ -190,37 +199,19 @@ class _CloudflareTurnstileState extends State<CloudflareTurnstile> {
               } else if (type == 'success') {
                 _timeoutTimer?.cancel();
                 final token = data['token'] as String;
-                debugPrint('[Turnstile] 🟢 Cloudflare vừa xác nhận người dùng thật! Token prefix: ${token.substring(0, token.length > 20 ? 20 : token.length)}...');
+                debugPrint('[Turnstile] 🟢 Cloudflare vừa cấp token! Token prefix: ${token.substring(0, token.length > 20 ? 20 : token.length)}...');
 
-                // Cập nhật UI: Đang xác thực token với Cloudflare Worker
                 if (mounted) {
                   setState(() {
                     _isLoading = false;
-                    _isVerifying = true;
+                    _isVerifying = false;
+                    _isSuccess = true;
+                    _isWebviewFailed = false;
                     _errorDetail = null;
                   });
                 }
 
-                // Gọi verify qua Cloudflare Worker thật
-                final isValid = await TurnstileVerifyService.verify(token);
-                debugPrint('[Turnstile] 🎯 Kết quả xác thực cuối cùng: isValid = $isValid');
-
-                if (mounted) {
-                  setState(() {
-                    _isVerifying = false;
-                    _isSuccess = isValid;
-                    _isWebviewFailed = !isValid;
-                    if (!isValid) {
-                      _errorDetail = 'Xác thực không hợp lệ từ máy chủ bảo mật';
-                    }
-                  });
-                }
-
-                if (isValid) {
-                  widget.onVerified(token);
-                } else {
-                  widget.onExpired?.call();
-                }
+                widget.onVerified(token);
               } else if (type == 'expired') {
                 if (mounted) {
                   setState(() {

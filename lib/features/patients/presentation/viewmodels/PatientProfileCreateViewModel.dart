@@ -1487,6 +1487,32 @@ class PatientProfileCreateViewModel extends BasePortalViewModel {
   }
 
   // Get selectable time slots
+  DateTime? _parseSlotEndTime(String slot, DateTime baseDate) {
+    try {
+      final parts = slot.split('-');
+      if (parts.length > 1) {
+        final endPart = parts[1].trim();
+        final match = RegExp(r'(\d{1,2})\s*(?:[g:h]\s*(\d{1,2}))?').firstMatch(endPart.toLowerCase());
+        if (match != null) {
+          final hr = int.parse(match.group(1)!);
+          final minStr = match.group(2);
+          final min = (minStr != null && minStr.isNotEmpty) ? int.parse(minStr) : 0;
+          return DateTime(baseDate.year, baseDate.month, baseDate.day, hr, min);
+        }
+      } else {
+        final match = RegExp(r'(\d{1,2})\s*(?:[g:h]\s*(\d{1,2}))?').firstMatch(parts[0].toLowerCase().trim());
+        if (match != null) {
+          final hr = int.parse(match.group(1)!);
+          final minStr = match.group(2);
+          final min = (minStr != null && minStr.isNotEmpty) ? int.parse(minStr) : 0;
+          return DateTime(baseDate.year, baseDate.month, baseDate.day, hr, min).add(const Duration(minutes: 30));
+        }
+      }
+    } catch (_) {}
+    return null;
+  }
+
+  // Get selectable time slots
   List<String> getSlotsForDate(DateTime date) {
     final master = masterData;
     if (master != null) {
@@ -1507,15 +1533,9 @@ class PatientProfileCreateViewModel extends BasePortalViewModel {
     ];
     if (target.isAfter(today)) return fallbackSlots;
     return fallbackSlots.where((slot) {
-      final startPart = slot.split('-')[0].trim().toLowerCase();
-      int hr = 0, min = 0;
-      if (startPart.contains('g')) {
-        final parts = startPart.split('g');
-        hr = int.parse(parts[0]);
-        min = parts[1].isEmpty ? 0 : int.parse(parts[1]);
-      }
-      final slotStartTime = DateTime(now.year, now.month, now.day, hr, min);
-      return !now.isAfter(slotStartTime.add(const Duration(minutes: 15)));
+      final slotEndTime = _parseSlotEndTime(slot, now);
+      if (slotEndTime == null) return true;
+      return !now.isAfter(slotEndTime.add(const Duration(minutes: 15)));
     }).toList();
   }
 
@@ -1523,28 +1543,34 @@ class PatientProfileCreateViewModel extends BasePortalViewModel {
   bool validateSelectedSlot() {
     if (selectedDate == null || selectedTime == null) return false;
     final now = DateTime.now();
-    final dateParts = DateFormat('dd/MM/yyyy').format(selectedDate!).split('/');
-    final ticketDay = DateTime(
-      int.parse(dateParts[2]),
-      int.parse(dateParts[1]),
-      int.parse(dateParts[0]),
-    );
     final today = DateTime(now.year, now.month, now.day);
+    final ticketDay = DateTime(selectedDate!.year, selectedDate!.month, selectedDate!.day);
     
+    // Ngày trong quá khứ -> Không hợp lệ
     if (ticketDay.isBefore(today)) return false;
+    // Ngày từ ngày mai trở đi -> Luôn hợp lệ
     if (ticketDay.isAfter(today)) return true;
     
-    // Today: check hour/minute
-    final startPart = selectedTime!.split('-')[0].trim().toLowerCase();
-    int hr = 0;
-    int min = 0;
-    if (startPart.contains('g')) {
-      final parts = startPart.split('g');
-      hr = int.parse(parts[0]);
-      min = parts[1].isEmpty ? 0 : int.parse(parts[1]);
+    // Nếu là ngày hôm nay:
+    // 1. Nếu slot này nằm trong danh sách DicNgayGioKham của server trả về cho ngày hôm nay
+    //    -> Server đã kiểm tra và cho phép đặt
+    final master = masterData;
+    if (master != null) {
+      final dateIso = _dateToIsoKey(selectedDate!);
+      final validSlots = master.getSlotsForDate(dateIso);
+      if (validSlots.contains(selectedTime)) {
+        return true;
+      }
     }
-    final slotTime = DateTime(now.year, now.month, now.day, hr, min);
-    return slotTime.isAfter(now);
+    
+    // 2. Kiểm tra giờ kết thúc của slot (có cộng thêm 15 phút đệm phòng trường hợp người dùng thao tác)
+    final slotEndTime = _parseSlotEndTime(selectedTime!, now);
+    if (slotEndTime != null) {
+      return !now.isAfter(slotEndTime.add(const Duration(minutes: 15)));
+    }
+    
+    // Nếu không parse được thì không chặn oan, để server xử lý
+    return true;
   }
 
   Future<Result<MedicalTicketEntity>> _continueFlow() async {

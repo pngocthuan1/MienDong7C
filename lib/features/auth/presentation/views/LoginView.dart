@@ -32,7 +32,17 @@ class _LoginViewState extends State<LoginView> with WidgetsBindingObserver {
   final _formKey = GlobalKey<FormState>();
   late final LoginViewModel _viewModel;
   String? _captchaToken;
+  int _captchaResetKey = 0;
   bool _isFaceIdAvailable = false;
+
+  void _resetCaptcha() {
+    if (!mounted) return;
+    setState(() {
+      _captchaToken = null;
+      _viewModel.captchaToken = null;
+      _captchaResetKey++;
+    });
+  }
 
   @override
   void initState() {
@@ -96,16 +106,13 @@ class _LoginViewState extends State<LoginView> with WidgetsBindingObserver {
           await AppLocator.secureStorage.saveBiometricCredentials(phone, password);
         }
         _viewModel.loginCommand.clearResult();
+        _resetCaptcha();
         if (mounted) {
           AppNavigator.resetToNamed(context, RouteNames.home);
         }
       },
       failure: (exception) {
-        if (_viewModel.captchaToken == null) {
-          setState(() {
-            _captchaToken = null; // Khóa nút Đăng nhập ngay lập tức khi CAPTCHA bị từ chối
-          });
-        }
+        _resetCaptcha();
         _viewModel.loginCommand.clearResult();
       },
     );
@@ -311,18 +318,14 @@ class _LoginViewState extends State<LoginView> with WidgetsBindingObserver {
             viewModel: _viewModel,
             onSubmit: _submit,
             captchaToken: _captchaToken,
+            captchaResetKey: _captchaResetKey,
             onCaptchaVerified: (token) {
               _viewModel.captchaToken = token;
               setState(() {
                 _captchaToken = token;
               });
             },
-            onResetCaptcha: () {
-              _viewModel.captchaToken = null;
-              setState(() {
-                _captchaToken = null;
-              });
-            },
+            onResetCaptcha: _resetCaptcha,
             onBiometricPressed: _onBiometricLoginPressed,
             isFaceIdAvailable: _isFaceIdAvailable,
           ),
@@ -337,6 +340,7 @@ class _LoginForm extends StatelessWidget {
     required this.viewModel,
     required this.onSubmit,
     required this.captchaToken,
+    required this.captchaResetKey,
     required this.onCaptchaVerified,
     required this.onResetCaptcha,
     required this.onBiometricPressed,
@@ -346,6 +350,7 @@ class _LoginForm extends StatelessWidget {
   final LoginViewModel viewModel;
   final Future<void> Function() onSubmit;
   final String? captchaToken;
+  final int captchaResetKey;
   final ValueChanged<String> onCaptchaVerified;
   final VoidCallback onResetCaptcha;
   final VoidCallback onBiometricPressed;
@@ -436,6 +441,7 @@ class _LoginForm extends StatelessWidget {
                   viewModel.message!.contains('CAPTCHA');
               return Center(
                 child: CloudflareTurnstile(
+                  key: ValueKey('turnstile_login_$captchaResetKey'),
                   siteKey: Environment.turnstileSiteKey,
                   hasError: hasCaptchaError,
                   errorMessage: viewModel.message,

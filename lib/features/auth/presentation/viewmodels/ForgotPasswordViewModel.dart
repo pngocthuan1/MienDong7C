@@ -30,6 +30,10 @@ class ForgotPasswordViewModel extends ChangeNotifier {
   }
 
   String? get message => _message;
+  set message(String? val) {
+    _message = val;
+    notifyListeners();
+  }
 
   String? checkPhone(String? value) {
     if (phoneError != null) return phoneError;

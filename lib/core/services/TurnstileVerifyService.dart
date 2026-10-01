@@ -28,6 +28,11 @@ class TurnstileVerifyService {
 
   /// Xác thực token qua máy chủ bảo mật Cloudflare Worker (không để lộ Secret Key trong App)
   Future<ApiResult<TurnstileVerifyResult>> verifyToken(String captchaToken) async {
+    // Chế độ Web Test: Chặn hẳn lệnh gọi Cloudflare Worker, không gửi bất kỳ request nào
+    if (kIsWeb && Environment.disableTurnstileOnWeb) {
+      return const ApiSuccess(TurnstileVerifyResult(success: true));
+    }
+
     if (captchaToken.isEmpty) {
       return ApiFailure(
         BusinessException('Mã xác thực CAPTCHA không được để trống'),

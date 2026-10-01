@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:benhvien7c/core/config/environment.dart';
+import 'package:benhvien7c/core/network/ApiResult.dart';
 import 'package:benhvien7c/core/theme/AppSizes.dart';
 import 'package:benhvien7c/core/dio/AppLocator.dart';
 import 'package:benhvien7c/core/navigation/AppNavigator.dart';
@@ -28,6 +29,15 @@ class _ForgotPasswordViewState extends State<ForgotPasswordView> {
   final _formKey = GlobalKey<FormState>();
   late final ForgotPasswordViewModel _viewModel;
   String? _captchaToken;
+  int _captchaResetKey = 0;
+
+  void _resetCaptcha() {
+    if (!mounted) return;
+    setState(() {
+      _captchaToken = null;
+      _captchaResetKey++;
+    });
+  }
 
   @override
   void initState() {
@@ -56,6 +66,7 @@ class _ForgotPasswordViewState extends State<ForgotPasswordView> {
     result.when(
       success: (message) {
         _viewModel.requestOtpCommand.clearResult();
+        _resetCaptcha();
         ScaffoldMessenger.of(
           context,
         ).showSnackBar(SnackBar(content: Text(message)));
@@ -73,6 +84,7 @@ class _ForgotPasswordViewState extends State<ForgotPasswordView> {
       },
       failure: (_) {
         _viewModel.requestOtpCommand.clearResult();
+        _resetCaptcha();
       },
     );
   }
@@ -83,6 +95,23 @@ class _ForgotPasswordViewState extends State<ForgotPasswordView> {
       if (!_formKey.currentState!.validate()) {
         return;
       }
+
+      // ── Xác thực CAPTCHA duy nhất 1 lần tại thời điểm bấm Gửi mã OTP ──
+      final isBypassedOnWeb = kIsWeb && Environment.disableTurnstileOnWeb;
+      if (!isBypassedOnWeb) {
+        if (_captchaToken == null || _captchaToken!.isEmpty) {
+          _viewModel.message = 'Vui lòng hoàn thành xác thực CAPTCHA.';
+          return;
+        }
+
+        final verifyRes = await AppLocator.turnstileService.verifyToken(_captchaToken!);
+        if (verifyRes is ApiFailure) {
+          _viewModel.message = 'Xác thực CAPTCHA thất bại hoặc nghi ngờ Spam Bot.';
+          _resetCaptcha();
+          return;
+        }
+      }
+
       await _viewModel.requestOtpCommand.execute();
       if (_viewModel.phoneError != null) {
         _formKey.currentState!.validate();
@@ -146,6 +175,7 @@ class _ForgotPasswordViewState extends State<ForgotPasswordView> {
                     if (!(kIsWeb && Environment.disableTurnstileOnWeb)) ...[
                       const SizedBox(height: AppSizes.itemSpacing),
                       CloudflareTurnstile(
+                        key: ValueKey('turnstile_forgot_$_captchaResetKey'),
                         onVerified: (token) {
                           setState(() {
                             _captchaToken = token;

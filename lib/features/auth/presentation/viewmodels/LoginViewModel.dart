@@ -255,14 +255,23 @@ class LoginViewModel extends ChangeNotifier {
     final phoneVal = phoneController.text.trim();
     final passwordVal = passwordController.text;
 
-    // Chế độ Server Thật -> Kiểm tra CAPTCHA nếu có trước khi gọi Backend API
-    if (captchaToken != null && captchaToken!.isNotEmpty) {
+    // ── Xác thực CAPTCHA duy nhất 1 lần tại thời điểm bấm Đăng nhập ──
+    final isBypassedOnWeb = kIsWeb && Environment.disableTurnstileOnWeb;
+    if (!isBypassedOnWeb) {
+      if (captchaToken == null || captchaToken!.isEmpty) {
+        _message = 'Vui lòng hoàn thành xác thực CAPTCHA.';
+        notifyListeners();
+        return ApiFailure(
+          BusinessException('Vui lòng hoàn thành xác thực CAPTCHA.'),
+        );
+      }
+
       final verifyRes = await AppLocator.turnstileService.verifyToken(
         captchaToken!,
       );
       if (verifyRes is ApiFailure<TurnstileVerifyResult>) {
         _message = 'Xác thực CAPTCHA thất bại hoặc nghi ngờ Spam Bot.';
-        captchaToken = null; // Khóa chặt nút bấm ngay lập tức, chặn spam!
+        captchaToken = null; // Khóa chặt nút bấm và yêu cầu reset token mới
         notifyListeners();
         return ApiFailure(verifyRes.exception);
       }

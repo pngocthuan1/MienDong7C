@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:benhvien7c/core/config/environment.dart';
+import 'package:benhvien7c/core/network/ApiResult.dart';
 import 'package:benhvien7c/core/widgets/AppResponsiveContainer.dart';
 import 'package:benhvien7c/app/router/RouteNames.dart';
 import 'package:benhvien7c/core/dio/AppLocator.dart';
@@ -32,7 +33,16 @@ class _PatientProfileCreateViewState extends State<PatientProfileCreateView> {
   final _formKey = GlobalKey<FormState>();
   late final PatientProfileCreateViewModel _viewModel;
   String? _captchaToken;
+  int _captchaResetKey = 0;
   bool _initializedArgs = false;
+
+  void _resetCaptcha() {
+    if (!mounted) return;
+    setState(() {
+      _captchaToken = null;
+      _captchaResetKey++;
+    });
+  }
 
   // Quản lý FocusNode tường minh để chuyển focus mượt mà, không chớp tắt bàn phím
   final _identifierFocus = FocusNode();
@@ -275,6 +285,7 @@ class _PatientProfileCreateViewState extends State<PatientProfileCreateView> {
     result.when(
       ok: (MedicalTicketEntity ticket) {
         _viewModel.continueCommand.clearResult();
+        _resetCaptcha();
         // Refresh danh sách hồ sơ từ server sau khi đăng ký thành công
         AppLocator.portalRepository.loadPatientProfiles();
         ScaffoldMessenger.of(context).clearSnackBars();
@@ -302,11 +313,15 @@ class _PatientProfileCreateViewState extends State<PatientProfileCreateView> {
           arguments: ticket,
         );
       },
-      error: (err, _) {
+      error: (err, msg) {
         _viewModel.continueCommand.clearResult();
+        _resetCaptcha();
+        final displayErr = msg.trim().isNotEmpty
+            ? msg.trim()
+            : err.toString().replaceAll('Exception: ', '');
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Lỗi đặt lịch: ${err.toString()}'),
+            content: Text('Lỗi đặt lịch: $displayErr'),
             backgroundColor: Colors.red,
           ),
         );
@@ -633,6 +648,30 @@ class _PatientProfileCreateViewState extends State<PatientProfileCreateView> {
       FocusScope.of(context).unfocus();
       if (!_formKey.currentState!.validate()) {
         return;
+      }
+
+      // ── Xác thực CAPTCHA duy nhất 1 lần tại thời điểm bấm Đăng ký khám ──
+      final isBypassedOnWeb = kIsWeb && Environment.disableTurnstileOnWeb;
+      if (!isBypassedOnWeb) {
+        if (_captchaToken == null || _captchaToken!.isEmpty) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Vui lòng hoàn thành xác thực CAPTCHA.')),
+          );
+          return;
+        }
+
+        final verifyRes = await AppLocator.turnstileService.verifyToken(_captchaToken!);
+        if (!mounted) return;
+        if (verifyRes is ApiFailure) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Xác thực CAPTCHA thất bại hoặc nghi ngờ Spam Bot. Vui lòng thử lại.'),
+              backgroundColor: Colors.red,
+            ),
+          );
+          _resetCaptcha();
+          return;
+        }
       }
 
       // Luồng 3: Kiểm tra đối chiếu trước khi đăng ký
@@ -1766,6 +1805,7 @@ class _PatientProfileCreateViewState extends State<PatientProfileCreateView> {
                     height: 70,
                     child: RepaintBoundary(
                       child: CloudflareTurnstile(
+                        key: ValueKey('turnstile_patient_$_captchaResetKey'),
                         onVerified: (token) {
                           setState(() {
                             _captchaToken = token;

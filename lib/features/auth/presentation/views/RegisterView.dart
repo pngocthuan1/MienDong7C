@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/gestures.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:benhvien7c/core/network/ApiResult.dart';
 import 'package:benhvien7c/core/theme/AppSizes.dart';
 import 'package:benhvien7c/core/config/environment.dart';
 import 'package:benhvien7c/core/dio/AppLocator.dart';
@@ -32,7 +33,16 @@ class _RegisterViewState extends State<RegisterView> {
   late final RegisterViewModel _viewModel;
   late final FocusNode _passwordFocusNode;
   String? _captchaToken;
+  int _captchaResetKey = 0;
   bool _agreeToTerms = false;
+
+  void _resetCaptcha() {
+    if (!mounted) return;
+    setState(() {
+      _captchaToken = null;
+      _captchaResetKey++;
+    });
+  }
 
   @override
   void initState() {
@@ -72,6 +82,7 @@ class _RegisterViewState extends State<RegisterView> {
     result.when(
       success: (message) async {
         _viewModel.registerCommand.clearResult();
+        _resetCaptcha();
         ScaffoldMessenger.of(
           context,
         ).showSnackBar(SnackBar(content: Text(message)));
@@ -91,6 +102,7 @@ class _RegisterViewState extends State<RegisterView> {
       },
       failure: (_) {
         _viewModel.registerCommand.clearResult();
+        _resetCaptcha();
       },
     );
   }
@@ -101,6 +113,23 @@ class _RegisterViewState extends State<RegisterView> {
       if (!_formKey.currentState!.validate()) {
         return;
       }
+
+      // ── Xác thực CAPTCHA duy nhất 1 lần tại thời điểm bấm Đăng ký ──
+      final isBypassedOnWeb = kIsWeb && Environment.disableTurnstileOnWeb;
+      if (!isBypassedOnWeb) {
+        if (_captchaToken == null || _captchaToken!.isEmpty) {
+          _viewModel.message = 'Vui lòng hoàn thành xác thực CAPTCHA.';
+          return;
+        }
+
+        final verifyRes = await AppLocator.turnstileService.verifyToken(_captchaToken!);
+        if (verifyRes is ApiFailure) {
+          _viewModel.message = 'Xác thực CAPTCHA thất bại hoặc nghi ngờ Spam Bot.';
+          _resetCaptcha();
+          return;
+        }
+      }
+
       await _viewModel.registerCommand.execute();
       if (_viewModel.phoneError != null) {
         _formKey.currentState!.validate();
@@ -199,6 +228,7 @@ class _RegisterViewState extends State<RegisterView> {
               if (!(kIsWeb && Environment.disableTurnstileOnWeb)) ...[
                 const SizedBox(height: AppSizes.itemSpacing),
                 CloudflareTurnstile(
+                  key: ValueKey('turnstile_reg_$_captchaResetKey'),
                   siteKey: Environment.turnstileSiteKey,
                   onVerified: (token) {
                     setState(() {

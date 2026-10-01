@@ -62,6 +62,10 @@ class RegisterViewModel extends ChangeNotifier {
 
   UserRole get selectedRole => _selectedRole;
   String? get message => _message;
+  set message(String? val) {
+    _message = val;
+    notifyListeners();
+  }
 
   void updateRole(UserRole role) {
     if (_selectedRole == role) return;
