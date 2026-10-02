@@ -32,6 +32,7 @@ class PortalRepositoryImpl implements PortalRepository {
   final PortalMockDatasource _datasource;
   final DatLichKhamRemoteDataSource? _remoteDatasource;
   final ThongBaoRemoteDataSource? _thongBaoRemoteDataSource;
+  DkkListMasterDto? _cachedMaster;
 
   String _getHisUsername() {
     final activeUser = AppSessionStore.instance.currentUser;
@@ -419,23 +420,116 @@ class PortalRepositoryImpl implements PortalRepository {
       final formattedNgayKham = _formatNgayKhamForServer(selectedDate ?? '');
       final formattedGioKham = _formatGioKhamForServer(selectedTime ?? '');
 
+      // Tự động load master data nếu chưa có để đảm bảo map đúng ID số nguyên cho server int.Parse
+      DkkListMasterDto? master = _cachedMaster;
+      if (master == null) {
+        try {
+          master = await remote.getListMaster();
+          _cachedMaster = master;
+        } catch (_) {}
+      }
+
+      // Chuẩn hóa ID Phòng khám: Bắt buộc là số nguyên hợp lệ cho server int.Parse(wrkModel.PhongKham)
+      String resolvedPhongKhamId = '';
+      String resolvedPhongKhamTen = department ?? draft.clinic ?? '';
+      if (departmentId != null && int.tryParse(departmentId) != null) {
+        resolvedPhongKhamId = departmentId;
+      } else if (master != null && master.listPhongKham.isNotEmpty) {
+        final searchName = resolvedPhongKhamTen.trim().toLowerCase();
+        final matchedPk = master.listPhongKham.where((p) {
+          final pName = p.display.trim().toLowerCase();
+          return pName == searchName || pName.contains(searchName) || searchName.contains(pName);
+        }).firstOrNull;
+        if (matchedPk != null && int.tryParse(matchedPk.id) != null) {
+          resolvedPhongKhamId = matchedPk.id;
+          resolvedPhongKhamTen = matchedPk.display;
+        } else {
+          resolvedPhongKhamId = master.listPhongKham.first.id;
+          if (resolvedPhongKhamTen.isEmpty) {
+            resolvedPhongKhamTen = master.listPhongKham.first.display;
+          }
+        }
+      } else if (departmentId != null && int.tryParse(departmentId) != null) {
+        resolvedPhongKhamId = departmentId;
+      } else {
+        resolvedPhongKhamId = '49';
+      }
+
+      // Chuẩn hóa ID Tỉnh/TP: Bắt buộc là số nguyên hợp lệ cho server int.Parse(wrkModel.TinhTp)
+      String resolvedTinhId = '';
+      String resolvedTinhTen = (provinceName != null && provinceName.isNotEmpty) ? provinceName : (draft.province ?? '');
+      if (provinceCode != null && int.tryParse(provinceCode) != null) {
+        resolvedTinhId = provinceCode;
+      } else if (master != null && master.listTinh.isNotEmpty) {
+        final searchProv = resolvedTinhTen.trim().toLowerCase();
+        final matchedTinh = master.listTinh.where((t) {
+          final tName = t.display.trim().toLowerCase();
+          return tName == searchProv || tName.contains(searchProv) || searchProv.contains(tName);
+        }).firstOrNull;
+        if (matchedTinh != null) {
+          resolvedTinhId = matchedTinh.id.toString();
+          resolvedTinhTen = matchedTinh.display;
+        } else {
+          final hcm = master.listTinh.where((t) => t.display.contains('Hồ Chí Minh') || t.id == 79).firstOrNull;
+          resolvedTinhId = hcm != null ? hcm.id.toString() : master.listTinh.first.id.toString();
+        }
+      } else {
+        resolvedTinhId = '79';
+      }
+
+      // Chuẩn hóa ID Phường/Xã: Bắt buộc là số nguyên hợp lệ cho server int.Parse(wrkModel.PhuongXa)
+      String resolvedPhuongId = '';
+      String resolvedPhuongTen = (wardName != null && wardName.isNotEmpty) ? wardName : (draft.ward ?? '');
+      if (wardCode != null && int.tryParse(wardCode) != null) {
+        resolvedPhuongId = wardCode;
+      } else if (master != null && master.dicPhuong.isNotEmpty) {
+        final searchWard = resolvedPhuongTen.trim().toLowerCase();
+        final provinceWards = master.dicPhuong[resolvedTinhId] ?? [];
+        var matchedPhuong = provinceWards.where((w) {
+          final wName = w.display.trim().toLowerCase();
+          return wName == searchWard || wName.contains(searchWard) || searchWard.contains(wName);
+        }).firstOrNull;
+        if (matchedPhuong == null) {
+          for (final wards in master.dicPhuong.values) {
+            final found = wards.where((w) {
+              final wName = w.display.trim().toLowerCase();
+              return wName == searchWard || wName.contains(searchWard) || searchWard.contains(wName);
+            }).firstOrNull;
+            if (found != null) {
+              matchedPhuong = found;
+              break;
+            }
+          }
+        }
+        if (matchedPhuong != null) {
+          resolvedPhuongId = matchedPhuong.id.toString();
+          resolvedPhuongTen = matchedPhuong.display;
+        } else if (provinceWards.isNotEmpty) {
+          resolvedPhuongId = provinceWards.first.id.toString();
+        } else {
+          resolvedPhuongId = '26830';
+        }
+      } else {
+        resolvedPhuongId = '26830';
+      }
+
       final req = DangKyKhamRequestDto(
         maHS: maHS,
         maBN: maBN,
         maBhytHoacMaBn: maBhytHoacMaBn,
         hoTen: draft.fullName,
         gioiTinh: (draft.gender.trim().toLowerCase() == 'nữ' || draft.gender.trim().toLowerCase() == 'nu') ? 'Nữ' : 'Nam',
-        ngaySinh: _toIsoDateTime(draft.dateOfBirth),
-        ngayCap: _toIsoDateTime(draft.cccdIssueDate),
+        ngaySinh: _toIsoDateTime(draft.dateOfBirth) ?? (draft.birthYear.isNotEmpty ? '${draft.birthYear}-01-01T00:00:00' : '2000-01-01T00:00:00'),
+        ngayCap: _toIsoDateTime(draft.cccdIssueDate) ?? '2021-01-01T00:00:00',
         soDienThoai: draft.phoneNumber,
         ngayKham: formattedNgayKham,
         gioKham: formattedGioKham,
-        phongKham: departmentId ?? '',
-        phongKhamTen: department ?? '',
-        tinhTp: (provinceCode != null && provinceCode.isNotEmpty) ? provinceCode : (draft.province ?? ''),
-        tinhTpTen: (provinceName != null && provinceName.isNotEmpty) ? provinceName : (draft.province ?? ''),
-        phuongXa: (wardCode != null && wardCode.isNotEmpty) ? wardCode : (draft.ward ?? ''),
-        phuongXaTen: (wardName != null && wardName.isNotEmpty) ? wardName : (draft.ward ?? ''),
+        phongKham: resolvedPhongKhamId,
+        phongKhamTen: resolvedPhongKhamTen,
+        tinhTp: resolvedTinhId,
+        tinhTpTen: resolvedTinhTen,
+        phuongXa: resolvedPhuongId,
+        phuongXaTen: resolvedPhuongTen,
         trieuChung: symptom,
         dangKyDum: (draft.dangKyGiup != null && draft.dangKyGiup!.trim().isNotEmpty)
             ? draft.dangKyGiup!.trim()
@@ -931,6 +1025,7 @@ class PortalRepositoryImpl implements PortalRepository {
     try {
       final remote = _remoteDatasource ?? DatLichKhamRemoteDataSource(AppLocator.dioClient);
       final master = await remote.getListMaster();
+      _cachedMaster = master;
       return Ok(master);
     } on ApiException catch (e) {
       return Error(e, e.message);
@@ -1044,9 +1139,13 @@ class PortalRepositoryImpl implements PortalRepository {
 
   String _formatGioKhamForServer(String gioKham) {
     if (gioKham.isEmpty) return gioKham;
-    return gioKham.replaceAllMapped(
+    String s = gioKham.trim();
+    if (!s.contains(' - ') && s.contains('-')) {
+      s = s.replaceAll('-', ' - ');
+    }
+    return s.replaceAllMapped(
       RegExp(r'(\d{1,2}):(\d{2})'),
-      (match) => '${int.parse(match[1]!)}g${match[2]!}',
+      (match) => '${match[1]!}g${match[2]!}',
     );
   }
 

@@ -366,6 +366,18 @@ class PatientProfileCreateViewModel extends BasePortalViewModel {
             _serverPhongKhamList = data.listPhongKham;
           }
           masterError = null;
+
+          // Khởi tạo ngày và khung giờ khám khả dụng đầu tiên nếu chưa chọn
+          if (selectedDate == null) {
+            final dates = getAvailableDates();
+            if (dates.isNotEmpty) {
+              selectedDate = dates.first;
+              final slots = getSlotsForDate(dates.first);
+              if (slots.isNotEmpty) {
+                selectedTime = slots.first;
+              }
+            }
+          }
         },
         error: (_, message) {
           masterError = message;
@@ -615,28 +627,33 @@ class PatientProfileCreateViewModel extends BasePortalViewModel {
     //   1. Có mã từ profile.maBN hoặc _selectedMaHS
     //   2. Không bắt đầu bằng 'T' (mã tạm)
     //   3. KHÁC với số CCCD/Hộ chiếu (profile.identifier)
-    final candidateMa = (profile.maBN != null && profile.maBN!.trim().isNotEmpty)
-        ? profile.maBN!.trim()
-        : (_selectedMaHS ?? '');
-    final cccdOrPassport = (profile.identifier.isNotEmpty && profile.identifier != 'N/A')
+    final rawMaSo = (profile.maSo != null && profile.maSo!.isNotEmpty && profile.maSo != 'N/A')
+        ? profile.maSo!.trim()
+        : (profile.maBN != null && profile.maBN!.trim().isNotEmpty ? profile.maBN!.trim() : '');
+    final rawIdentifier = (profile.identifier.isNotEmpty && profile.identifier != 'N/A')
         ? profile.identifier.trim()
         : '';
 
-    final isReal = candidateMa.isNotEmpty &&
-        !candidateMa.toUpperCase().startsWith('T') &&
-        candidateMa != cccdOrPassport;
+    // Nếu identifier trùng với maSo (dữ liệu cũ bị gán nhầm MaBN vào cả 2 ô)
+    // -> Xem đó là MaBN, ô CCCD để trống!
+    final String cccdVal;
+    final String maBNVal;
+    if (rawIdentifier.isNotEmpty && rawIdentifier == rawMaSo) {
+      cccdVal = '';
+      maBNVal = rawMaSo;
+    } else {
+      cccdVal = rawIdentifier;
+      maBNVal = rawMaSo;
+    }
+
+    final isReal = maBNVal.isNotEmpty && !maBNVal.toUpperCase().startsWith('T');
     _hasRealMaBN = isReal;
-    _maBN = isReal ? candidateMa : null;
+    _maBN = isReal ? maBNVal : null;
     _hospitalSnapshot = null; // Chưa có snapshot — sẽ fetch khi cần
     _compareSourceIsSavedProfile = true;
 
     // Gán mã bệnh nhân vào đúng controller ô Mã BN
-    patientCodeController.text = _maBN ?? '';
-
-    // Số CCCD / Hộ chiếu: Luôn gán đúng vào ô Số CCCD / Hộ Chiếu (trừ khi trùng với MaBN)
-    final cccdVal = (profile.identifier.isNotEmpty && profile.identifier != 'N/A' && profile.identifier != _maBN)
-        ? profile.identifier
-        : ((profile.identifier.isNotEmpty && profile.identifier != 'N/A' && !isReal) ? profile.identifier : '');
+    patientCodeController.text = maBNVal;
 
     final formattedDob = (profile.dateOfBirth != null && profile.dateOfBirth!.isNotEmpty)
         ? (DateTimeConverter.toVnDate(profile.dateOfBirth) ?? profile.dateOfBirth!)
@@ -1245,6 +1262,16 @@ class PatientProfileCreateViewModel extends BasePortalViewModel {
     // 13. Bổ sung thông tin nếu phiếu gốc bị thiếu (tra từ savedProfiles hoặc API bệnh viện)
     _enrichTicketDataAsync(ticket, maBNVal, cccdVal);
 
+    // 14. Khởi tạo ngày và khung giờ khám hợp lệ cho lượt đăng ký mới
+    final availableDates = getAvailableDates();
+    if (availableDates.isNotEmpty) {
+      selectedDate = availableDates.first;
+      final availableSlots = getSlotsForDate(availableDates.first);
+      if (availableSlots.isNotEmpty) {
+        selectedTime = availableSlots.first;
+      }
+    }
+
     fullNameError = null;
     birthYearError = null;
     phoneError = null;
@@ -1462,80 +1489,90 @@ class PatientProfileCreateViewModel extends BasePortalViewModel {
   // Generate selectable dates skipping Sundays and holidays
   List<DateTime> getAvailableDates() {
     final master = masterData;
+    final List<DateTime> rawDates = [];
     if (master != null && master.listNgayKham.isNotEmpty) {
-      final List<DateTime> result = [];
       for (final ngayDto in master.listNgayKham) {
-        final date = DateTime.tryParse(ngayDto.id);
-        if (date != null) result.add(date);
+        final date = DateTime.tryParse(ngayDto.id)?.toLocal();
+        if (date != null) {
+          rawDates.add(DateTime(date.year, date.month, date.day));
+        }
       }
-      if (result.isNotEmpty) return result;
     }
-    // Fallback: tự generate dựa theo logic local
-    final List<DateTime> list = [];
-    DateTime current = DateTime.now();
-    for (int i = 0; i < 30; i++) {
-      final date = current.add(Duration(days: i));
-      if (date.weekday == DateTime.sunday) continue;
-      if (isHoliday2026(date)) continue;
-      if (i == 0) {
-        final slots = getSlotsForDate(date);
-        if (slots.isEmpty) continue;
+    if (rawDates.isEmpty) {
+      // Fallback: tự generate dựa theo logic local
+      final current = DateTime.now();
+      for (int i = 0; i < 30; i++) {
+        final date = current.add(Duration(days: i));
+        final cleanDate = DateTime(date.year, date.month, date.day);
+        if (cleanDate.weekday == DateTime.sunday) continue;
+        if (isHoliday2026(cleanDate)) continue;
+        rawDates.add(cleanDate);
       }
-      list.add(date);
     }
-    return list;
+
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+
+    // Lọc bỏ ngày quá khứ và ngày hôm nay nếu ĐÃ HẾT TẤT CẢ KHUNG GIỜ KHÁM
+    return rawDates.where((d) {
+      if (d.isBefore(today)) return false;
+      if (d.isAtSameMomentAs(today)) {
+        final slotsToday = getSlotsForDate(d);
+        if (slotsToday.isEmpty) return false;
+      }
+      return true;
+    }).toList();
   }
 
-  // Get selectable time slots
-  DateTime? _parseSlotEndTime(String slot, DateTime baseDate) {
+  // Parse slot start time (e.g. "07g00", "7g", "07:00")
+  DateTime? _parseSlotStartTime(String slot, DateTime baseDate) {
     try {
       final parts = slot.split('-');
-      if (parts.length > 1) {
-        final endPart = parts[1].trim();
-        final match = RegExp(r'(\d{1,2})\s*(?:[g:h]\s*(\d{1,2}))?').firstMatch(endPart.toLowerCase());
-        if (match != null) {
-          final hr = int.parse(match.group(1)!);
-          final minStr = match.group(2);
-          final min = (minStr != null && minStr.isNotEmpty) ? int.parse(minStr) : 0;
-          return DateTime(baseDate.year, baseDate.month, baseDate.day, hr, min);
-        }
-      } else {
-        final match = RegExp(r'(\d{1,2})\s*(?:[g:h]\s*(\d{1,2}))?').firstMatch(parts[0].toLowerCase().trim());
-        if (match != null) {
-          final hr = int.parse(match.group(1)!);
-          final minStr = match.group(2);
-          final min = (minStr != null && minStr.isNotEmpty) ? int.parse(minStr) : 0;
-          return DateTime(baseDate.year, baseDate.month, baseDate.day, hr, min).add(const Duration(minutes: 30));
-        }
+      final startPart = parts[0].trim().toLowerCase();
+      final match = RegExp(r'(\d{1,2})\s*(?:[g:h:]\s*(\d{1,2}))?').firstMatch(startPart);
+      if (match != null) {
+        final hr = int.parse(match.group(1)!);
+        final minStr = match.group(2);
+        final min = (minStr != null && minStr.isNotEmpty) ? int.parse(minStr) : 0;
+        return DateTime(baseDate.year, baseDate.month, baseDate.day, hr, min);
       }
     } catch (_) {}
     return null;
   }
 
+
   // Get selectable time slots
   List<String> getSlotsForDate(DateTime date) {
-    final master = masterData;
-    if (master != null) {
-      final dateIso = _dateToIsoKey(date);
-      final slots = master.getSlotsForDate(dateIso);
-      if (slots.isNotEmpty) return slots;
-    }
-    // Fallback local
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
     final target = DateTime(date.year, date.month, date.day);
     if (target.isBefore(today)) return [];
-    const fallbackSlots = [
-      '7g00 - 7g30', '7g30 - 8g00', '8g00 - 8g30', '8g30 - 9g00', '9g00 - 9g30',
-      '9g30 - 10g00', '10g00 - 10g30', '10g30 - 11g00', '11g00 - 11g30',
-      '13g00 - 13g30', '13g30 - 14g00', '14g00 - 14g30', '14g30 - 15g00', '15g00 - 15g30',
-      '15g30 - 16g00', '16g00 - 16g30',
-    ];
-    if (target.isAfter(today)) return fallbackSlots;
-    return fallbackSlots.where((slot) {
-      final slotEndTime = _parseSlotEndTime(slot, now);
-      if (slotEndTime == null) return true;
-      return !now.isAfter(slotEndTime.add(const Duration(minutes: 15)));
+
+    List<String> rawSlots = [];
+    final master = masterData;
+    if (master != null) {
+      final dateIso = _dateToIsoKey(date);
+      rawSlots = master.getSlotsForDate(dateIso);
+    }
+    if (rawSlots.isEmpty) {
+      rawSlots = const [
+        '07g00 - 07g30', '07g30 - 08g00', '08g00 - 08g30', '08g30 - 09g00', '09g00 - 09g30',
+        '09g30 - 10g00', '10g00 - 10g30', '10g30 - 11g00', '11g00 - 11g30',
+        '13g00 - 13g30', '13g30 - 14g00', '14g00 - 14g30', '14g30 - 15g00', '15g00 - 15g30',
+        '15g30 - 16g00', '16g00 - 16g30',
+      ];
+    }
+
+    // Nếu là ngày trong tương lai (ngày mai trở đi) -> Luôn hợp lệ tất cả slots
+    if (target.isAfter(today)) return rawSlots;
+
+    // Nếu là ngày HÔM NAY -> LỌC BỎ CÁC KHUNG GIỜ ĐÃ QUA!
+    // Server logic: DatLichKhamLogic.cs:L42: if (ngayGioKham.AddMinutes(15) < DateTime.Now) reject!
+    // Vì vậy chỉ giữ lại các khung giờ mà slotStartTime + 15 phút >= now
+    return rawSlots.where((slot) {
+      final slotStartTime = _parseSlotStartTime(slot, now);
+      if (slotStartTime == null) return true;
+      return !now.isAfter(slotStartTime.add(const Duration(minutes: 15)));
     }).toList();
   }
 
@@ -1552,31 +1589,24 @@ class PatientProfileCreateViewModel extends BasePortalViewModel {
     if (ticketDay.isAfter(today)) return true;
     
     // Nếu là ngày hôm nay:
-    // 1. Nếu slot này nằm trong danh sách DicNgayGioKham của server trả về cho ngày hôm nay
-    //    -> Server đã kiểm tra và cho phép đặt
-    final master = masterData;
-    if (master != null) {
-      final dateIso = _dateToIsoKey(selectedDate!);
-      final validSlots = master.getSlotsForDate(dateIso);
-      if (validSlots.contains(selectedTime)) {
-        return true;
-      }
+    // Kiểm tra giờ bắt đầu của khung giờ: nếu quá 15 phút so với giờ bắt đầu thì không cho đặt
+    final slotStartTime = _parseSlotStartTime(selectedTime!, now);
+    if (slotStartTime != null) {
+      return !now.isAfter(slotStartTime.add(const Duration(minutes: 15)));
     }
     
-    // 2. Kiểm tra giờ kết thúc của slot (có cộng thêm 15 phút đệm phòng trường hợp người dùng thao tác)
-    final slotEndTime = _parseSlotEndTime(selectedTime!, now);
-    if (slotEndTime != null) {
-      return !now.isAfter(slotEndTime.add(const Duration(minutes: 15)));
-    }
-    
-    // Nếu không parse được thì không chặn oan, để server xử lý
     return true;
   }
 
   Future<Result<MedicalTicketEntity>> _continueFlow() async {
-    // 1. Validate slot one last time to prevent time drift bookings
+    // 1. Kiểm tra ngày và giờ khám
+    if (selectedDate == null || selectedTime == null) {
+      return Error(Exception('ValidationError'), 'Vui lòng chọn ngày khám và khung giờ khám.');
+    }
+
+    // 2. Validate slot one last time to prevent time drift bookings
     if (!validateSelectedSlot()) {
-      return Error(Exception('TimeExpired'), 'Khung giờ khám được chọn đã trôi qua. Vui lòng chọn khung giờ khác.');
+      return Error(Exception('TimeExpired'), 'Khung giờ khám "$selectedTime" đã trôi qua. Vui lòng chọn khung giờ khác.');
     }
 
     if (registerForSomeoneElse && dangKyGiupController.text.trim().isEmpty) {

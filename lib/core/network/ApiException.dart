@@ -51,43 +51,68 @@ sealed class ApiException implements Exception {
             errorMessage = errorCode.message;
           }
 
-          // Ưu tiên 2: có ErrorMessage riêng -> override message hiển thị,
-          // nhưng vẫn giữ errorCode ở trên nếu có, để category không bị mất
-          final rawErrorMessage = data['ErrorMessage'];
+          // Ưu tiên 2: có ErrorMessage riêng -> override message hiển thị
+          final rawErrorMessage = data['ErrorMessage'] ?? data['errorMessage'];
           if (rawErrorMessage != null &&
               rawErrorMessage.toString().trim().isNotEmpty) {
-            errorMessage = rawErrorMessage.toString();
+            errorMessage = rawErrorMessage.toString().trim();
           }
-          // Ưu tiên 3: fallback message thông thường
+          // Ưu tiên 3: kiểm tra ASP.NET Core Validation Problem Details "errors" dictionary
+          else if (data['errors'] is Map) {
+            final errMap = data['errors'] as Map;
+            final list = <String>[];
+            errMap.forEach((k, v) {
+              if (v is List) {
+                list.addAll(v.map((e) => '$k: $e'));
+              } else if (v != null) {
+                list.add('$k: $v');
+              }
+            });
+            if (list.isNotEmpty) {
+              errorMessage = list.join('\n');
+            }
+          }
+          // Ưu tiên 4: detail hoặc title từ RFC 7807 Problem Details
+          else if (data['detail'] != null && data['detail'].toString().trim().isNotEmpty) {
+            errorMessage = data['detail'].toString().trim();
+          }
+          else if (data['title'] != null && data['title'].toString().trim().isNotEmpty) {
+            errorMessage = data['title'].toString().trim();
+          }
+          // Ưu tiên 5: fallback message thông thường
           else if (errorCode == null &&
               data['message'] != null &&
               data['message'].toString().trim().isNotEmpty) {
-            errorMessage = data['message'].toString();
+            errorMessage = data['message'].toString().trim();
           }
+        } else if (data is String && data.trim().isNotEmpty) {
+          errorMessage = data.trim();
         }
+
+        final statusPrefix = statusCode != null ? '[Mã $statusCode] ' : '';
 
         switch (statusCode) {
           case 400:
             return BadRequestException(
-              errorMessage,
+              '$statusPrefix$errorMessage',
               statusCode: statusCode,
               errorCode: errorCode,
             );
           case 401:
             return UnauthorizedException(
-              errorMessage,
+              '$statusPrefix$errorMessage',
               statusCode: statusCode,
               errorCode: errorCode,
             );
           case 403:
             return ForbiddenException(
-              errorMessage,
+              '$statusPrefix$errorMessage',
               statusCode: statusCode,
               errorCode: errorCode,
             );
           case 404:
             return NotFoundException(
-              errorMessage,
+              '$statusPrefix$errorMessage',
               statusCode: statusCode,
               errorCode: errorCode,
             );
@@ -97,14 +122,14 @@ sealed class ApiException implements Exception {
           case 504:
             return ServerException(
               errorMessage.isNotEmpty && errorMessage != 'Đã xảy ra lỗi từ hệ thống.'
-                  ? errorMessage
+                  ? '$statusPrefix$errorMessage'
                   : 'Máy chủ bệnh viện đang bận hoặc gặp sự cố (Mã: $statusCode). Vui lòng thử lại sau.',
               statusCode: statusCode,
               errorCode: errorCode,
             );
           default:
             return UnknownException(
-              errorMessage,
+              '$statusPrefix$errorMessage',
               statusCode: statusCode,
               errorCode: errorCode,
             );

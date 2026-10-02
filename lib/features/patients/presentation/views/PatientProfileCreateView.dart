@@ -450,9 +450,14 @@ class _PatientProfileCreateViewState extends State<PatientProfileCreateView> {
     final ngayCapStr = DateTimeConverter.toVnDate(dto.ngayCap) ?? 'Chưa có thông tin';
     final ngaySinhStr = DateTimeConverter.toVnDate(dto.ngaySinh) ?? 'Chưa có thông tin';
     final hoTenStr = dto.hoTen.isNotEmpty ? dto.hoTen : 'Chưa có thông tin';
-    final gioiTinhStr = (dto.gioiTinh != null && dto.gioiTinh!.isNotEmpty && dto.gioiTinh != 'null')
-        ? dto.gioiTinh!
-        : 'Chưa có thông tin';
+    final rawGender = dto.gioiTinh?.trim().toLowerCase() ?? '';
+    final gioiTinhStr = (rawGender == '1' || rawGender == 'nữ' || rawGender == 'nu' || rawGender == 'female')
+        ? 'Nữ'
+        : (rawGender == '0' || rawGender == 'nam' || rawGender == 'male')
+            ? 'Nam'
+            : (dto.gioiTinh != null && dto.gioiTinh!.isNotEmpty && dto.gioiTinh != 'null'
+                ? dto.gioiTinh!
+                : 'Chưa có thông tin');
     final sdtStr = (dto.soDienThoai != null && dto.soDienThoai!.isNotEmpty && dto.soDienThoai != 'null')
         ? dto.soDienThoai!
         : 'Chưa có thông tin';
@@ -687,6 +692,11 @@ class _PatientProfileCreateViewState extends State<PatientProfileCreateView> {
               userDraft: draft,
               role: _viewModel.role,
               department: _viewModel.selectedDepartment,
+              departmentId: _viewModel.selectedClinicId,
+              provinceCode: _viewModel.selectedProvinceCode,
+              provinceName: _viewModel.selectedProvinceName ?? _viewModel.provinceController.text.trim(),
+              wardCode: _viewModel.selectedWardCode,
+              wardName: _viewModel.selectedWardName ?? _viewModel.wardController.text.trim(),
               selectedDate: _viewModel.formattedSelectedDate,
               selectedTime: _viewModel.selectedTime,
               symptom: _viewModel.symptomController.text.trim(),
@@ -710,7 +720,14 @@ class _PatientProfileCreateViewState extends State<PatientProfileCreateView> {
         return StatefulBuilder(
           builder: (context, setModalState) {
             final dates = _viewModel.getAvailableDates();
-            
+            if (_viewModel.selectedDate == null && dates.isNotEmpty) {
+              _viewModel.selectedDate = dates.first;
+              final slots = _viewModel.getSlotsForDate(dates.first);
+              if (slots.isNotEmpty) {
+                _viewModel.selectedTime = slots.first;
+              }
+            }
+
             return Container(
               decoration: const BoxDecoration(
                 color: Colors.white,
@@ -779,8 +796,12 @@ class _PatientProfileCreateViewState extends State<PatientProfileCreateView> {
                               setModalState(() {
                                 _viewModel.selectedDate = date;
                                 final slots = _viewModel.getSlotsForDate(date);
-                                if (slots.isNotEmpty && !slots.contains(_viewModel.selectedTime)) {
-                                  _viewModel.selectedTime = slots.first;
+                                if (slots.isNotEmpty) {
+                                  if (_viewModel.selectedTime == null || !slots.contains(_viewModel.selectedTime)) {
+                                    _viewModel.selectedTime = slots.first;
+                                  }
+                                } else {
+                                  _viewModel.selectedTime = null;
                                 }
                               });
                               setState(() {});
@@ -839,39 +860,62 @@ class _PatientProfileCreateViewState extends State<PatientProfileCreateView> {
                         ),
                       )
                     else ...[
-                      Wrap(
-                        spacing: 8,
-                        runSpacing: 8,
-                        children: _viewModel.getSlotsForDate(_viewModel.selectedDate!).map((slot) {
-                          final isSelected = _viewModel.selectedTime == slot;
-                          return GestureDetector(
-                            onTap: () {
-                              setModalState(() {
-                                _viewModel.selectedTime = slot;
-                              });
-                              setState(() {});
-                            },
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                              decoration: BoxDecoration(
-                                color: isSelected ? const Color(0xFFEBF3FF) : Colors.white,
-                                borderRadius: BorderRadius.circular(8),
-                                border: Border.all(
-                                  color: isSelected ? const Color(0xFF0D6EFD) : const Color(0xFFE2E8F0),
-                                  width: isSelected ? 1.5 : 1,
+                      Builder(
+                        builder: (context) {
+                          final availableSlots = _viewModel.getSlotsForDate(_viewModel.selectedDate!);
+                          if (availableSlots.isEmpty) {
+                            return const Center(
+                              child: Padding(
+                                padding: EdgeInsets.symmetric(vertical: 24),
+                                child: Column(
+                                  children: [
+                                    Icon(Icons.access_time_filled, color: Colors.orange, size: 36),
+                                    SizedBox(height: 8),
+                                    Text(
+                                      'Đã hết khung giờ khám cho ngày này.\nVui lòng chọn ngày khám khác.',
+                                      textAlign: TextAlign.center,
+                                      style: TextStyle(color: Color(0xFF64748B), fontSize: 13, fontWeight: FontWeight.w500),
+                                    ),
+                                  ],
                                 ),
                               ),
-                              child: Text(
-                                slot,
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.bold,
-                                  color: isSelected ? const Color(0xFF0D6EFD) : const Color(0xFF0F172A),
+                            );
+                          }
+                          return Wrap(
+                            spacing: 8,
+                            runSpacing: 8,
+                            children: availableSlots.map((slot) {
+                              final isSelected = _viewModel.selectedTime == slot;
+                              return GestureDetector(
+                                onTap: () {
+                                  setModalState(() {
+                                    _viewModel.selectedTime = slot;
+                                  });
+                                  setState(() {});
+                                },
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                  decoration: BoxDecoration(
+                                    color: isSelected ? const Color(0xFFEBF3FF) : Colors.white,
+                                    borderRadius: BorderRadius.circular(8),
+                                    border: Border.all(
+                                      color: isSelected ? const Color(0xFF0D6EFD) : const Color(0xFFE2E8F0),
+                                      width: isSelected ? 1.5 : 1,
+                                    ),
+                                  ),
+                                  child: Text(
+                                    slot,
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.bold,
+                                      color: isSelected ? const Color(0xFF0D6EFD) : const Color(0xFF0F172A),
+                                    ),
+                                  ),
                                 ),
-                              ),
-                            ),
+                              );
+                            }).toList(),
                           );
-                        }).toList(),
+                        },
                       ),
                     ],
                     const SizedBox(height: 24),

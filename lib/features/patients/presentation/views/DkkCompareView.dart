@@ -14,6 +14,11 @@ class DkkCompareArgs {
   final PatientProfileDraftEntity userDraft;
   final UserRole role;
   final String? department;
+  final String? departmentId;
+  final String? provinceCode;
+  final String? provinceName;
+  final String? wardCode;
+  final String? wardName;
   final String? selectedDate;
   final String? selectedTime;
   final String? symptom;
@@ -23,6 +28,11 @@ class DkkCompareArgs {
     required this.userDraft,
     required this.role,
     this.department,
+    this.departmentId,
+    this.provinceCode,
+    this.provinceName,
+    this.wardCode,
+    this.wardName,
     this.selectedDate,
     this.selectedTime,
     this.symptom,
@@ -51,6 +61,11 @@ class _DkkCompareViewState extends State<DkkCompareView> {
         repository: AppLocator.portalRepository,
         role: args.role,
         department: args.department,
+        departmentId: args.departmentId,
+        provinceCode: args.provinceCode,
+        provinceName: args.provinceName,
+        wardCode: args.wardCode,
+        wardName: args.wardName,
         selectedDate: args.selectedDate,
         selectedTime: args.selectedTime,
         symptom: args.symptom,
@@ -335,20 +350,22 @@ class _DkkCompareViewState extends State<DkkCompareView> {
   }
 
   List<_InfoRow> _buildSystemRows(DkkThongTinKhamModel model) => [
+        _InfoRow('Số CC/HC', model.systemCccd, model.maBhytHoacMaBnDiff),
+        _InfoRow('Ngày cấp', model.systemNgayCap, model.ngayCapDiff),
         _InfoRow('Họ tên', model.systemHoTen, model.hoTenDiff),
         _InfoRow('Ngày sinh', model.systemNgaySinh, model.ngaySinhDiff),
         _InfoRow('Giới tính', model.systemGioiTinh, model.gioiTinhDiff),
-        _InfoRow('Ngày cấp', model.systemNgayCap, model.ngayCapDiff),
         _InfoRow('Điện thoại', model.systemSoDienThoai, model.soDienThoaiDiff),
         _InfoRow('Tỉnh/Thành', model.systemTinhTpTen.isNotEmpty ? model.systemTinhTpTen : model.systemTinhTp, model.tinhTpDiff),
         _InfoRow('Phường/Xã', model.systemPhuongXaTen.isNotEmpty ? model.systemPhuongXaTen : model.systemPhuongXa, model.phuongXaDiff),
       ];
 
   List<_InfoRow> _buildUserRows(DkkThongTinKhamModel model) => [
+        _InfoRow('Số CC/HC', model.userCccd, model.maBhytHoacMaBnDiff),
+        _InfoRow('Ngày cấp', model.userNgayCap, model.ngayCapDiff),
         _InfoRow('Họ tên', model.userHoTen, model.hoTenDiff),
         _InfoRow('Ngày sinh', model.userNgaySinh, model.ngaySinhDiff),
         _InfoRow('Giới tính', model.userGioiTinh, model.gioiTinhDiff),
-        _InfoRow('Ngày cấp', model.userNgayCap, model.ngayCapDiff),
         _InfoRow('Điện thoại', model.userSoDienThoai, model.soDienThoaiDiff),
         _InfoRow('Tỉnh/Thành', model.userTinhTpTen.isNotEmpty ? model.userTinhTpTen : model.userTinhTp, model.tinhTpDiff),
         _InfoRow('Phường/Xã', model.userPhuongXaTen.isNotEmpty ? model.userPhuongXaTen : model.userPhuongXa, model.phuongXaDiff),

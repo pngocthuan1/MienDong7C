@@ -110,6 +110,8 @@ class DkkTimBenhNhanResponseDto {
 // ---------------------------------------------------------------------------
 class DkkKiemTraBenhNhanResponseDto {
   final String? maBN;
+  final bool? maBNDiff;
+  final bool? maBhytHoacMaBnDiff;
   final String? soDienThoai;
   final bool? soDienThoaiDiff;
   final bool? hoTenDiff;
@@ -121,6 +123,8 @@ class DkkKiemTraBenhNhanResponseDto {
 
   const DkkKiemTraBenhNhanResponseDto({
     this.maBN,
+    this.maBNDiff,
+    this.maBhytHoacMaBnDiff,
     this.soDienThoai,
     this.soDienThoaiDiff,
     this.hoTenDiff,
@@ -134,6 +138,8 @@ class DkkKiemTraBenhNhanResponseDto {
   factory DkkKiemTraBenhNhanResponseDto.fromJson(Map<String, dynamic> json) {
     return DkkKiemTraBenhNhanResponseDto(
       maBN: json['MaBN']?.toString() ?? json['mabn']?.toString(),
+      maBNDiff: json['MaBNDiff'] as bool? ?? json['maBNDiff'] as bool?,
+      maBhytHoacMaBnDiff: json['MaBhytHoacMaBnDiff'] as bool? ?? json['maBhytHoacMaBnDiff'] as bool?,
       soDienThoai: json['SoDienThoai']?.toString() ?? json['sdt']?.toString(),
       soDienThoaiDiff: json['SoDienThoaiDiff'] as bool? ?? json['soDienThoaiDiff'] as bool?,
       hoTenDiff: json['HoTenDiff'] as bool? ?? json['hoTenDiff'] as bool?,
@@ -146,6 +152,8 @@ class DkkKiemTraBenhNhanResponseDto {
   }
 
   bool get hasDiff =>
+      (maBNDiff ?? false) ||
+      (maBhytHoacMaBnDiff ?? false) ||
       (soDienThoaiDiff ?? false) ||
       (hoTenDiff ?? false) ||
       (gioiTinhDiff ?? false) ||
@@ -228,13 +236,24 @@ class DkkNgayKhamDto {
 }
 
 class DkkGioKhamSlotDto {
+  final String id;
   final int tuGio;
   final int tuPhut;
   final int denGio;
   final int denPhut;
   final String display;
-  DkkGioKhamSlotDto({required this.tuGio, required this.tuPhut, required this.denGio, required this.denPhut, required this.display});
+
+  DkkGioKhamSlotDto({
+    this.id = '',
+    required this.tuGio,
+    required this.tuPhut,
+    required this.denGio,
+    required this.denPhut,
+    required this.display,
+  });
+
   factory DkkGioKhamSlotDto.fromJson(Map<String, dynamic> json) => DkkGioKhamSlotDto(
+    id: json['Id']?.toString() ?? json['id']?.toString() ?? '',
     tuGio: (json['TuGio'] as num?)?.toInt() ?? (json['tuGio'] as num?)?.toInt() ?? 0,
     tuPhut: (json['TuPhut'] as num?)?.toInt() ?? (json['tuPhut'] as num?)?.toInt() ?? 0,
     denGio: (json['DenGio'] as num?)?.toInt() ?? (json['denGio'] as num?)?.toInt() ?? 0,
@@ -311,8 +330,36 @@ class DkkListMasterDto {
       (k) => k == ngayIso || k.startsWith(ngayIso.substring(0, 10)),
       orElse: () => '',
     );
-    if (key.isEmpty) return listGioKham.map((e) => e.display).toList();
-    return dicNgayGioKham[key] ?? [];
+    final rawSlots = key.isNotEmpty ? (dicNgayGioKham[key] ?? []) : <String>[];
+    final sourceList = rawSlots.isNotEmpty ? rawSlots : listGioKham.map((e) => e.display).toList();
+
+    return sourceList.map((raw) {
+      final matched = listGioKham.where((s) => s.id == raw || s.display == raw).firstOrNull;
+      if (matched != null && matched.display.isNotEmpty) {
+        return _formatToDisplayString(matched.display);
+      }
+      return _formatToDisplayString(raw);
+    }).toList();
+  }
+
+  static String _formatToDisplayString(String raw) {
+    final trimmed = raw.trim();
+    if (trimmed.contains('g') && trimmed.contains(' - ')) return trimmed;
+    final parts = trimmed.split('-');
+    if (parts.length >= 2) {
+      final start = parts[0].trim();
+      final end = parts[1].trim();
+      final sMatch = RegExp(r'(\d{1,2}):(\d{2})').firstMatch(start);
+      final eMatch = RegExp(r'(\d{1,2}):(\d{2})').firstMatch(end);
+      if (sMatch != null && eMatch != null) {
+        final sHr = sMatch.group(1)!.padLeft(2, '0');
+        final sMin = sMatch.group(2)!;
+        final eHr = eMatch.group(1)!.padLeft(2, '0');
+        final eMin = eMatch.group(2)!;
+        return '${sHr}g$sMin - ${eHr}g$eMin';
+      }
+    }
+    return trimmed;
   }
 }
 

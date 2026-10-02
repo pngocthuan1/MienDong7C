@@ -16,8 +16,52 @@ import 'package:benhvien7c/features/patients/domain/entities/PatientProfileDraft
 import 'package:benhvien7c/features/patients/domain/entities/MedicalTicketEntity.dart';
 import 'package:benhvien7c/core/commands/result.dart';
 
+import 'package:benhvien7c/features/patients/domain/entities/DkkThongTinKhamModel.dart';
+import 'package:benhvien7c/features/patients/presentation/viewmodels/DkkCompareViewModel.dart';
+
 class FakePortalRepository implements PortalRepository {
   DkkTimBenhNhanResponseDto? mockSearchResponse;
+  PatientProfileDraftEntity? lastCreatedDraft;
+  String? lastDeptId;
+  String? lastProvinceCode;
+  String? lastWardCode;
+
+  @override
+  Future<Result<MedicalTicketEntity>> createMedicalTicket(
+    UserRole role,
+    PatientProfileDraftEntity draft, {
+    String? department,
+    String? departmentId,
+    String? provinceCode,
+    String? provinceName,
+    String? wardCode,
+    String? wardName,
+    String? selectedDate,
+    String? selectedTime,
+    String? symptom,
+  }) async {
+    lastCreatedDraft = draft;
+    lastDeptId = departmentId;
+    lastProvinceCode = provinceCode;
+    lastWardCode = wardCode;
+    return const Ok(MedicalTicketEntity(
+      hospitalName: 'BV Quân Dân Y Miền Đông',
+      hospitalAddress: '50 Lê Văn Việt',
+      ticketTitle: 'Phiếu khám',
+      roomName: 'P01',
+      serviceName: 'Khám bệnh',
+      queueNumber: '001',
+      scheduleText: 'Thứ 5, 01/10/2026',
+      patientName: 'LÊ NGUYỄN GIA HƯNG',
+      gender: 'Nam',
+      birthYear: '1989',
+      address: '50 Lê Văn Việt',
+      insuranceText: 'Có BHYT',
+      patientCode: '07641190',
+      createdAtText: '01/10/2026',
+      note: 'Note',
+    ));
+  }
 
   @override
   Future<Result<DkkTimBenhNhanResponseDto?>> timBenhNhanByCccdHc(String soCcHc) async {
@@ -383,6 +427,199 @@ void main() {
           reason: 'Ngày sinh được tự động làm giàu từ hồ sơ bệnh viện');
       expect(vm.provinceController.text, 'Thành phố Hồ Chí Minh');
       expect(vm.wardController.text, 'Phường Đông Hòa');
+    });
+
+    test('7. Khắc phục lỗi TimeExpired: Lọc bỏ khung giờ đã qua trong ngày và tự khởi tạo ngày giờ hợp lệ', () {
+      final repo = FakePortalRepository();
+      final vm = PatientProfileCreateViewModel(repo, AppSessionStore.instance);
+
+      final now = DateTime.now();
+      final today = DateTime(now.year, now.month, now.day);
+      final tomorrow = today.add(const Duration(days: 1));
+
+      // 1. Ngày mai -> Luôn hợp lệ với mọi khung giờ
+      vm.selectedDate = tomorrow;
+      vm.selectedTime = '07g00 - 07g30';
+      expect(vm.validateSelectedSlot(), isTrue,
+          reason: 'Khung giờ ở ngày trong tương lai luôn hợp lệ');
+
+      // 2. Ngày hôm qua -> Luôn không hợp lệ
+      vm.selectedDate = today.subtract(const Duration(days: 1));
+      vm.selectedTime = '07g00 - 07g30';
+      expect(vm.validateSelectedSlot(), isFalse,
+          reason: 'Khung giờ ở ngày quá khứ phải bị từ chối');
+
+      // 3. Khung giờ sáng sớm 06:00 của ngày hôm nay (nếu hiện tại đã trôi qua sau 06:15)
+      final earlyMorning = DateTime(now.year, now.month, now.day, 6, 0);
+      if (now.isAfter(earlyMorning.add(const Duration(minutes: 15)))) {
+        vm.selectedDate = today;
+        vm.selectedTime = '06g00 - 06g30';
+        expect(vm.validateSelectedSlot(), isFalse,
+            reason: 'Khung giờ sáng sớm đã trôi qua hơn 15 phút phải bị từ chối');
+        
+        // Xác nhận getSlotsForDate(today) tự động loại bỏ các khung giờ đã qua
+        final slotsToday = vm.getSlotsForDate(today);
+        expect(slotsToday.contains('06g00 - 06g30'), isFalse,
+            reason: 'getSlotsForDate không được chứa khung giờ đã hết hạn');
+      }
+
+      // 4. Bấm "Đăng ký lại" từ phiếu cũ: Hệ thống tự động chọn ngày khám và khung giờ khám mới hợp lệ
+      const oldTicket = MedicalTicketEntity(
+        hospitalName: 'Bệnh viện Quân Dân Y Miền Đông',
+        hospitalAddress: '50 Lê Văn Việt',
+        ticketTitle: 'PHIẾU ĐẶT LỊCH KHÁM',
+        roomName: 'Phòng 01',
+        serviceName: 'Khám bệnh',
+        queueNumber: '001',
+        scheduleText: 'Thứ 4, 30/09/2026',
+        patientName: 'LÊ NGUYỄN GIA HƯNG',
+        gender: 'Nam',
+        birthYear: '1989',
+        address: '50 Lê Văn Việt',
+        insuranceText: 'Có BHYT',
+        patientCode: '07641190',
+        createdAtText: '29/09/2026',
+        note: 'Ghi chú',
+      );
+
+      vm.prefillFromTicket(oldTicket);
+      expect(vm.selectedDate, isNotNull,
+          reason: 'Đăng ký lại phải tự động khởi tạo ngày khám mới');
+      expect(vm.selectedTime, isNotNull,
+          reason: 'Đăng ký lại phải tự động khởi tạo khung giờ khám mới');
+      expect(vm.validateSelectedSlot(), isTrue,
+          reason: 'Ngày giờ tự khởi tạo khi Đăng ký lại phải hợp lệ');
+    });
+
+    test('8. Luồng 3: Màn đối chiếu thông tin — Đầy đủ trường Số CC/HC, Giới tính viết hoa, cờ NgayCapDiff & maBhytHoacMaBnDiff chính xác, và submit an toàn không lỗi', () async {
+      final repo = FakePortalRepository();
+
+      const systemSnapshot = DkkTimBenhNhanResponseDto(
+        maBN: '07641190',
+        maBhytHoacMaBn: '082089008431',
+        hoTen: 'LÊ NGUYỄN GIA HƯNG',
+        ngaySinh: '1989-03-25T00:00:00',
+        ngayCap: '2021-10-20T00:00:00',
+        soCcHc: '082089008431',
+        gioiTinh: 'nam', // dữ liệu thô từ server dạng chữ thường
+        soDienThoai: '0902377251',
+        tinhTp: '79',
+        tinhTpTen: 'Thành phố Hồ Chí Minh',
+        phuongXa: '26830',
+        phuongXaTen: 'Phường Đông Hòa',
+      );
+
+      // Trường hợp 1: Người dùng để trống Ngày cấp và nhập giới tính chữ thường 'nam'
+      const userDraftEmptyNgayCap = PatientProfileDraftEntity(
+        identifier: '082089008431',
+        fullName: 'LÊ NGUYỄN GIA HƯNG',
+        birthYear: '1989',
+        gender: 'nam', // chữ thường
+        phoneNumber: '0988999888', // SĐT sửa khác
+        dateOfBirth: '25/03/1989',
+        cccdIssueDate: null, // để trống ngày cấp
+        province: 'Thành phố Hồ Chí Minh',
+        ward: 'Phường Đông Hòa',
+        maSo: '07641190',
+        maBN: '07641190',
+      );
+
+      final model1 = DkkThongTinKhamModel.compare(
+        system: systemSnapshot,
+        user: userDraftEmptyNgayCap,
+        isFromSavedProfile: true,
+      );
+
+      // 1. Kiểm tra trường Số CC/HC được map chính xác trên cả 2 bên
+      expect(model1.systemCccd, '082089008431');
+      expect(model1.userCccd, '082089008431');
+      expect(model1.maBhytHoacMaBnDiff, isFalse);
+
+      // 2. Kiểm tra chuẩn hóa Giới tính viết hoa chữ cái đầu: 'Nam', 'Nữ'
+      expect(model1.systemGioiTinh, 'Nam', reason: 'Giới tính hệ thống phải viết hoa "Nam"');
+      expect(model1.userGioiTinh, 'Nam', reason: 'Giới tính người dùng phải viết hoa "Nam"');
+      expect(model1.gioiTinhDiff, isFalse);
+
+      // 3. Kiểm tra cờ NgayCapDiff: Người dùng để trống ngày cấp còn hệ thống có -> BẮT BUỘC ĐÁNH DẤU DIFF = TRUE
+      expect(model1.ngayCapDiff, isTrue,
+          reason: 'Một bên rỗng và một bên có ngày cấp phải tính là Diff = true');
+
+      // 4. Kiểm tra SoDienThoaiDiff
+      expect(model1.soDienThoaiDiff, isTrue);
+
+      // 5. Kiểm tra khi serverDiff trả về kết quả (thậm chí server trả về NgayCapDiff: false do default bool),
+      // client compare vẫn giữ vững NgayCapDiff = true
+      final combinedModel = DkkThongTinKhamModel.fromServerCheck(
+        system: systemSnapshot,
+        user: userDraftEmptyNgayCap,
+        isFromSavedProfile: true,
+        serverDiff: const DkkKiemTraBenhNhanResponseDto(
+          soDienThoaiDiff: true,
+          ngayCapDiff: false, // server bool default
+        ),
+      );
+      expect(combinedModel.ngayCapDiff, isTrue,
+          reason: 'NgayCapDiff không bị ghi đè bởi false của serverDiff khi client đã phát hiện khác biệt');
+
+      // 6. Kiểm tra trường hợp sửa khác số CCCD: maBhytHoacMaBnDiff = true
+      const userDraftDiffCccd = PatientProfileDraftEntity(
+        identifier: '079089001234', // CCCD khác
+        fullName: 'LÊ NGUYỄN GIA HƯNG',
+        birthYear: '1989',
+        gender: 'Nam',
+        phoneNumber: '0902377251',
+        dateOfBirth: '25/03/1989',
+        cccdIssueDate: '20/10/2021',
+        province: 'Thành phố Hồ Chí Minh',
+        ward: 'Phường Đông Hòa',
+        maSo: '07641190',
+        maBN: '07641190',
+      );
+      final modelDiffCccd = DkkThongTinKhamModel.compare(
+        system: systemSnapshot,
+        user: userDraftDiffCccd,
+        isFromSavedProfile: false,
+      );
+      expect(modelDiffCccd.maBhytHoacMaBnDiff, isTrue,
+          reason: 'Khác CCCD phải đánh dấu maBhytHoacMaBnDiff = true');
+
+      // 7. Kiểm tra Submit từ DkkCompareViewModel: Cả 2 nút xác nhận đều truyền đầy đủ các trường bắt buộc
+      final compareVm = DkkCompareViewModel(
+        compareModel: model1,
+        userDraft: userDraftEmptyNgayCap,
+        repository: repo,
+        role: UserRole.customer,
+        department: 'Phòng khám 1 - Nội tổng quát',
+        departmentId: '49',
+        provinceCode: '79',
+        provinceName: 'Thành phố Hồ Chí Minh',
+        wardCode: '26830',
+        wardName: 'Phường Đông Hòa',
+        selectedDate: 'Thứ 5, 01/10/2026',
+        selectedTime: '07g00 - 07g30',
+        symptom: 'Đau đầu',
+      );
+
+      // Nút 1: Xác nhận bằng thông tin hệ thống
+      final resultSys = await compareVm.submit(true);
+      expect(resultSys is Ok<MedicalTicketEntity>, isTrue);
+      expect(repo.lastCreatedDraft, isNotNull);
+      expect(repo.lastCreatedDraft!.identifier, '082089008431');
+      expect(repo.lastCreatedDraft!.cccdIssueDate, '2021-10-20T00:00:00');
+      expect(repo.lastCreatedDraft!.gender, 'Nam');
+      expect(repo.lastDeptId, '49');
+      expect(repo.lastProvinceCode, '79');
+      expect(repo.lastWardCode, '26830');
+
+      // Nút 2: Xác nhận bằng thông tin người dùng nhập (dù user để trống ngày cấp, hệ thống tự bảo lưu an toàn từ snapshot)
+      final resultUser = await compareVm.submit(false);
+      expect(resultUser is Ok<MedicalTicketEntity>, isTrue);
+      expect(repo.lastCreatedDraft, isNotNull);
+      expect(repo.lastCreatedDraft!.identifier, '082089008431');
+      expect(repo.lastCreatedDraft!.cccdIssueDate, isNotNull,
+          reason: 'Ngày cấp được bảo lưu an toàn từ hệ thống để backend không bị lỗi null');
+      expect(repo.lastCreatedDraft!.gender, 'Nam');
+      expect(repo.lastDeptId, '49');
     });
   });
 }

@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:benhvien7c/core/network/ApiException.dart';
 import 'package:benhvien7c/core/network/ApiResponseDto.dart';
 import 'package:benhvien7c/core/network/DioClient.dart';
@@ -86,17 +87,26 @@ class DatLichKhamRemoteDataSource {
 
   // API 5: Đăng ký đặt lịch khám
   Future<int> dangKyKham(DangKyKhamRequestDto request) async {
-
     try {
+      final jsonBody = request.toJson();
+      if (kDebugMode) {
+        print('➡️ [POST /api/DatLichKham/DangKy] Request: $jsonBody');
+      }
       final response = await _dioClient.dio.post(
         '/api/DatLichKham/DangKy',
-        data: request.toJson(),
+        data: jsonBody,
       );
+      if (kDebugMode) {
+        print('⬅️ [POST /api/DatLichKham/DangKy] Response: Status ${response.statusCode} - Data: ${response.data}');
+      }
       final data = _extractData(response.data);
       if (data is num) return data.toInt();
       if (data is String) return int.tryParse(data) ?? 0;
       return 0;
     } on DioException catch (e) {
+      if (kDebugMode) {
+        print('❌ [POST /api/DatLichKham/DangKy] DioException: Status ${e.response?.statusCode} - Body: ${e.response?.data}');
+      }
       throw ApiException.fromDioError(e);
     }
   }
@@ -169,6 +179,15 @@ class DatLichKhamRemoteDataSource {
           responseDto.displayMessage,
           errorCode: responseDto.errorCode,
         );
+      }
+      // NẾU server trả về ErrorMessage kèm theo (ngay cả khi ErrorCode == 0 do ShowErrors default)
+      if (responseDto.errorMessage != null && responseDto.errorMessage!.trim().isNotEmpty) {
+        if (responseDto.data == null || responseDto.data == 0 || responseDto.data == '0') {
+          throw BusinessException(
+            responseDto.errorMessage!.trim(),
+            errorCode: responseDto.errorCode,
+          );
+        }
       }
       return responseDto.data;
     }
