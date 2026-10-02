@@ -4,6 +4,7 @@ import 'package:benhvien7c/core/navigation/AppNavigator.dart';
 import 'package:benhvien7c/features/auth/presentation/views/AuthFlowArguments.dart';
 import 'package:benhvien7c/features/patients/presentation/viewmodels/MedicalTicketViewModel.dart';
 import 'package:benhvien7c/features/patients/presentation/widgets/MedicalTicketBarcode.dart';
+import 'package:benhvien7c/core/utils/DateTimeConverter.dart';
 
 class MedicalTicketView extends StatefulWidget {
   const MedicalTicketView({required this.args, super.key});
@@ -135,11 +136,18 @@ class _MedicalTicketViewState extends State<MedicalTicketView> {
     final isExpanded = _viewModel.isExpanded;
     final canDelete = _viewModel.canDelete;
 
-    // Địa chỉ hiển thị
+    // Địa chỉ hiển thị (ưu tiên ghép từ Phường/Xã + Tỉnh/TP mà người dùng đã đăng ký)
     final addressText = [ticket.ward, ticket.province]
-        .where((s) => s != null && s.isNotEmpty)
+        .where((s) => s != null && s.trim().isNotEmpty)
         .join(', ');
-    final finalAddress = addressText.isNotEmpty ? addressText : ticket.address;
+    // Tuyệt đối không lấy địa chỉ bệnh viện cho địa chỉ người dùng
+    String finalAddress = addressText;
+    if (finalAddress.isEmpty &&
+        ticket.address.isNotEmpty &&
+        ticket.address != ticket.hospitalAddress &&
+        !ticket.address.contains('50 Lê Văn Việt')) {
+      finalAddress = ticket.address;
+    }
 
     return AppResponsiveContainer(
       appBar: AppBar(
@@ -325,11 +333,14 @@ class _MedicalTicketViewState extends State<MedicalTicketView> {
                       else if (ticket.insuranceText.isNotEmpty)
                         _DetailRow(label: 'Mã số/Thẻ', value: ticket.insuranceText),
                       if (ticket.ngayCap != null && ticket.ngayCap!.isNotEmpty)
-                        _DetailRow(label: 'Ngày cấp', value: ticket.ngayCap!),
+                        _DetailRow(
+                          label: 'Ngày cấp',
+                          value: DateTimeConverter.toVnDate(ticket.ngayCap) ?? ticket.ngayCap!,
+                        ),
                       _DetailRow(
                         label: 'Ngày sinh',
                         value: (ticket.dateOfBirth != null && ticket.dateOfBirth!.isNotEmpty)
-                            ? ticket.dateOfBirth!
+                            ? (DateTimeConverter.toVnDate(ticket.dateOfBirth) ?? ticket.dateOfBirth!)
                             : ticket.birthYear,
                       ),
                       _DetailRow(label: 'Giới tính', value: ticket.gender),
@@ -349,7 +360,10 @@ class _MedicalTicketViewState extends State<MedicalTicketView> {
                                   const Divider(color: Color(0xFFE2E8F0), thickness: 1),
                                   const SizedBox(height: 10),
 
-                                  _DetailRow(label: 'Ngày khám', value: ticket.scheduleText),
+                                  _DetailRow(
+                                    label: 'Ngày khám',
+                                    value: DateTimeConverter.formatScheduleForDisplay(ticket.scheduleText),
+                                  ),
                                   if (ticket.clinic != null && ticket.clinic!.isNotEmpty)
                                     _DetailRow(label: 'Phòng khám', value: ticket.clinic!)
                                   else if (ticket.department != null && ticket.department!.isNotEmpty)
@@ -391,7 +405,10 @@ class _MedicalTicketViewState extends State<MedicalTicketView> {
                                     const SizedBox(height: 10),
                                   ],
 
-                                  _DetailRow(label: 'Đăng ký lúc', value: ticket.createdAtText),
+                                  _DetailRow(
+                                    label: 'Đăng ký lúc',
+                                    value: DateTimeConverter.toVnDateTime(ticket.createdAtText, includeSeconds: true) ?? ticket.createdAtText,
+                                  ),
                                   if (ticket.dangKyGiup != null && ticket.dangKyGiup!.isNotEmpty)
                                     _DetailRow(label: 'Đăng ký giúp', value: ticket.dangKyGiup!),
                                 ],

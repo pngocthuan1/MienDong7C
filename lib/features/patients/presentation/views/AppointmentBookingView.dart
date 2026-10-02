@@ -10,6 +10,7 @@ import 'package:benhvien7c/features/patients/presentation/viewmodels/Appointment
 import 'package:benhvien7c/features/patients/presentation/widgets/PortalDrawer.dart';
 import 'package:benhvien7c/features/patients/presentation/views/TicketBarcodeScannerView.dart';
 import 'package:benhvien7c/features/patients/presentation/widgets/TicketPickerBottomSheet.dart';
+import 'package:benhvien7c/core/utils/DateTimeConverter.dart';
 
 class AppointmentBookingView extends StatefulWidget {
   const AppointmentBookingView({super.key});
@@ -243,7 +244,7 @@ class _AppointmentBookingViewState extends State<AppointmentBookingView> {
                     const SizedBox(width: 8),
                     Expanded(
                       child: Text(
-                        '${ticket.patientName.toUpperCase()} - ${(ticket.dateOfBirth != null && ticket.dateOfBirth!.isNotEmpty) ? ticket.dateOfBirth! : ticket.birthYear}',
+                        '${ticket.patientName.toUpperCase()} - ${(ticket.dateOfBirth != null && ticket.dateOfBirth!.isNotEmpty) ? (DateTimeConverter.toVnDate(ticket.dateOfBirth) ?? ticket.birthYear) : ticket.birthYear}',
                         style: const TextStyle(
                           fontSize: 17,
                           fontWeight: FontWeight.bold,
@@ -298,7 +299,7 @@ class _AppointmentBookingViewState extends State<AppointmentBookingView> {
                         const Icon(Icons.calendar_today_rounded, size: 18, color: Colors.black),
                         const SizedBox(width: 8),
                         Text(
-                          'Ngày khám: ${ticket.scheduleText}',
+                          'Ngày khám: ${DateTimeConverter.formatScheduleForDisplay(ticket.scheduleText)}',
                           style: const TextStyle(
                             fontSize: 15,
                             color: Color(0xFF1E293B),

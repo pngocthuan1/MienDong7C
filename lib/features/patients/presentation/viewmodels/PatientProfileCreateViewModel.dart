@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -5,6 +6,7 @@ import 'package:intl/intl.dart';
 import 'package:benhvien7c/core/commands/command.dart';
 import 'package:benhvien7c/core/commands/result.dart';
 import 'package:benhvien7c/core/dio/AppLocator.dart';
+import 'package:benhvien7c/core/services/TimeService.dart';
 import 'package:benhvien7c/core/utils/Validators.dart';
 import 'package:benhvien7c/core/utils/CccdParserHelper.dart';
 import 'package:benhvien7c/core/utils/AddressHelper.dart';
@@ -122,6 +124,58 @@ class PatientProfileCreateViewModel extends BasePortalViewModel {
   String? selectedDepartment = 'Phòng khám 1 - Nội tổng quát';
   DateTime? selectedDate;
   String? selectedTime;
+
+  /// Hằng số số phút cho phép đăng ký tính từ giờ bắt đầu ca khám (16 phút)
+  static const int kSoPhutKhoaCaKham = 16;
+  Timer? _realtimeRefreshTimer;
+  void Function(String message)? onSlotExpired;
+
+  /// Bắt đầu lắng nghe và tự động kiểm tra real-time khung giờ/ngày khám mỗi 15 giây
+  void startRealtimeValidation({void Function(String message)? onExpired}) {
+    if (onExpired != null) {
+      onSlotExpired = onExpired;
+    }
+    _realtimeRefreshTimer?.cancel();
+    _realtimeRefreshTimer = Timer.periodic(const Duration(seconds: 15), (_) {
+      _checkRealtimeSlotValidity();
+    });
+  }
+
+  void _checkRealtimeSlotValidity() {
+    if (isDisposed) return;
+    bool stateChanged = false;
+
+    // 1. Kiểm tra ngày khám đã chọn có còn khả dụng không
+    if (selectedDate != null) {
+      final availableDates = getAvailableDates();
+      final isDateValid = availableDates.any((d) =>
+          d.year == selectedDate!.year &&
+          d.month == selectedDate!.month &&
+          d.day == selectedDate!.day);
+
+      if (!isDateValid) {
+        selectedDate = null;
+        selectedTime = null;
+        stateChanged = true;
+        onSlotExpired?.call('Ngày khám hôm nay đã hết khung giờ khả dụng. Vui lòng chọn ngày khám khác.');
+      } else if (selectedTime != null) {
+        // 2. Nếu ngày còn, kiểm tra khung giờ đã chọn có còn khả dụng không
+        final availableSlots = getSlotsForDate(selectedDate!);
+        if (!availableSlots.contains(selectedTime)) {
+          final oldSlot = selectedTime!;
+          final displaySlot = DateTimeConverter.formatGioKhamForDisplay(oldSlot);
+          selectedTime = null;
+          stateChanged = true;
+          onSlotExpired?.call('Khung giờ "$displaySlot" đã trôi qua. Vui lòng chọn khung giờ khác.');
+        }
+      }
+    }
+
+    if (stateChanged) {
+      notifyListeners();
+    }
+  }
+
   bool saveProfile = false;
   bool _registerForSomeoneElse = false;
   bool get registerForSomeoneElse => _registerForSomeoneElse;
@@ -1500,7 +1554,7 @@ class PatientProfileCreateViewModel extends BasePortalViewModel {
     }
     if (rawDates.isEmpty) {
       // Fallback: tự generate dựa theo logic local
-      final current = DateTime.now();
+      final current = TimeService.now();
       for (int i = 0; i < 30; i++) {
         final date = current.add(Duration(days: i));
         final cleanDate = DateTime(date.year, date.month, date.day);
@@ -1510,7 +1564,7 @@ class PatientProfileCreateViewModel extends BasePortalViewModel {
       }
     }
 
-    final now = DateTime.now();
+    final now = TimeService.now();
     final today = DateTime(now.year, now.month, now.day);
 
     // Lọc bỏ ngày quá khứ và ngày hôm nay nếu ĐÃ HẾT TẤT CẢ KHUNG GIỜ KHÁM
@@ -1540,10 +1594,9 @@ class PatientProfileCreateViewModel extends BasePortalViewModel {
     return null;
   }
 
-
   // Get selectable time slots
   List<String> getSlotsForDate(DateTime date) {
-    final now = DateTime.now();
+    final now = TimeService.now();
     final today = DateTime(now.year, now.month, now.day);
     final target = DateTime(date.year, date.month, date.day);
     if (target.isBefore(today)) return [];
@@ -1567,19 +1620,21 @@ class PatientProfileCreateViewModel extends BasePortalViewModel {
     if (target.isAfter(today)) return rawSlots;
 
     // Nếu là ngày HÔM NAY -> LỌC BỎ CÁC KHUNG GIỜ ĐÃ QUA!
-    // Server logic: DatLichKhamLogic.cs:L42: if (ngayGioKham.AddMinutes(15) < DateTime.Now) reject!
-    // Vì vậy chỉ giữ lại các khung giờ mà slotStartTime + 15 phút >= now
+    // Server logic: DatLichKhamLogic.cs: if (ngayGioKham.AddMinutes(15) < DateTime.Now) reject!
+    // Với từng khung giờ trong DicNgayGioKham[ngày đó], parse giờ bắt đầu của khung giờ,
+    // cộng thêm kSoPhutKhoaCaKham = 16 phút. Nếu TimeService.now() vượt qua mốc đó, ẨN khung giờ này.
     return rawSlots.where((slot) {
       final slotStartTime = _parseSlotStartTime(slot, now);
       if (slotStartTime == null) return true;
-      return !now.isAfter(slotStartTime.add(const Duration(minutes: 15)));
+      final deadline = slotStartTime.add(const Duration(minutes: kSoPhutKhoaCaKham));
+      return now.isBefore(deadline);
     }).toList();
   }
 
   // Double checks if the selected slot is still valid (has not passed)
   bool validateSelectedSlot() {
     if (selectedDate == null || selectedTime == null) return false;
-    final now = DateTime.now();
+    final now = TimeService.now();
     final today = DateTime(now.year, now.month, now.day);
     final ticketDay = DateTime(selectedDate!.year, selectedDate!.month, selectedDate!.day);
     
@@ -1589,13 +1644,8 @@ class PatientProfileCreateViewModel extends BasePortalViewModel {
     if (ticketDay.isAfter(today)) return true;
     
     // Nếu là ngày hôm nay:
-    // Kiểm tra giờ bắt đầu của khung giờ: nếu quá 15 phút so với giờ bắt đầu thì không cho đặt
-    final slotStartTime = _parseSlotStartTime(selectedTime!, now);
-    if (slotStartTime != null) {
-      return !now.isAfter(slotStartTime.add(const Duration(minutes: 15)));
-    }
-    
-    return true;
+    final availableSlots = getSlotsForDate(selectedDate!);
+    return availableSlots.contains(selectedTime);
   }
 
   Future<Result<MedicalTicketEntity>> _continueFlow() async {
@@ -1606,7 +1656,8 @@ class PatientProfileCreateViewModel extends BasePortalViewModel {
 
     // 2. Validate slot one last time to prevent time drift bookings
     if (!validateSelectedSlot()) {
-      return Error(Exception('TimeExpired'), 'Khung giờ khám "$selectedTime" đã trôi qua. Vui lòng chọn khung giờ khác.');
+      final displaySlot = DateTimeConverter.formatGioKhamForDisplay(selectedTime!);
+      return Error(Exception('TimeExpired'), 'Khung giờ khám "$displaySlot" đã trôi qua. Vui lòng chọn khung giờ khác.');
     }
 
     if (registerForSomeoneElse && dangKyGiupController.text.trim().isEmpty) {
@@ -1726,6 +1777,7 @@ class PatientProfileCreateViewModel extends BasePortalViewModel {
 
   @override
   void dispose() {
+    _realtimeRefreshTimer?.cancel();
     dangKyGiupController.dispose();
     identifierController.dispose();
     fullNameController.dispose();

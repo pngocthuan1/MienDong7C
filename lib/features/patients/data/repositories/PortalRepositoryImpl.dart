@@ -594,6 +594,36 @@ class PortalRepositoryImpl implements PortalRepository {
           ? serverPhieu.maBN!.trim()
           : '';
 
+      final patientAddress = [resolvedPhuongTen, resolvedTinhTen]
+          .where((s) => s.trim().isNotEmpty)
+          .join(', ');
+
+      final formattedDob = DateTimeConverter.toVnDate(draft.dateOfBirth) ??
+          (draft.birthYear.isNotEmpty ? draft.birthYear : null);
+      final formattedNgayCap = DateTimeConverter.toVnDate(draft.cccdIssueDate) ?? draft.cccdIssueDate;
+
+      // Lưu metadata đăng ký gắn với ID phiếu để phục hồi chính xác khi tải lại từ server
+      if (bookingId > 0) {
+        final meta = {
+          'ticketId': bookingId.toString(),
+          'soCcHc': draft.identifier.trim(),
+          'ngayCap': formattedNgayCap,
+          'dateOfBirth': formattedDob,
+          'birthYear': draft.birthYear,
+          'gender': draft.gender,
+          'patientName': draft.fullName,
+          'phoneNumber': draft.phoneNumber,
+          'province': resolvedTinhTen.isNotEmpty ? resolvedTinhTen : (draft.province ?? ''),
+          'ward': resolvedPhuongTen.isNotEmpty ? resolvedPhuongTen : (draft.ward ?? ''),
+          'address': patientAddress,
+          'clinic': resolvedPhongKhamTen,
+          'department': resolvedPhongKhamTen,
+          'dangKyGiup': draft.dangKyGiup,
+          'symptom': symptom,
+        };
+        await _saveTicketMetadata(bookingId.toString(), meta);
+      }
+
       final ticket = MedicalTicketEntity(
         id: bookingId.toString(),
         hospitalName: 'Bệnh viện Quân Dân Y Miền Đông',
@@ -606,7 +636,7 @@ class PortalRepositoryImpl implements PortalRepository {
         patientName: serverPhieu?.hoTen ?? draft.fullName,
         gender: _mapServerGender(serverPhieu?.gioiTinh, draft.gender),
         birthYear: serverPhieu?.namSinh?.toString() ?? draft.birthYear,
-        address: '50 Lê Văn Việt, Phường Tăng Nhơn Phú, Thành Phố Hồ Chí Minh',
+        address: patientAddress, // KHÔNG lấy địa chỉ bệnh viện làm địa chỉ bệnh nhân
         insuranceText: draft.identifier.length >= 10 ? 'Có BHYT (${draft.identifier})' : 'Tự túc (Không BHYT)',
         patientCode: patientCodeStr.isNotEmpty ? patientCodeStr : (draft.maSo ?? ''),
         createdAtText: _formatCreatedAtText(serverPhieu?.ngayud),
@@ -617,17 +647,16 @@ class PortalRepositoryImpl implements PortalRepository {
         phoneNumber: serverPhieu?.sdt ?? draft.phoneNumber,
         symptom: serverPhieu?.trieuChung ?? symptom,
         dangKyGiup: serverPhieu?.dangKyDum ?? draft.dangKyGiup,
-        dateOfBirth: draft.dateOfBirth,
-        province: provinceName ?? draft.province,
-        ward: wardName ?? draft.ward,
+        dateOfBirth: formattedDob,
+        province: resolvedTinhTen.isNotEmpty ? resolvedTinhTen : draft.province,
+        ward: resolvedPhuongTen.isNotEmpty ? resolvedPhuongTen : draft.ward,
         clinic: draft.clinic ?? department,
         doneStatus: serverPhieu?.done ?? 1,
         coTheXoa: serverPhieu?.coTheXoa,
         trangThai: serverPhieu?.trangThai,
-        soCcHc: serverPhieu?.soCcHc ?? draft.identifier,
-        ngayCap: serverPhieu?.ngayCap ?? draft.cccdIssueDate,
+        soCcHc: draft.identifier.isNotEmpty ? draft.identifier : serverPhieu?.soCcHc,
+        ngayCap: formattedNgayCap,
       );
-
 
       // Lưu lại vào cache địa phương để hiển thị lịch sử ngoại tuyến
       try {
@@ -651,6 +680,35 @@ class PortalRepositoryImpl implements PortalRepository {
     }
   }
 
+  // --- Ticket Metadata Persistence by Ticket ID ---
+  static const String _ticketMetadataCacheKey = 'ticket_registration_metadata_v1';
+
+  /// Lưu metadata đăng ký của phiếu khám gắn với ticketId
+  Future<void> _saveTicketMetadata(String ticketId, Map<String, dynamic> metadata) async {
+    try {
+      final prefs = AppLocator.sharedPreferences;
+      final raw = prefs.getString(_ticketMetadataCacheKey);
+      Map<String, dynamic> map = {};
+      if (raw != null && raw.isNotEmpty) {
+        map = Map<String, dynamic>.from(jsonDecode(raw) as Map);
+      }
+      map[ticketId] = metadata;
+      await prefs.setString(_ticketMetadataCacheKey, jsonEncode(map));
+    } catch (_) {}
+  }
+
+  /// Đọc tất cả metadata đăng ký đã lưu
+  Map<String, dynamic> _getAllTicketMetadata() {
+    try {
+      final prefs = AppLocator.sharedPreferences;
+      final raw = prefs.getString(_ticketMetadataCacheKey);
+      if (raw != null && raw.isNotEmpty) {
+        return Map<String, dynamic>.from(jsonDecode(raw) as Map);
+      }
+    } catch (_) {}
+    return {};
+  }
+
   // --- Ticket Cache (Stale-While-Revalidate) ---
 
   static const String _ticketsCacheKeyPrefix = 'cached_tickets_v1_';
@@ -671,27 +729,93 @@ class PortalRepositoryImpl implements PortalRepository {
     try {
       final remote = _remoteDatasource ?? DatLichKhamRemoteDataSource(AppLocator.dioClient);
       final listSoKham = await remote.getListSoKham();
+
+      // Đọc metadata đăng ký cục bộ đã lưu theo ticketId
+      final allMeta = _getAllTicketMetadata();
+
+      // Đọc cached profiles để làm fallback nếu ticket cũ chưa có metadata trong store
+      List<PatientProfileDraftEntity> cachedProfiles = [];
+      try {
+        cachedProfiles = await _datasource.loadPatientProfiles();
+      } catch (_) {}
+
       final entities = listSoKham.map((dto) {
+        final ticketIdStr = dto.id.toString();
+        final meta = allMeta[ticketIdStr] as Map<String, dynamic>?;
+
         final serviceNameText = (dto.trieuChung != null && dto.trieuChung!.trim().isNotEmpty)
             ? dto.trieuChung!.trim()
             : 'Khám bệnh';
         final cleanMaBN = (dto.maBN != null && dto.maBN!.trim().isNotEmpty) ? dto.maBN!.trim() : '';
-        // Ưu tiên soCcHc nếu có; nếu không có, xem maThe nếu khác maBN và có độ dài hợp lệ (>= 8 ký tự)
-        final cleanSoCcHc = (dto.soCcHc != null && dto.soCcHc!.trim().isNotEmpty && dto.soCcHc != cleanMaBN)
-            ? dto.soCcHc!.trim()
-            : ((dto.maThe != null && dto.maThe!.trim().isNotEmpty && dto.maThe!.trim() != cleanMaBN && dto.maThe!.trim().length >= 8)
-                ? dto.maThe!.trim()
-                : null);
 
-        // Parse province và ward nếu có
-        String? prov = dto.tinhTpTen ?? dto.tinhTp;
-        String? ward = dto.phuongXaTen ?? dto.phuongXa;
+        // 1. Phục hồi Số CCCD / Hộ chiếu
+        String? cleanSoCcHc = meta?['soCcHc']?.toString();
+        if (cleanSoCcHc == null || cleanSoCcHc.isEmpty) {
+          cleanSoCcHc = (dto.soCcHc != null && dto.soCcHc!.trim().isNotEmpty && dto.soCcHc != cleanMaBN)
+              ? dto.soCcHc!.trim()
+              : ((dto.maThe != null && dto.maThe!.trim().isNotEmpty && dto.maThe!.trim() != cleanMaBN && dto.maThe!.trim().length >= 8)
+                  ? dto.maThe!.trim()
+                  : null);
+        }
+
+        // 2. Phục hồi Ngày cấp (luôn chuẩn hóa sang dd/MM/yyyy)
+        String? cleanNgayCap = meta?['ngayCap']?.toString() ?? dto.ngayCap;
+        cleanNgayCap = DateTimeConverter.toVnDate(cleanNgayCap) ?? cleanNgayCap;
+
+        // 3. Phục hồi Ngày sinh (luôn chuẩn hóa sang dd/MM/yyyy)
+        String? cleanDob = meta?['dateOfBirth']?.toString() ?? dto.ngaySinh;
+        cleanDob = DateTimeConverter.toVnDate(cleanDob) ?? cleanDob;
+
+        // 4. Phục hồi Tỉnh/TP và Phường/Xã
+        String? prov = meta?['province']?.toString() ?? dto.tinhTpTen ?? dto.tinhTp;
+        String? ward = meta?['ward']?.toString() ?? dto.phuongXaTen ?? dto.phuongXa;
         if ((prov == null || prov.isEmpty) && dto.diaChi != null && dto.diaChi!.contains(',')) {
           final addrParts = dto.diaChi!.split(',').map((e) => e.trim()).toList();
           if (addrParts.isNotEmpty) {
             prov = addrParts.last;
             if (addrParts.length >= 2) {
               ward = addrParts[addrParts.length - 2];
+            }
+          }
+        }
+
+        // 5. Phục hồi Địa chỉ người dùng đăng ký
+        String patientAddress = meta?['address']?.toString() ?? '';
+        if (patientAddress.isEmpty) {
+          patientAddress = [ward, prov]
+              .where((s) => s != null && s.trim().isNotEmpty)
+              .join(', ');
+        }
+        if (patientAddress.isEmpty && dto.diaChi != null && dto.diaChi!.trim().isNotEmpty) {
+          final srvAddr = dto.diaChi!.trim();
+          if (!srvAddr.contains('50 Lê Văn Việt')) {
+            patientAddress = srvAddr;
+          }
+        }
+
+        // 6. Fallback từ cached profiles (nếu ticket cũ chưa có metadata trong store)
+        if (patientAddress.isEmpty || cleanDob == null || cleanNgayCap == null || cleanSoCcHc == null) {
+          final matchedProfile = cachedProfiles.where((p) {
+            final pId = p.identifier.trim();
+            final pName = p.fullName.trim().toLowerCase();
+            final matchId = pId.isNotEmpty && (pId == cleanSoCcHc || pId == dto.maThe || pId == cleanMaBN);
+            final matchNamePhone = pName.isNotEmpty &&
+                pName == (dto.hoTen ?? '').trim().toLowerCase() &&
+                p.phoneNumber.trim().isNotEmpty &&
+                p.phoneNumber.trim() == (dto.sdt ?? '').trim();
+            return matchId || matchNamePhone;
+          }).firstOrNull;
+
+          if (matchedProfile != null) {
+            cleanSoCcHc ??= (matchedProfile.identifier.isNotEmpty ? matchedProfile.identifier : null);
+            cleanDob ??= (matchedProfile.dateOfBirth != null ? DateTimeConverter.toVnDate(matchedProfile.dateOfBirth) : null);
+            cleanNgayCap ??= (matchedProfile.cccdIssueDate != null ? DateTimeConverter.toVnDate(matchedProfile.cccdIssueDate) : null);
+            prov ??= matchedProfile.province;
+            ward ??= matchedProfile.ward;
+            if (patientAddress.isEmpty) {
+              patientAddress = [ward, prov]
+                  .where((s) => s != null && s.trim().isNotEmpty)
+                  .join(', ');
             }
           }
         }
@@ -708,9 +832,7 @@ class PortalRepositoryImpl implements PortalRepository {
           patientName: dto.hoTen ?? '',
           gender: _mapServerGender(dto.gioiTinh, 'Nam'),
           birthYear: dto.namSinh?.toString() ?? '',
-          address: (dto.diaChi != null && dto.diaChi!.trim().isNotEmpty)
-              ? dto.diaChi!.trim()
-              : '50 Lê Văn Việt, Phường Tăng Nhơn Phú, Thành Phố Hồ Chí Minh',
+          address: patientAddress, // TUYỆT ĐỐI không lấy địa chỉ bệnh viện
           insuranceText: dto.maThe != null && dto.maThe!.isNotEmpty ? 'Có BHYT (${dto.maThe})' : 'Tự túc',
           patientCode: cleanMaBN,
           createdAtText: _formatCreatedAtText(dto.ngayud ?? dto.ngayGioKham),
@@ -721,17 +843,16 @@ class PortalRepositoryImpl implements PortalRepository {
           selectedTime: '',
           phoneNumber: dto.sdt,
           symptom: dto.trieuChung,
-          dangKyGiup: dto.dangKyDum,
-          dateOfBirth: dto.ngaySinh,
+          dangKyGiup: meta?['dangKyGiup']?.toString() ?? dto.dangKyDum,
+          dateOfBirth: cleanDob,
           province: prov,
           ward: ward,
           doneStatus: dto.done,
           coTheXoa: dto.coTheXoa,
           trangThai: dto.trangThai,
           soCcHc: cleanSoCcHc,
-          ngayCap: dto.ngayCap,
+          ngayCap: cleanNgayCap,
         );
-
       }).toList();
       // Ghi cache mới (fire-and-forget, không block UI)
       if (phone.isNotEmpty) {

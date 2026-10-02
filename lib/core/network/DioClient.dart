@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:benhvien7c/core/config/environment.dart';
 import 'package:benhvien7c/core/network/AuthInterceptor.dart';
 import 'package:benhvien7c/core/storage/SecureStorageService.dart';
+import 'package:benhvien7c/core/services/TimeService.dart';
 import 'package:dio/dio.dart';
 import 'package:dio/io.dart';
 
@@ -20,6 +21,15 @@ class DioClient {
 
     // Chèn Interceptor tự động chèn headers bắt buộc & Logging
     this.dio.interceptors.addAll([
+      InterceptorsWrapper(
+        onResponse: (response, handler) {
+          final dateHeader = response.headers.value('date');
+          if (dateHeader != null) {
+            TimeService.updateFromDateHeader(dateHeader);
+          }
+          return handler.next(response);
+        },
+      ),
       AuthInterceptor(secureStorage, this.dio),
       LogInterceptor(
         request: true,

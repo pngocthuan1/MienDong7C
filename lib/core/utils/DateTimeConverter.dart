@@ -85,4 +85,82 @@ class DateTimeConverter {
 
     return null;
   }
+
+  /// Chuyển đổi chuỗi ngày giờ bất kỳ sang định dạng dd/MM/yyyy HH:mm:ss hoặc dd/MM/yyyy HH:mm của Việt Nam.
+  static String? toVnDateTime(dynamic date, {bool includeSeconds = true}) {
+    if (date == null) return null;
+    final str = date.toString().trim();
+    if (str.isEmpty || str.toLowerCase() == 'null') return null;
+
+    // Chuẩn hóa T thành khoảng trắng
+    final clean = str.replaceAll('T', ' ');
+
+    // Nếu đã có ngày dd/MM/yyyy ở đầu: ví dụ "01/10/2026 06:00" hoặc "28/09/2026 12:33:05"
+    if (RegExp(r'^\d{2}/\d{2}/\d{4}').hasMatch(clean)) {
+      final parts = clean.split(' ');
+      if (parts.length >= 2) {
+        final datePart = parts[0];
+        final timePart = parts[1];
+        final tUnits = timePart.split(':');
+        if (tUnits.length >= 2) {
+          final hh = tUnits[0].padLeft(2, '0');
+          final mm = tUnits[1].padLeft(2, '0');
+          if (includeSeconds && tUnits.length >= 3) {
+            final ss = tUnits[2].split('.').first.padLeft(2, '0');
+            return '$datePart $hh:$mm:$ss';
+          }
+          return '$datePart $hh:$mm';
+        }
+      }
+      return clean;
+    }
+
+    // Thử parse bằng DateTime.tryParse (ISO, standard formats)
+    final parsed = DateTime.tryParse(str);
+    if (parsed != null) {
+      final dd = parsed.day.toString().padLeft(2, '0');
+      final mm = parsed.month.toString().padLeft(2, '0');
+      final yyyy = parsed.year.toString().padLeft(4, '0');
+      final hh = parsed.hour.toString().padLeft(2, '0');
+      final min = parsed.minute.toString().padLeft(2, '0');
+      if (includeSeconds) {
+        final ss = parsed.second.toString().padLeft(2, '0');
+        return '$dd/$mm/$yyyy $hh:$min:$ss';
+      }
+      return '$dd/$mm/$yyyy $hh:$min';
+    }
+
+    // Thử tách phần ngày và phần giờ nếu có space
+    if (clean.contains(' ')) {
+      final parts = clean.split(' ');
+      final datePart = toVnDate(parts[0]);
+      if (datePart != null) {
+        return '$datePart ${parts.sublist(1).join(' ')}';
+      }
+    }
+
+    return toVnDate(str) ?? str;
+  }
+
+  /// Đổi định dạng hiển thị giờ khám trên UI từ "07g00 - 07g30" thành "7:00 - 7:30".
+  /// Hỗ trợ cả "07g00", "07:00 - 07:30", "13g30 - 14g00",...
+  /// Tuyệt đối KHÔNG dùng chuỗi này gửi lên server; chỉ dùng để hiển thị trên UI.
+  static String formatGioKhamForDisplay(String raw) {
+    if (raw.trim().isEmpty) return raw;
+    return raw.replaceAllMapped(
+      RegExp(r'(\d{1,2})\s*[g:h:]\s*(\d{2})', caseSensitive: false),
+      (match) {
+        final hr = int.parse(match.group(1)!);
+        final min = match.group(2)!;
+        return '$hr:$min';
+      },
+    );
+  }
+
+  /// Format chuỗi lịch khám "Thứ X, dd/MM/yyyy HH:mm" hoặc "dd/MM/yyyy 07g00 - 07g30" cho UI hiển thị đẹp
+  static String formatScheduleForDisplay(String rawSchedule) {
+    if (rawSchedule.trim().isEmpty) return rawSchedule;
+    final formattedTime = formatGioKhamForDisplay(rawSchedule);
+    return toVnDateTime(formattedTime, includeSeconds: false) ?? formattedTime;
+  }
 }

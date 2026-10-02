@@ -59,7 +59,31 @@ class _PatientProfileCreateViewState extends State<PatientProfileCreateView> {
       AppLocator.portalRepository,
       AppLocator.sessionStore,
     );
+    _viewModel.addListener(_onViewModelChanged);
     _viewModel.continueCommand.addListener(_onContinueChanged);
+    _viewModel.startRealtimeValidation(
+      onExpired: (message) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).clearSnackBars();
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Row(
+              children: [
+                const Icon(Icons.access_time_filled, color: Colors.white, size: 20),
+                const SizedBox(width: 8),
+                Expanded(child: Text(message)),
+              ],
+            ),
+            backgroundColor: const Color(0xFFE11D48),
+            duration: const Duration(seconds: 4),
+          ),
+        );
+      },
+    );
+  }
+
+  void _onViewModelChanged() {
+    if (mounted) setState(() {});
   }
 
   @override
@@ -267,6 +291,7 @@ class _PatientProfileCreateViewState extends State<PatientProfileCreateView> {
     _dobFocus.dispose();
     _phoneFocus.dispose();
     _symptomFocus.dispose();
+    _viewModel.removeListener(_onViewModelChanged);
     _viewModel.continueCommand.removeListener(_onContinueChanged);
     _viewModel.dispose();
     super.dispose();
@@ -904,7 +929,7 @@ class _PatientProfileCreateViewState extends State<PatientProfileCreateView> {
                                     ),
                                   ),
                                   child: Text(
-                                    slot,
+                                    DateTimeConverter.formatGioKhamForDisplay(slot),
                                     style: TextStyle(
                                       fontSize: 12,
                                       fontWeight: FontWeight.bold,
@@ -1379,7 +1404,9 @@ class _PatientProfileCreateViewState extends State<PatientProfileCreateView> {
     final dateStr = _viewModel.selectedDate != null
         ? DateFormat('dd/MM/yyyy').format(_viewModel.selectedDate!)
         : 'Chưa chọn';
-    final timeStr = _viewModel.selectedTime ?? 'Chưa chọn';
+    final timeStr = _viewModel.selectedTime != null
+        ? DateTimeConverter.formatGioKhamForDisplay(_viewModel.selectedTime!)
+        : 'Chưa chọn';
     final addressStr = [
       if (_viewModel.wardController.text.isNotEmpty) _viewModel.wardController.text,
       if (_viewModel.provinceController.text.isNotEmpty) _viewModel.provinceController.text,
@@ -1779,7 +1806,9 @@ class _PatientProfileCreateViewState extends State<PatientProfileCreateView> {
                             ),
                             const SizedBox(height: 6),
                             Text(
-                              _viewModel.selectedTime ?? 'Chọn giờ',
+                              _viewModel.selectedTime != null
+                                  ? DateTimeConverter.formatGioKhamForDisplay(_viewModel.selectedTime!)
+                                  : 'Chọn giờ',
                               style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
                             ),
                           ],
