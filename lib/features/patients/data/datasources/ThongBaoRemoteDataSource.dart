@@ -115,7 +115,7 @@ class ThongBaoRemoteDataSource {
     };
 
     if (kDebugMode) {
-      print('🚀 Calling /api/ThongBao/Post with payload: $payload');
+      debugPrint('🚀 [ThongBao] Gửi thông báo: Tiêu đề="${payload['TieuDe']}", Người nhận=${noiNhanList.length}');
     }
 
     final response = await _dioClient.dio.post(
@@ -149,7 +149,7 @@ class ThongBaoRemoteDataSource {
       }
     } catch (e) {
       if (kDebugMode) {
-        print('⚠️ Upload file error: $e');
+        debugPrint('⚠️ [ThongBao] Upload file error: $e');
       }
     }
     return null;

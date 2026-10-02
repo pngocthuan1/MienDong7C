@@ -199,7 +199,9 @@ class CloudflareTurnstileState extends State<CloudflareTurnstile> {
               } else if (type == 'success') {
                 _timeoutTimer?.cancel();
                 final token = data['token'] as String;
-                debugPrint('[Turnstile] 🟢 Cloudflare vừa cấp token! Token prefix: ${token.substring(0, token.length > 20 ? 20 : token.length)}...');
+                if (kDebugMode) {
+                  debugPrint('[Turnstile] 🟢 Cloudflare vừa cấp token! (độ dài: ${token.length} ký tự)');
+                }
 
                 if (mounted) {
                   setState(() {

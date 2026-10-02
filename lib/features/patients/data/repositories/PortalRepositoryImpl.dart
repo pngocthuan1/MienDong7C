@@ -319,7 +319,7 @@ class PortalRepositoryImpl implements PortalRepository {
         );
       } catch (e) {
         if (kDebugMode) {
-          print('⚠️ Exception calling /api/ThongBao/Post: $e');
+          debugPrint('⚠️ Exception calling /api/ThongBao/Post: $e');
         }
         rethrow;
       }

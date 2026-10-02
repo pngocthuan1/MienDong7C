@@ -1,6 +1,7 @@
 import 'package:benhvien7c/core/theme/AppColors.dart';
 import 'package:benhvien7c/core/widgets/AppNotificationToast.dart';
 import 'package:benhvien7c/core/services/FirebaseTokenService.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 class NotificationHelper {
@@ -108,8 +109,9 @@ class NotificationHelper {
     required String title,
     required String body,
   }) {
-    // In-app log simulation
-    debugPrint('[Local Notification] ID: $id, Title: $title, Body: $body');
+    if (kDebugMode) {
+      debugPrint('[Local Notification] ID: $id, Title: $title');
+    }
     // Local notifications can be hooked to flutter_local_notifications package in production.
   }
 

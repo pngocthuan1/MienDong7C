@@ -1,7 +1,9 @@
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:benhvien7c/core/config/environment.dart';
 import 'package:benhvien7c/core/network/AuthInterceptor.dart';
+import 'package:benhvien7c/core/network/SecureLogInterceptor.dart';
 import 'package:benhvien7c/core/storage/SecureStorageService.dart';
 import 'package:benhvien7c/core/services/TimeService.dart';
 import 'package:dio/dio.dart';
@@ -31,14 +33,7 @@ class DioClient {
         },
       ),
       AuthInterceptor(secureStorage, this.dio),
-      LogInterceptor(
-        request: true,
-        requestHeader: true,
-        requestBody: true,
-        responseHeader: false,
-        responseBody: true,
-        error: true,
-      ),
+      if (kDebugMode) SecureLogInterceptor(),
     ]);
 
     // Bypass chứng chỉ SSL tự ký khi dev chạy localhost/IP nội bộ/máy thật

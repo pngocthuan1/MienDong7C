@@ -61,8 +61,8 @@ class FirebaseTokenService {
         _fcmToken = token;
       }
       if (kDebugMode) {
-        print('🔥 [FirebaseTokenService] Token thực tế: $_fcmToken');
-        print('📱 [FirebaseTokenService] Thiết bị: $_deviceInfoString');
+        debugPrint('🔥 [FirebaseTokenService] Token: tồn tại (độ dài ${_fcmToken?.length ?? 0} ký tự)');
+        debugPrint('📱 [FirebaseTokenService] Thiết bị: $_deviceInfoString');
       }
 
       // Lưu Token vào bộ nhớ tạm SharedPreferences
@@ -79,7 +79,7 @@ class FirebaseTokenService {
       });
     } catch (e) {
       if (kDebugMode) {
-        print('⚠️ [FirebaseTokenService] Khởi tạo Firebase: $e');
+        debugPrint('⚠️ [FirebaseTokenService] Khởi tạo Firebase: $e');
       }
     }
   }

@@ -64,6 +64,11 @@ import 'package:device_info_plus/device_info_plus.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
+  // BẢO MẬT: Tắt toàn bộ debugPrint ở môi trường RELEASE để tránh rò rỉ log ra console / adb logcat
+  if (kReleaseMode) {
+    debugPrint = (String? message, {int? wrapWidth}) {};
+  }
+
   final secureStorage = SecureStorageService();
   final deviceInfoPlugin = DeviceInfoPlugin();
 
@@ -203,7 +208,9 @@ void main() async {
       );
     }
   } catch (e) {
-    debugPrint('Lỗi phục hồi session: $e');
+    if (kDebugMode) {
+      debugPrint('Lỗi phục hồi session: $e');
+    }
   }
 
   // 5. Khởi chạy UI ngay lập tức với SplashView (logo bệnh viện hoạt họa mượt mà, không giật lag)
@@ -346,7 +353,9 @@ DateTime _parseExpiry(String? expiresStr) {
       }
     }
   } catch (e) {
-    debugPrint('Error parsing refreshTokenExpiry: $e');
+    if (kDebugMode) {
+      debugPrint('Error parsing refreshTokenExpiry: $e');
+    }
   }
   return DateTime.now().add(const Duration(days: 1));
 }

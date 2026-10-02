@@ -906,39 +906,58 @@ class _PatientProfileCreateViewState extends State<PatientProfileCreateView> {
                               ),
                             );
                           }
-                          return Wrap(
-                            spacing: 8,
-                            runSpacing: 8,
-                            children: availableSlots.map((slot) {
-                              final isSelected = _viewModel.selectedTime == slot;
-                              return GestureDetector(
-                                onTap: () {
-                                  setModalState(() {
-                                    _viewModel.selectedTime = slot;
-                                  });
-                                  setState(() {});
-                                },
-                                child: Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                                  decoration: BoxDecoration(
-                                    color: isSelected ? const Color(0xFFEBF3FF) : Colors.white,
-                                    borderRadius: BorderRadius.circular(8),
-                                    border: Border.all(
-                                      color: isSelected ? const Color(0xFF0D6EFD) : const Color(0xFFE2E8F0),
-                                      width: isSelected ? 1.5 : 1,
-                                    ),
-                                  ),
-                                  child: Text(
-                                    DateTimeConverter.formatGioKhamForDisplay(slot),
-                                    style: TextStyle(
-                                      fontSize: 12,
-                                      fontWeight: FontWeight.bold,
-                                      color: isSelected ? const Color(0xFF0D6EFD) : const Color(0xFF0F172A),
-                                    ),
-                                  ),
+                          return LayoutBuilder(
+                            builder: (context, constraints) {
+                              final crossAxisCount = constraints.maxWidth >= 500 ? 4 : 3;
+                              return GridView.builder(
+                                shrinkWrap: true,
+                                physics: const NeverScrollableScrollPhysics(),
+                                gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                                  crossAxisCount: crossAxisCount,
+                                  crossAxisSpacing: 8,
+                                  mainAxisSpacing: 8,
+                                  childAspectRatio: crossAxisCount == 4 ? 2.8 : 2.5,
                                 ),
+                                itemCount: availableSlots.length,
+                                itemBuilder: (context, index) {
+                                  final slot = availableSlots[index];
+                                  final isSelected = _viewModel.selectedTime == slot;
+                                  return GestureDetector(
+                                    onTap: () {
+                                      setModalState(() {
+                                        _viewModel.selectedTime = slot;
+                                      });
+                                      setState(() {});
+                                    },
+                                    child: Container(
+                                      alignment: Alignment.center,
+                                      padding: const EdgeInsets.symmetric(horizontal: 4),
+                                      decoration: BoxDecoration(
+                                        color: isSelected ? const Color(0xFFEBF3FF) : Colors.white,
+                                        borderRadius: BorderRadius.circular(8),
+                                        border: Border.all(
+                                          color: isSelected ? const Color(0xFF0D6EFD) : const Color(0xFFE2E8F0),
+                                          width: isSelected ? 1.5 : 1,
+                                        ),
+                                      ),
+                                      child: FittedBox(
+                                        fit: BoxFit.scaleDown,
+                                        child: Text(
+                                          DateTimeConverter.formatGioKhamForDisplay(slot),
+                                          textAlign: TextAlign.center,
+                                          maxLines: 1,
+                                          style: TextStyle(
+                                            fontSize: 12,
+                                            fontWeight: isSelected ? FontWeight.bold : FontWeight.w600,
+                                            color: isSelected ? const Color(0xFF0D6EFD) : const Color(0xFF0F172A),
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  );
+                                },
                               );
-                            }).toList(),
+                            },
                           );
                         },
                       ),

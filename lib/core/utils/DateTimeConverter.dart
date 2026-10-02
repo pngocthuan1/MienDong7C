@@ -142,22 +142,25 @@ class DateTimeConverter {
     return toVnDate(str) ?? str;
   }
 
-  /// Đổi định dạng hiển thị giờ khám trên UI từ "07g00 - 07g30" thành "7:00 - 7:30".
-  /// Hỗ trợ cả "07g00", "07:00 - 07:30", "13g30 - 14g00",...
+  /// Đổi định dạng hiển thị giờ khám trên UI từ Id "10:00-10:30" thành "10:00 - 10:30".
+  /// Tách theo dấu '-' thành 2 phần và thêm khoảng trắng quanh dấu '-'.
+  /// Không dùng regex, không phụ thuộc vào trường "Display" của server.
   /// Tuyệt đối KHÔNG dùng chuỗi này gửi lên server; chỉ dùng để hiển thị trên UI.
   static String formatGioKhamForDisplay(String raw) {
-    if (raw.trim().isEmpty) return raw;
-    return raw.replaceAllMapped(
-      RegExp(r'(\d{1,2})\s*[g:h:]\s*(\d{2})', caseSensitive: false),
-      (match) {
-        final hr = int.parse(match.group(1)!);
-        final min = match.group(2)!;
-        return '$hr:$min';
-      },
-    );
+    final trimmed = raw.trim();
+    if (trimmed.isEmpty) return trimmed;
+    final parts = trimmed.split('-');
+    if (parts.length >= 2) {
+      final start = parts[0].trim();
+      final end = parts[1].trim();
+      if (start.isNotEmpty && end.isNotEmpty) {
+        return '$start - $end';
+      }
+    }
+    return trimmed;
   }
 
-  /// Format chuỗi lịch khám "Thứ X, dd/MM/yyyy HH:mm" hoặc "dd/MM/yyyy 07g00 - 07g30" cho UI hiển thị đẹp
+  /// Format chuỗi lịch khám "Thứ X, dd/MM/yyyy HH:mm" hoặc "dd/MM/yyyy 10:00 - 10:30" cho UI hiển thị đẹp
   static String formatScheduleForDisplay(String rawSchedule) {
     if (rawSchedule.trim().isEmpty) return rawSchedule;
     final formattedTime = formatGioKhamForDisplay(rawSchedule);

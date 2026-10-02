@@ -471,14 +471,14 @@ class PatientProfileCreateViewModel extends BasePortalViewModel {
         final slots = master.getSlotsForDate(dateIso);
         if (slots.isNotEmpty) return slots;
       }
-      return master.listGioKham.map((e) => e.display).toList();
+      return master.listGioKham.map((e) => e.id.isNotEmpty ? e.id : e.display).toList();
     }
     // Fallback hardcode
     return [
-      '7g00 - 7g30', '7g30 - 8g00', '8g00 - 8g30', '8g30 - 9g00', '9g00 - 9g30',
-      '9g30 - 10g00', '10g00 - 10g30', '10g30 - 11g00', '11g00 - 11g30',
-      '13g00 - 13g30', '13g30 - 14g00', '14g00 - 14g30', '14g30 - 15g00', '15g00 - 15g30',
-      '15g30 - 16g00', '16g00 - 16g30',
+      '07:00-07:30', '07:30-08:00', '08:00-08:30', '08:30-09:00', '09:00-09:30',
+      '09:30-10:00', '10:00-10:30', '10:30-11:00', '11:00-11:30',
+      '13:00-13:30', '13:30-14:00', '14:00-14:30', '14:30-15:00', '15:00-15:30',
+      '15:30-16:00', '16:00-16:30',
     ];
   }
 
@@ -1578,12 +1578,18 @@ class PatientProfileCreateViewModel extends BasePortalViewModel {
     }).toList();
   }
 
-  // Parse slot start time (e.g. "07g00", "7g", "07:00")
+  // Parse slot start time (e.g. "10:00", "07:30", "07g00", "7g")
   DateTime? _parseSlotStartTime(String slot, DateTime baseDate) {
     try {
       final parts = slot.split('-');
-      final startPart = parts[0].trim().toLowerCase();
-      final match = RegExp(r'(\d{1,2})\s*(?:[g:h:]\s*(\d{1,2}))?').firstMatch(startPart);
+      final startPart = parts[0].trim();
+      if (startPart.contains(':')) {
+        final timeParts = startPart.split(':');
+        final hr = int.parse(timeParts[0].trim());
+        final min = int.parse(timeParts[1].trim());
+        return DateTime(baseDate.year, baseDate.month, baseDate.day, hr, min);
+      }
+      final match = RegExp(r'(\d{1,2})\s*(?:[g:h:]\s*(\d{1,2}))?').firstMatch(startPart.toLowerCase());
       if (match != null) {
         final hr = int.parse(match.group(1)!);
         final minStr = match.group(2);
@@ -1609,10 +1615,10 @@ class PatientProfileCreateViewModel extends BasePortalViewModel {
     }
     if (rawSlots.isEmpty) {
       rawSlots = const [
-        '07g00 - 07g30', '07g30 - 08g00', '08g00 - 08g30', '08g30 - 09g00', '09g00 - 09g30',
-        '09g30 - 10g00', '10g00 - 10g30', '10g30 - 11g00', '11g00 - 11g30',
-        '13g00 - 13g30', '13g30 - 14g00', '14g00 - 14g30', '14g30 - 15g00', '15g00 - 15g30',
-        '15g30 - 16g00', '16g00 - 16g30',
+        '07:00-07:30', '07:30-08:00', '08:00-08:30', '08:30-09:00', '09:00-09:30',
+        '09:30-10:00', '10:00-10:30', '10:30-11:00', '11:00-11:30',
+        '13:00-13:30', '13:30-14:00', '14:00-14:30', '14:30-15:00', '15:00-15:30',
+        '15:30-16:00', '16:00-16:30',
       ];
     }
 

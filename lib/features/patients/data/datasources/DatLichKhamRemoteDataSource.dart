@@ -90,14 +90,14 @@ class DatLichKhamRemoteDataSource {
     try {
       final jsonBody = request.toJson();
       if (kDebugMode) {
-        print('➡️ [POST /api/DatLichKham/DangKy] Request: $jsonBody');
+        debugPrint('➡️ [DatLichKham] Đăng ký khám: ${request.hoTen}, Ngày: ${request.ngayKham}, Giờ: ${request.gioKham}');
       }
       final response = await _dioClient.dio.post(
         '/api/DatLichKham/DangKy',
         data: jsonBody,
       );
       if (kDebugMode) {
-        print('⬅️ [POST /api/DatLichKham/DangKy] Response: Status ${response.statusCode} - Data: ${response.data}');
+        debugPrint('⬅️ [DatLichKham] Đăng ký phản hồi, Status: ${response.statusCode}');
       }
       final data = _extractData(response.data);
       if (data is num) return data.toInt();
@@ -105,7 +105,7 @@ class DatLichKhamRemoteDataSource {
       return 0;
     } on DioException catch (e) {
       if (kDebugMode) {
-        print('❌ [POST /api/DatLichKham/DangKy] DioException: Status ${e.response?.statusCode} - Body: ${e.response?.data}');
+        debugPrint('❌ [DatLichKham] Lỗi đăng ký khám: Status ${e.response?.statusCode} - ${e.message}');
       }
       throw ApiException.fromDioError(e);
     }

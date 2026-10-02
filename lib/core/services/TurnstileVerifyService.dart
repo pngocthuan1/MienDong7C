@@ -41,7 +41,9 @@ class TurnstileVerifyService {
 
     try {
       final workerUrl = Environment.captchaVerifyWorkerUrl;
-      debugPrint('[TurnstileService] 🚀 Gửi token lên Cloudflare Worker: $workerUrl');
+      if (kDebugMode) {
+        debugPrint('[TurnstileService] 🚀 Gửi token lên Cloudflare Worker (độ dài token: ${captchaToken.length})');
+      }
       final response = await _dio.post<Map<String, dynamic>>(
         workerUrl,
         data: {
@@ -54,15 +56,21 @@ class TurnstileVerifyService {
         ),
       );
 
-      debugPrint('[TurnstileService] 📥 Phản hồi từ Worker: ${response.data}');
+      if (kDebugMode) {
+        debugPrint('[TurnstileService] 📥 Phản hồi từ Worker: success=${response.data?['success']}');
+      }
 
       if (response.data != null) {
         final result = TurnstileVerifyResult.fromJson(response.data!);
         if (result.success) {
-          debugPrint('[TurnstileService] ✅ CAPTCHA hợp lệ 100% từ Cloudflare Turnstile!');
+          if (kDebugMode) {
+            debugPrint('[TurnstileService] ✅ CAPTCHA hợp lệ 100% từ Cloudflare Turnstile!');
+          }
           return ApiSuccess(result);
         } else {
-          debugPrint('[TurnstileService] ❌ CAPTCHA không hợp lệ hoặc bị từ chối.');
+          if (kDebugMode) {
+            debugPrint('[TurnstileService] ❌ CAPTCHA không hợp lệ hoặc bị từ chối.');
+          }
           return ApiFailure(
             BusinessException(
               'Xác thực CAPTCHA thất bại: ${result.error ?? "Phát hiện nghi ngờ tự động hóa"}',

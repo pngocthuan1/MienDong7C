@@ -42,8 +42,10 @@ class Command<T> extends ChangeNotifier {
     try {
       _result = await _action();
     } catch (e, stackTrace) {
-      debugPrint('[Command] Unhandled error during execute(): $e');
-      debugPrintStack(stackTrace: stackTrace);
+      if (kDebugMode) {
+        debugPrint('[Command] Unhandled error during execute(): $e');
+        debugPrintStack(stackTrace: stackTrace);
+      }
       _result = ApiFailure(
         UnknownException('Đã xảy ra lỗi không xác định. Vui lòng thử lại.'),
       );
@@ -365,7 +367,9 @@ class LoginViewModel extends ChangeNotifier {
       } catch (e) {
         // Không chặn luồng login customer nếu server HIS lỗi/không phản hồi,
         // nhưng vẫn log lại để theo dõi thay vì nuốt im lặng.
-        debugPrint('[LoginViewModel] loginHis lookup failed: $e');
+        if (kDebugMode) {
+          debugPrint('[LoginViewModel] loginHis lookup failed: $e');
+        }
       }
 
       // Nếu username có dạng chữ (giống tài khoản nhân viên) và server HIS

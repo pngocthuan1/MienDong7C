@@ -25,8 +25,10 @@ class Command0<T> extends ChangeNotifier {
       // vẫn để lọt exception ra ngoài phạm vi try/catch của nó — ví dụ
       // lỗi bên trong callback result.when(...). Log lại thay vì nuốt
       // im lặng, để không rơi vào trạng thái _result == null vĩnh viễn.
-      debugPrint('[Command0] Unhandled error during execute(): $e');
-      debugPrintStack(stackTrace: stackTrace);
+      if (kDebugMode) {
+        debugPrint('[Command0] Unhandled error during execute(): $e');
+        debugPrintStack(stackTrace: stackTrace);
+      }
       _result = Error<T>(e is Exception ? e : Exception(e.toString()), e.toString());
     } finally {
       _running = false;
@@ -85,8 +87,10 @@ class Command1<T, P> extends ChangeNotifier {
     try {
       _result = await _action(param);
     } catch (e, stackTrace) {
-      debugPrint('[Command1] Unhandled error during execute(): $e');
-      debugPrintStack(stackTrace: stackTrace);
+      if (kDebugMode) {
+        debugPrint('[Command1] Unhandled error during execute(): $e');
+        debugPrintStack(stackTrace: stackTrace);
+      }
       _result = Error<T>(e is Exception ? e : Exception(e.toString()), e.toString());
     } finally {
       _running = false;

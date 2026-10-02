@@ -324,42 +324,22 @@ class DkkListMasterDto {
     );
   }
 
-  /// Lấy danh sách giờ khám khả dụng cho một ngày cụ thể
+  /// Lấy danh sách giờ khám khả dụng cho một ngày cụ thể (trả về danh sách Id slot dạng "HH:mm-HH:mm")
   List<String> getSlotsForDate(String ngayIso) {
     final key = dicNgayGioKham.keys.firstWhere(
       (k) => k == ngayIso || k.startsWith(ngayIso.substring(0, 10)),
       orElse: () => '',
     );
     final rawSlots = key.isNotEmpty ? (dicNgayGioKham[key] ?? []) : <String>[];
-    final sourceList = rawSlots.isNotEmpty ? rawSlots : listGioKham.map((e) => e.display).toList();
+    final sourceList = rawSlots.isNotEmpty ? rawSlots : listGioKham.map((e) => e.id).toList();
 
     return sourceList.map((raw) {
       final matched = listGioKham.where((s) => s.id == raw || s.display == raw).firstOrNull;
-      if (matched != null && matched.display.isNotEmpty) {
-        return _formatToDisplayString(matched.display);
+      if (matched != null && matched.id.isNotEmpty) {
+        return matched.id;
       }
-      return _formatToDisplayString(raw);
+      return raw;
     }).toList();
-  }
-
-  static String _formatToDisplayString(String raw) {
-    final trimmed = raw.trim();
-    if (trimmed.contains('g') && trimmed.contains(' - ')) return trimmed;
-    final parts = trimmed.split('-');
-    if (parts.length >= 2) {
-      final start = parts[0].trim();
-      final end = parts[1].trim();
-      final sMatch = RegExp(r'(\d{1,2}):(\d{2})').firstMatch(start);
-      final eMatch = RegExp(r'(\d{1,2}):(\d{2})').firstMatch(end);
-      if (sMatch != null && eMatch != null) {
-        final sHr = sMatch.group(1)!.padLeft(2, '0');
-        final sMin = sMatch.group(2)!;
-        final eHr = eMatch.group(1)!.padLeft(2, '0');
-        final eMin = eMatch.group(2)!;
-        return '${sHr}g$sMin - ${eHr}g$eMin';
-      }
-    }
-    return trimmed;
   }
 }
 

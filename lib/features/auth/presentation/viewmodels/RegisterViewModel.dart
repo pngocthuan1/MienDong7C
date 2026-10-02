@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:benhvien7c/core/network/ApiException.dart';
 import 'package:benhvien7c/core/network/ApiResult.dart';
@@ -25,8 +26,10 @@ class Command<T> extends ChangeNotifier {
     try {
       _result = await _action();
     } catch (e,stackTrace) {
-      debugPrint('[Command] Unhandled error during execute(): $e');
-      debugPrintStack(stackTrace: stackTrace);
+      if (kDebugMode) {
+        debugPrint('[Command] Unhandled error during execute(): $e');
+        debugPrintStack(stackTrace: stackTrace);
+      }
        _result = ApiFailure(
         UnknownException('Đã xảy ra lỗi không xác định. Vui lòng thử lại.'),
       );
