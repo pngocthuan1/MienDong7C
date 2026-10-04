@@ -93,6 +93,61 @@ class _AppointmentBookingViewState extends State<AppointmentBookingView> {
     );
   }
 
+  /// Widget ô thông tin dùng chung — đảm bảo mọi trường có cùng kiểu dáng, padding, font.
+  /// [valueColor]: màu riêng cho giá trị (ví dụ màu tím #4F46E5 cho Mã BN).
+  /// [textScaler]: TextScaler đã clamp sẵn để bảo vệ layout với Accessibility.
+  Widget _buildInfoField({
+    required IconData icon,
+    required String label,
+    required String value,
+    Color iconColor = const Color(0xFF64748B),
+    Color? valueColor,
+    required TextScaler textScaler,
+  }) {
+    final displayValue = value.trim().isEmpty ? '--' : value.trim();
+    final resolvedValueColor = valueColor ?? const Color(0xFF1E293B);
+
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.only(top: 1.5),
+          child: Icon(icon, size: 15, color: iconColor),
+        ),
+        const SizedBox(width: 5),
+        Expanded(
+          child: Text.rich(
+            TextSpan(
+              children: [
+                TextSpan(
+                  text: '$label: ',
+                  style: const TextStyle(
+                    fontSize: 12.5,
+                    color: Color(0xFF64748B),
+                    fontWeight: FontWeight.w400,
+                    height: 1.4,
+                  ),
+                ),
+                TextSpan(
+                  text: displayValue,
+                  style: TextStyle(
+                    fontSize: 12.5,
+                    color: resolvedValueColor,
+                    fontWeight: FontWeight.w600,
+                    height: 1.4,
+                  ),
+                ),
+              ],
+            ),
+            textScaler: textScaler,
+            softWrap: true,
+          ),
+        ),
+      ],
+    );
+  }
+
+
   Widget _buildTicketsList(
     List<MedicalTicketEntity> tickets, {
     required String emptyMessage,
@@ -259,81 +314,100 @@ class _AppointmentBookingViewState extends State<AppointmentBookingView> {
 
               const Divider(height: 1, color: Color(0xFFE2E8F0)),
 
-              Padding(
-                padding: const EdgeInsets.all(14),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    // Line 1: # Mã BN (Chỉ hiển thị khi có mã chính thức 8 số)
-                    if (ticket.patientCode.trim().length == 8 && RegExp(r'^\d+$').hasMatch(ticket.patientCode.trim())) ...[
-                      Row(
-                        crossAxisAlignment: CrossAxisAlignment.center,
-                        children: [
-                          const Text(
-                            '#',
-                            style: TextStyle(
-                              fontSize: 22,
-                              fontWeight: FontWeight.bold,
-                              color: Color(0xFF4F46E5),
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: Text(
-                              'Mã BN: ${ticket.patientCode}',
-                              style: const TextStyle(
-                                fontSize: 18,
-                                fontWeight: FontWeight.bold,
-                                color: Color(0xFF4F46E5),
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 8),
+              // === KHỐI THÔNG TIN BỆNH NHÂN: lưới 2 cột responsive ===
+              LayoutBuilder(
+                builder: (context, constraints) {
+                  // Ngưỡng responsive: thẻ rộng < 320dp → xếp 1 cột (màn hình ~380dp trở xuống)
+                  final isSingleColumn = constraints.maxWidth < 320;
+                  // Giới hạn TextScaler: bảo vệ layout trên cả Android font scale và iOS Dynamic Type
+                  final textScaler = MediaQuery.textScalerOf(context)
+                      .clamp(minScaleFactor: 0.9, maxScaleFactor: 1.15);
+
+                  // Chuẩn hóa dữ liệu hiển thị
+                  final genderDisplay = (ticket.gender.trim().isEmpty) ? '--' : ticket.gender.trim();
+                  final phoneDisplay = (ticket.phoneNumber == null || ticket.phoneNumber!.trim().isEmpty) ? '--' : ticket.phoneNumber!.trim();
+                  final maBnDisplay = ticket.patientCode.trim().isEmpty ? '--' : ticket.patientCode.trim();
+                  final ccHcDisplay = (ticket.soCcHc == null || ticket.soCcHc!.trim().isEmpty) ? '--' : ticket.soCcHc!.trim();
+                  final addressDisplay = (ticket.address.trim().isEmpty) ? '--' : ticket.address.trim();
+                  final scheduleDisplay = DateTimeConverter.formatScheduleForDisplay(ticket.scheduleText);
+                  final queueDisplay = ticket.queueNumber.trim().isEmpty ? '--' : ticket.queueNumber.trim();
+                  final isMaBnOfficial = ticket.patientCode.trim().length == 8 &&
+                      RegExp(r'^\d+$').hasMatch(ticket.patientCode.trim());
+
+                  Widget buildRow(Widget left, Widget right) => Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(flex: 1, child: left),
+                      const SizedBox(width: 12),
+                      Expanded(flex: 1, child: right),
                     ],
+                  );
 
-                    // Line 2: Ngày khám: ...
-                    Row(
+                  Widget buildInfoSection() {
+                    if (isSingleColumn) {
+                      // 1 cột — mỗi trường 1 hàng riêng
+                      return Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          _buildInfoField(icon: Icons.wc_rounded, label: 'Giới tính', value: genderDisplay, textScaler: textScaler),
+                          const SizedBox(height: 8),
+                          _buildInfoField(icon: Icons.phone_iphone_rounded, label: 'SĐT', value: phoneDisplay, textScaler: textScaler),
+                          const SizedBox(height: 8),
+                          _buildInfoField(icon: Icons.tag_rounded, label: 'Mã BN', value: maBnDisplay,
+                              valueColor: isMaBnOfficial ? const Color(0xFF4F46E5) : null, textScaler: textScaler),
+                          const SizedBox(height: 8),
+                          _buildInfoField(icon: Icons.badge_outlined, label: 'CC/HC', value: ccHcDisplay, textScaler: textScaler),
+                          const SizedBox(height: 8),
+                          _buildInfoField(icon: Icons.location_on_outlined, label: 'Địa chỉ', value: addressDisplay, textScaler: textScaler),
+                          const SizedBox(height: 8),
+                          _buildInfoField(icon: Icons.calendar_today_rounded, label: 'Ngày khám', value: scheduleDisplay, textScaler: textScaler),
+                          const SizedBox(height: 8),
+                          _buildInfoField(icon: Icons.confirmation_number_outlined, label: 'Số đăng ký', value: queueDisplay, textScaler: textScaler),
+                        ],
+                      );
+                    }
+
+                    // 2 cột — bố cục lưới chuẩn
+                    return Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Icon(Icons.calendar_today_rounded, size: 18, color: Colors.black),
-                        const SizedBox(width: 8),
-                        Text(
-                          'Ngày khám: ${DateTimeConverter.formatScheduleForDisplay(ticket.scheduleText)}',
-                          style: const TextStyle(
-                            fontSize: 15,
-                            color: Color(0xFF1E293B),
-                            fontWeight: FontWeight.w500,
-                          ),
+                        // Hàng 1: Giới tính | SĐT
+                        buildRow(
+                          _buildInfoField(icon: Icons.wc_rounded, label: 'Giới tính', value: genderDisplay, textScaler: textScaler),
+                          _buildInfoField(icon: Icons.phone_iphone_rounded, label: 'SĐT', value: phoneDisplay, textScaler: textScaler),
+                        ),
+                        const SizedBox(height: 8),
+                        // Hàng 2: Mã BN | CC/HC
+                        buildRow(
+                          _buildInfoField(icon: Icons.tag_rounded, label: 'Mã BN', value: maBnDisplay,
+                              valueColor: isMaBnOfficial ? const Color(0xFF4F46E5) : null, textScaler: textScaler),
+                          _buildInfoField(icon: Icons.badge_outlined, label: 'CC/HC', value: ccHcDisplay, textScaler: textScaler),
+                        ),
+                        const SizedBox(height: 8),
+                        // Hàng 3: Địa chỉ — full width (không ghép cặp)
+                        _buildInfoField(icon: Icons.location_on_outlined, label: 'Địa chỉ', value: addressDisplay, textScaler: textScaler),
+                        const SizedBox(height: 8),
+                        // Hàng 4: Ngày khám | Số đăng ký
+                        buildRow(
+                          _buildInfoField(icon: Icons.calendar_today_rounded, label: 'Ngày khám', value: scheduleDisplay, textScaler: textScaler),
+                          _buildInfoField(icon: Icons.confirmation_number_outlined, label: 'Số ĐK', value: queueDisplay, textScaler: textScaler),
                         ),
                       ],
-                    ),
-                    const SizedBox(height: 6),
+                    );
+                  }
 
-                    // Line 3: # Số đăng ký: ...
-                    Row(
-                      children: [
-                        const Text(
-                          '#',
-                          style: TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.bold,
-                            color: Color(0xFF4F46E5),
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        Text(
-                          'Số đăng ký: ${ticket.queueNumber}',
-                          style: const TextStyle(
-                            fontSize: 15,
-                            color: Color(0xFF1E293B),
-                            fontWeight: FontWeight.w500,
-                          ),
-                        ),
-                      ],
-                    ),
+                  return Padding(
+                    padding: const EdgeInsets.fromLTRB(14, 12, 14, 4),
+                    child: buildInfoSection(),
+                  );
+                },
+              ),
 
-                    const SizedBox(height: 12),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(14, 0, 14, 14),
+                child: Column(
+                  children: [
+                    const SizedBox(height: 10),
                     const Divider(height: 1, color: Color(0xFFF1F5F9)),
                     const SizedBox(height: 8),
 
