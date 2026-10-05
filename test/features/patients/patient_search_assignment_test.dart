@@ -621,5 +621,106 @@ void main() {
       expect(repo.lastCreatedDraft!.gender, 'Nam');
       expect(repo.lastDeptId, '49');
     });
+
+    test('9. Lưu & Đọc Địa chỉ phiếu khám: Đầy đủ TinhTpTen, PhuongXaTen, DiaChi và không hiển thị "--"', () async {
+      // 1. Kiểm tra format hiển thị ở danh sách với phiếu có đầy đủ địa chỉ
+      const ticketWithFullAddress = MedicalTicketEntity(
+        id: '101',
+        hospitalName: 'Bệnh viện Quân Dân Y Miền Đông',
+        hospitalAddress: '50 Lê Văn Việt, Phường Tăng Nhơn Phú, Thành Phố Hồ Chí Minh',
+        ticketTitle: 'PHIẾU ĐẶT LỊCH KHÁM',
+        roomName: 'Phòng 01',
+        serviceName: 'Khám bệnh',
+        queueNumber: '001',
+        scheduleText: 'Thứ 4, 30/09/2026',
+        patientName: 'LÊ NGUYỄN GIA HƯNG',
+        gender: 'Nam',
+        birthYear: '1989',
+        address: 'Phường Đông Hòa, Thành phố Hồ Chí Minh',
+        province: 'Thành phố Hồ Chí Minh',
+        ward: 'Phường Đông Hòa',
+        insuranceText: 'Có BHYT',
+        patientCode: '07641190',
+        createdAtText: '29/09/2026',
+        note: 'Ghi chú',
+      );
+
+      final resolvedAddr1 = ticketWithFullAddress.address.trim().isNotEmpty
+          ? ticketWithFullAddress.address.trim()
+          : [ticketWithFullAddress.ward, ticketWithFullAddress.province]
+              .where((s) => s != null && s.trim().isNotEmpty)
+              .join(', ');
+      final display1 = resolvedAddr1.trim().isEmpty ? '--' : resolvedAddr1.trim();
+      expect(display1, 'Phường Đông Hòa, Thành phố Hồ Chí Minh');
+      expect(display1, isNot('--'));
+
+      // 2. Kiểm tra fallback khi address rỗng nhưng ward và province có giá trị
+      const ticketFallback = MedicalTicketEntity(
+        id: '102',
+        hospitalName: 'Bệnh viện Quân Dân Y Miền Đông',
+        hospitalAddress: '50 Lê Văn Việt, Phường Tăng Nhơn Phú, Thành Phố Hồ Chí Minh',
+        ticketTitle: 'PHIẾU ĐẶT LỊCH KHÁM',
+        roomName: 'Phòng 01',
+        serviceName: 'Khám bệnh',
+        queueNumber: '002',
+        scheduleText: 'Thứ 4, 30/09/2026',
+        patientName: 'LÊ NGUYỄN GIA HƯNG',
+        gender: 'Nam',
+        birthYear: '1989',
+        address: '', // rỗng
+        province: 'Thành phố Hồ Chí Minh',
+        ward: 'Phường Tăng Nhơn Phú',
+        insuranceText: 'Có BHYT',
+        patientCode: '07641190',
+        createdAtText: '29/09/2026',
+        note: 'Ghi chú',
+      );
+
+      final resolvedAddr2 = ticketFallback.address.trim().isNotEmpty
+          ? ticketFallback.address.trim()
+          : [ticketFallback.ward, ticketFallback.province]
+              .where((s) => s != null && s.trim().isNotEmpty)
+              .join(', ');
+      final display2 = resolvedAddr2.trim().isEmpty ? '--' : resolvedAddr2.trim();
+      expect(display2, 'Phường Tăng Nhơn Phú, Thành phố Hồ Chí Minh');
+      expect(display2, isNot('--'));
+
+      // 3. Kiểm tra phiếu cũ hoàn toàn không có thông tin thì hiển thị '--' theo đúng đặc tả mục 4
+      const ticketOldEmpty = MedicalTicketEntity(
+        id: '103',
+        hospitalName: 'Bệnh viện Quân Dân Y Miền Đông',
+        hospitalAddress: '50 Lê Văn Việt, Phường Tăng Nhơn Phú, Thành Phố Hồ Chí Minh',
+        ticketTitle: 'PHIẾU ĐẶT LỊCH KHÁM',
+        roomName: 'Phòng 01',
+        serviceName: 'Khám bệnh',
+        queueNumber: '003',
+        scheduleText: 'Thứ 4, 30/09/2026',
+        patientName: 'TEST 260928 12:32',
+        gender: 'Nam',
+        birthYear: '2000',
+        address: '',
+        province: null,
+        ward: null,
+        insuranceText: 'Tự túc',
+        patientCode: '07641190',
+        createdAtText: '28/09/2026',
+        note: 'Ghi chú',
+      );
+
+      final resolvedAddr3 = ticketOldEmpty.address.trim().isNotEmpty
+          ? ticketOldEmpty.address.trim()
+          : [ticketOldEmpty.ward, ticketOldEmpty.province]
+              .where((s) => s != null && s.trim().isNotEmpty)
+              .join(', ');
+      final display3 = resolvedAddr3.trim().isEmpty ? '--' : resolvedAddr3.trim();
+      expect(display3, '--', reason: 'Phiếu cũ thực sự không có địa chỉ thì hiển thị --');
+
+      // 4. Kiểm tra prefillFromTicket tách address thành province và ward khi đăng ký lại
+      final repo = FakePortalRepository();
+      final vm = PatientProfileCreateViewModel(repo, AppSessionStore.instance);
+      vm.prefillFromTicket(ticketWithFullAddress);
+      expect(vm.provinceController.text, 'Thành phố Hồ Chí Minh');
+      expect(vm.wardController.text, 'Phường Đông Hòa');
+    });
   });
 }

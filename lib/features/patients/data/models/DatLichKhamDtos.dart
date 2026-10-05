@@ -7,7 +7,13 @@ class DkkHoSoBenhNhanDto {
   final String? namSinh;
   final String? gioiTinh;
   final String? cccd;
+  final String? hoChieu;
+  final String? ngayCap;
   final String? soDienThoai;
+  final dynamic idTinh;
+  final dynamic idPhuong;
+  final String? tinh;
+  final String? xa;
 
   DkkHoSoBenhNhanDto({
     this.hoTen,
@@ -18,7 +24,13 @@ class DkkHoSoBenhNhanDto {
     this.namSinh,
     this.gioiTinh,
     this.cccd,
+    this.hoChieu,
+    this.ngayCap,
     this.soDienThoai,
+    this.idTinh,
+    this.idPhuong,
+    this.tinh,
+    this.xa,
   });
 
   factory DkkHoSoBenhNhanDto.fromJson(Map<String, dynamic> json) {
@@ -31,7 +43,13 @@ class DkkHoSoBenhNhanDto {
       namSinh: json['NamSinh']?.toString(),
       gioiTinh: json['GioiTinh']?.toString(),
       cccd: json['Cccd']?.toString(),
+      hoChieu: json['HoChieu']?.toString() ?? json['hochieu']?.toString(),
+      ngayCap: json['NgayCap']?.toString() ?? json['ngaycap']?.toString(),
       soDienThoai: json['SoDienThoai']?.toString(),
+      idTinh: json['id_tinh'] ?? json['Id_tinh'] ?? json['IdTinh'] ?? json['idTinh'],
+      idPhuong: json['id_phuong'] ?? json['Id_phuong'] ?? json['IdPhuong'] ?? json['idPhuong'],
+      tinh: json['Tinh']?.toString() ?? json['tinh']?.toString(),
+      xa: json['Xa']?.toString() ?? json['xa']?.toString(),
     );
   }
 }

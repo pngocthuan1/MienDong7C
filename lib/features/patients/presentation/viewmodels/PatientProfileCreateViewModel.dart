@@ -1283,11 +1283,27 @@ class PatientProfileCreateViewModel extends BasePortalViewModel {
     otherPhoneController.text = sdt;
 
     // 10. Tỉnh / Thành phố & Phường / Xã
-    if (ticket.province != null && ticket.province!.trim().isNotEmpty) {
-      selectProvince(ticket.province!.trim());
+    String? prefillProv = ticket.province?.trim();
+    String? prefillWard = ticket.ward?.trim();
+
+    // Nếu phiếu cũ chỉ có trường address chung (chưa tách riêng province/ward)
+    if ((prefillProv == null || prefillProv.isEmpty) &&
+        ticket.address.isNotEmpty &&
+        ticket.address.contains(',')) {
+      final parts = ticket.address.split(',').map((e) => e.trim()).toList();
+      if (parts.isNotEmpty) {
+        prefillProv = parts.last;
+        if (parts.length >= 2) {
+          prefillWard = parts[parts.length - 2];
+        }
+      }
     }
-    if (ticket.ward != null && ticket.ward!.trim().isNotEmpty) {
-      selectWard(ticket.ward!.trim());
+
+    if (prefillProv != null && prefillProv.isNotEmpty) {
+      selectProvince(prefillProv);
+    }
+    if (prefillWard != null && prefillWard.isNotEmpty) {
+      selectWard(prefillWard);
     }
 
     // 11. Phòng khám & Triệu chứng

@@ -136,18 +136,16 @@ class _MedicalTicketViewState extends State<MedicalTicketView> {
     final isExpanded = _viewModel.isExpanded;
     final canDelete = _viewModel.canDelete;
 
-    // Địa chỉ hiển thị (ưu tiên ghép từ Phường/Xã + Tỉnh/TP mà người dùng đã đăng ký)
+    // Địa chỉ hiển thị (ưu tiên địa chỉ đã lưu hoặc ghép từ Phường/Xã + Tỉnh/TP)
     final addressText = [ticket.ward, ticket.province]
         .where((s) => s != null && s.trim().isNotEmpty)
         .join(', ');
     // Tuyệt đối không lấy địa chỉ bệnh viện cho địa chỉ người dùng
-    String finalAddress = addressText;
-    if (finalAddress.isEmpty &&
-        ticket.address.isNotEmpty &&
-        ticket.address != ticket.hospitalAddress &&
-        !ticket.address.contains('50 Lê Văn Việt')) {
-      finalAddress = ticket.address;
-    }
+    String finalAddress = (ticket.address.trim().isNotEmpty &&
+            ticket.address != ticket.hospitalAddress &&
+            !ticket.address.contains('50 Lê Văn Việt'))
+        ? ticket.address.trim()
+        : addressText;
 
     return AppResponsiveContainer(
       appBar: AppBar(
@@ -344,8 +342,7 @@ class _MedicalTicketViewState extends State<MedicalTicketView> {
                             : ticket.birthYear,
                       ),
                       _DetailRow(label: 'Giới tính', value: ticket.gender),
-                      if (finalAddress.isNotEmpty)
-                        _DetailRow(label: 'Địa chỉ', value: finalAddress),
+                      _DetailRow(label: 'Địa chỉ', value: finalAddress.isNotEmpty ? finalAddress : '--'),
                       if (ticket.phoneNumber != null && ticket.phoneNumber!.isNotEmpty)
                         _DetailRow(label: 'Điện thoại', value: ticket.phoneNumber!),
 

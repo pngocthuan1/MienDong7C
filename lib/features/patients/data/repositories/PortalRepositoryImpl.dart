@@ -460,21 +460,35 @@ class PortalRepositoryImpl implements PortalRepository {
       String resolvedTinhTen = (provinceName != null && provinceName.isNotEmpty) ? provinceName : (draft.province ?? '');
       if (provinceCode != null && int.tryParse(provinceCode) != null) {
         resolvedTinhId = provinceCode;
+        if (master != null && (resolvedTinhTen.isEmpty || resolvedTinhTen == provinceCode)) {
+          final matchedTinh = master.listTinh.where((t) => t.id.toString() == provinceCode || t.maByt == provinceCode).firstOrNull;
+          if (matchedTinh != null) {
+            resolvedTinhTen = matchedTinh.display;
+          }
+        }
       } else if (master != null && master.listTinh.isNotEmpty) {
         final searchProv = resolvedTinhTen.trim().toLowerCase();
-        final matchedTinh = master.listTinh.where((t) {
-          final tName = t.display.trim().toLowerCase();
-          return tName == searchProv || tName.contains(searchProv) || searchProv.contains(tName);
-        }).firstOrNull;
+        final matchedTinh = (searchProv.isNotEmpty)
+            ? master.listTinh.where((t) {
+                final tName = t.display.trim().toLowerCase();
+                return tName == searchProv || tName.contains(searchProv) || searchProv.contains(tName);
+              }).firstOrNull
+            : null;
         if (matchedTinh != null) {
           resolvedTinhId = matchedTinh.id.toString();
           resolvedTinhTen = matchedTinh.display;
         } else {
           final hcm = master.listTinh.where((t) => t.display.contains('Hồ Chí Minh') || t.id == 79).firstOrNull;
           resolvedTinhId = hcm != null ? hcm.id.toString() : master.listTinh.first.id.toString();
+          if (resolvedTinhTen.isEmpty) {
+            resolvedTinhTen = hcm != null ? hcm.display : master.listTinh.first.display;
+          }
         }
       } else {
         resolvedTinhId = '79';
+        if (resolvedTinhTen.isEmpty) {
+          resolvedTinhTen = 'Thành phố Hồ Chí Minh';
+        }
       }
 
       // Chuẩn hóa ID Phường/Xã: Bắt buộc là số nguyên hợp lệ cho server int.Parse(wrkModel.PhuongXa)
@@ -482,14 +496,32 @@ class PortalRepositoryImpl implements PortalRepository {
       String resolvedPhuongTen = (wardName != null && wardName.isNotEmpty) ? wardName : (draft.ward ?? '');
       if (wardCode != null && int.tryParse(wardCode) != null) {
         resolvedPhuongId = wardCode;
+        if (master != null && (resolvedPhuongTen.isEmpty || resolvedPhuongTen == wardCode)) {
+          final provinceWards = master.dicPhuong[resolvedTinhId] ?? [];
+          var matchedPhuong = provinceWards.where((w) => w.id.toString() == wardCode || w.maByt == wardCode).firstOrNull;
+          if (matchedPhuong == null) {
+            for (final wards in master.dicPhuong.values) {
+              final found = wards.where((w) => w.id.toString() == wardCode || w.maByt == wardCode).firstOrNull;
+              if (found != null) {
+                matchedPhuong = found;
+                break;
+              }
+            }
+          }
+          if (matchedPhuong != null) {
+            resolvedPhuongTen = matchedPhuong.display;
+          }
+        }
       } else if (master != null && master.dicPhuong.isNotEmpty) {
         final searchWard = resolvedPhuongTen.trim().toLowerCase();
         final provinceWards = master.dicPhuong[resolvedTinhId] ?? [];
-        var matchedPhuong = provinceWards.where((w) {
-          final wName = w.display.trim().toLowerCase();
-          return wName == searchWard || wName.contains(searchWard) || searchWard.contains(wName);
-        }).firstOrNull;
-        if (matchedPhuong == null) {
+        var matchedPhuong = (searchWard.isNotEmpty)
+            ? provinceWards.where((w) {
+                final wName = w.display.trim().toLowerCase();
+                return wName == searchWard || wName.contains(searchWard) || searchWard.contains(wName);
+              }).firstOrNull
+            : null;
+        if (matchedPhuong == null && searchWard.isNotEmpty) {
           for (final wards in master.dicPhuong.values) {
             final found = wards.where((w) {
               final wName = w.display.trim().toLowerCase();
@@ -506,11 +538,20 @@ class PortalRepositoryImpl implements PortalRepository {
           resolvedPhuongTen = matchedPhuong.display;
         } else if (provinceWards.isNotEmpty) {
           resolvedPhuongId = provinceWards.first.id.toString();
+          if (resolvedPhuongTen.isEmpty) {
+            resolvedPhuongTen = provinceWards.first.display;
+          }
         } else {
           resolvedPhuongId = '26830';
+          if (resolvedPhuongTen.isEmpty) {
+            resolvedPhuongTen = 'Phường Tăng Nhơn Phú';
+          }
         }
       } else {
         resolvedPhuongId = '26830';
+        if (resolvedPhuongTen.isEmpty) {
+          resolvedPhuongTen = 'Phường Tăng Nhơn Phú';
+        }
       }
 
       final req = DangKyKhamRequestDto(
@@ -613,11 +654,23 @@ class PortalRepositoryImpl implements PortalRepository {
           'gender': draft.gender,
           'patientName': draft.fullName,
           'phoneNumber': draft.phoneNumber,
+          // Lưu đầy đủ cả TinhTp, TinhTpTen, province
+          'tinhTp': resolvedTinhId,
+          'tinhTpTen': resolvedTinhTen,
           'province': resolvedTinhTen.isNotEmpty ? resolvedTinhTen : (draft.province ?? ''),
+          'provinceCode': resolvedTinhId,
+          // Lưu đầy đủ cả PhuongXa, PhuongXaTen, ward
+          'phuongXa': resolvedPhuongId,
+          'phuongXaTen': resolvedPhuongTen,
           'ward': resolvedPhuongTen.isNotEmpty ? resolvedPhuongTen : (draft.ward ?? ''),
+          'wardCode': resolvedPhuongId,
+          // Lưu đầy đủ cả diaChi và address
+          'diaChi': patientAddress,
           'address': patientAddress,
           'clinic': resolvedPhongKhamTen,
           'department': resolvedPhongKhamTen,
+          'phongKham': resolvedPhongKhamId,
+          'phongKhamTen': resolvedPhongKhamTen,
           'dangKyGiup': draft.dangKyGiup,
           'symptom': symptom,
         };
@@ -733,10 +786,24 @@ class PortalRepositoryImpl implements PortalRepository {
       // Đọc metadata đăng ký cục bộ đã lưu theo ticketId
       final allMeta = _getAllTicketMetadata();
 
-      // Đọc cached profiles để làm fallback nếu ticket cũ chưa có metadata trong store
+      // Đọc master data để chuyển đổi mã ID sang tên hiển thị nếu cần
+      DkkListMasterDto? master = _cachedMaster;
+      if (master == null) {
+        try {
+          master = await remote.getListMaster();
+          _cachedMaster = master;
+        } catch (_) {}
+      }
+
+      // Đọc cached profiles và hồ sơ bệnh nhân từ server để phục hồi cho phiếu cũ
       List<PatientProfileDraftEntity> cachedProfiles = [];
       try {
         cachedProfiles = await _datasource.loadPatientProfiles();
+      } catch (_) {}
+
+      List<DkkHoSoBenhNhanDto> remoteHoSoList = [];
+      try {
+        remoteHoSoList = await remote.getListHoSo();
       } catch (_) {}
 
       final entities = listSoKham.map((dto) {
@@ -766,9 +833,37 @@ class PortalRepositoryImpl implements PortalRepository {
         String? cleanDob = meta?['dateOfBirth']?.toString() ?? dto.ngaySinh;
         cleanDob = DateTimeConverter.toVnDate(cleanDob) ?? cleanDob;
 
-        // 4. Phục hồi Tỉnh/TP và Phường/Xã
-        String? prov = meta?['province']?.toString() ?? dto.tinhTpTen ?? dto.tinhTp;
-        String? ward = meta?['ward']?.toString() ?? dto.phuongXaTen ?? dto.phuongXa;
+        // 4. Phục hồi Tỉnh/TP và Phường/Xã (hỗ trợ đọc cả tinhTpTen, province, TinhTpTen...)
+        String? prov = meta?['tinhTpTen']?.toString() ??
+            meta?['TinhTpTen']?.toString() ??
+            meta?['province']?.toString() ??
+            meta?['Province']?.toString() ??
+            dto.tinhTpTen ??
+            dto.tinhTp;
+        String? ward = meta?['phuongXaTen']?.toString() ??
+            meta?['PhuongXaTen']?.toString() ??
+            meta?['ward']?.toString() ??
+            meta?['Ward']?.toString() ??
+            dto.phuongXaTen ??
+            dto.phuongXa;
+
+        // Nếu prov hoặc ward là dạng ID số nguyên, tra cứu tên hiển thị từ master data
+        if (master != null) {
+          if (prov != null && int.tryParse(prov) != null) {
+            final tMatch = master.listTinh.where((t) => t.id.toString() == prov || t.maByt == prov).firstOrNull;
+            if (tMatch != null) prov = tMatch.display;
+          }
+          if (ward != null && int.tryParse(ward) != null) {
+            for (final wards in master.dicPhuong.values) {
+              final wMatch = wards.where((w) => w.id.toString() == ward || w.maByt == ward).firstOrNull;
+              if (wMatch != null) {
+                ward = wMatch.display;
+                break;
+              }
+            }
+          }
+        }
+
         if ((prov == null || prov.isEmpty) && dto.diaChi != null && dto.diaChi!.contains(',')) {
           final addrParts = dto.diaChi!.split(',').map((e) => e.trim()).toList();
           if (addrParts.isNotEmpty) {
@@ -779,21 +874,26 @@ class PortalRepositoryImpl implements PortalRepository {
           }
         }
 
-        // 5. Phục hồi Địa chỉ người dùng đăng ký
-        String patientAddress = meta?['address']?.toString() ?? '';
-        if (patientAddress.isEmpty) {
+        // 5. Phục hồi Địa chỉ người dùng đăng ký (hỗ trợ đọc cả diaChi, DiaChi, address, Address)
+        String patientAddress = meta?['diaChi']?.toString() ??
+            meta?['DiaChi']?.toString() ??
+            meta?['address']?.toString() ??
+            meta?['Address']?.toString() ??
+            '';
+
+        if (patientAddress.trim().isEmpty) {
           patientAddress = [ward, prov]
               .where((s) => s != null && s.trim().isNotEmpty)
               .join(', ');
         }
-        if (patientAddress.isEmpty && dto.diaChi != null && dto.diaChi!.trim().isNotEmpty) {
+        if (patientAddress.trim().isEmpty && dto.diaChi != null && dto.diaChi!.trim().isNotEmpty) {
           final srvAddr = dto.diaChi!.trim();
           if (!srvAddr.contains('50 Lê Văn Việt')) {
             patientAddress = srvAddr;
           }
         }
 
-        // 6. Fallback từ cached profiles (nếu ticket cũ chưa có metadata trong store)
+        // 6. Fallback từ cached profiles & remote ListHoSo (nếu ticket cũ chưa có metadata trong store)
         if (patientAddress.isEmpty || cleanDob == null || cleanNgayCap == null || cleanSoCcHc == null) {
           final matchedProfile = cachedProfiles.where((p) {
             final pId = p.identifier.trim();
@@ -818,6 +918,60 @@ class PortalRepositoryImpl implements PortalRepository {
                   .join(', ');
             }
           }
+
+          // Fallback từ remoteHoSoList nếu vẫn còn thiếu
+          if (remoteHoSoList.isNotEmpty && (patientAddress.isEmpty || cleanSoCcHc == null)) {
+            final matchedHoSo = remoteHoSoList.where((h) {
+              final hId = (h.cccd ?? h.hoChieu ?? h.maThe ?? '').trim();
+              final hMaBn = (h.maSo ?? '').trim();
+              final hName = (h.hoTen ?? '').trim().toLowerCase();
+              final matchId = hId.isNotEmpty && (hId == cleanSoCcHc || hId == dto.maThe || hId == cleanMaBN);
+              final matchMaBn = hMaBn.isNotEmpty && (hMaBn == cleanMaBN || hMaBn == dto.maThe);
+              final matchName = hName.isNotEmpty && hName == (dto.hoTen ?? '').trim().toLowerCase();
+              return matchId || matchMaBn || matchName;
+            }).firstOrNull;
+
+            if (matchedHoSo != null) {
+              cleanSoCcHc ??= (matchedHoSo.cccd ?? matchedHoSo.hoChieu ?? matchedHoSo.maThe);
+              cleanDob ??= DateTimeConverter.toVnDate(matchedHoSo.ngaySinh);
+              cleanNgayCap ??= DateTimeConverter.toVnDate(matchedHoSo.ngayCap);
+
+              if ((prov == null || prov.isEmpty) && matchedHoSo.idTinh != null && master != null) {
+                final tMatch = master.listTinh.where((t) => t.id == matchedHoSo.idTinh || t.id.toString() == matchedHoSo.idTinh.toString()).firstOrNull;
+                if (tMatch != null) prov = tMatch.display;
+              }
+              if ((ward == null || ward.isEmpty) && matchedHoSo.idPhuong != null && master != null) {
+                for (final wards in master.dicPhuong.values) {
+                  final wMatch = wards.where((w) => w.id == matchedHoSo.idPhuong || w.id.toString() == matchedHoSo.idPhuong.toString()).firstOrNull;
+                  if (wMatch != null) {
+                    ward = wMatch.display;
+                    break;
+                  }
+                }
+              }
+              if (patientAddress.isEmpty) {
+                patientAddress = [ward, prov]
+                    .where((s) => s != null && s.trim().isNotEmpty)
+                    .join(', ');
+              }
+            }
+          }
+        }
+
+        // Tự động ghi lại metadata đã phục hồi để các lần tải sau hiển thị tức thì
+        if (meta == null && (patientAddress.isNotEmpty || prov != null || ward != null)) {
+          _saveTicketMetadata(ticketIdStr, {
+            'ticketId': ticketIdStr,
+            'soCcHc': cleanSoCcHc ?? '',
+            'ngayCap': cleanNgayCap ?? '',
+            'dateOfBirth': cleanDob ?? '',
+            'tinhTpTen': prov ?? '',
+            'province': prov ?? '',
+            'phuongXaTen': ward ?? '',
+            'ward': ward ?? '',
+            'diaChi': patientAddress,
+            'address': patientAddress,
+          });
         }
 
         return MedicalTicketEntity(

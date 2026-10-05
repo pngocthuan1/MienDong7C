@@ -328,7 +328,10 @@ class _AppointmentBookingViewState extends State<AppointmentBookingView> {
                   final phoneDisplay = (ticket.phoneNumber == null || ticket.phoneNumber!.trim().isEmpty) ? '--' : ticket.phoneNumber!.trim();
                   final maBnDisplay = ticket.patientCode.trim().isEmpty ? '--' : ticket.patientCode.trim();
                   final ccHcDisplay = (ticket.soCcHc == null || ticket.soCcHc!.trim().isEmpty) ? '--' : ticket.soCcHc!.trim();
-                  final addressDisplay = (ticket.address.trim().isEmpty) ? '--' : ticket.address.trim();
+                  final resolvedAddr = ticket.address.trim().isNotEmpty
+                      ? ticket.address.trim()
+                      : [ticket.ward, ticket.province].where((s) => s != null && s.trim().isNotEmpty).join(', ');
+                  final addressDisplay = resolvedAddr.trim().isEmpty ? '--' : resolvedAddr.trim();
                   final scheduleDisplay = DateTimeConverter.formatScheduleForDisplay(ticket.scheduleText);
                   final queueDisplay = ticket.queueNumber.trim().isEmpty ? '--' : ticket.queueNumber.trim();
                   final isMaBnOfficial = ticket.patientCode.trim().length == 8 &&
