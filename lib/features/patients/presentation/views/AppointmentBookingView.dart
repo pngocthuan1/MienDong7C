@@ -340,6 +340,12 @@ class _AppointmentBookingViewState extends State<AppointmentBookingView> {
                       : (ticket.birthYear.trim().isNotEmpty ? ticket.birthYear.trim() : '');
                   final dobDisplay = (dobFormatted.isEmpty || dobFormatted.toLowerCase() == 'null') ? '--' : dobFormatted;
 
+                  // Chuẩn hóa Phòng khám
+                  final rawClinic = (ticket.clinic != null && ticket.clinic!.trim().isNotEmpty)
+                      ? ticket.clinic!.trim()
+                      : (ticket.department != null ? ticket.department!.trim() : '');
+                  final clinicDisplay = (rawClinic.isEmpty || rawClinic.toLowerCase() == 'null') ? '--' : rawClinic;
+
                   final queueDisplay = ticket.queueNumber.trim().isEmpty ? '--' : ticket.queueNumber.trim();
 
                   // Chuẩn hóa Ngày khám & Giờ khám gộp thành 1 chuỗi thống nhất: "dd/MM/yyyy • <giờ>"
@@ -401,57 +407,62 @@ class _AppointmentBookingViewState extends State<AppointmentBookingView> {
 
                   Widget buildInfoSection() {
                     if (isSingleColumn) {
-                      // Màn hình siêu nhỏ — mỗi trường 1 hàng riêng
+                      // Màn hình siêu nhỏ — mỗi trường 1 hàng riêng theo thứ tự mới
                       return Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
+                          _buildInfoField(icon: Icons.tag_rounded, label: 'Mã BN', value: maBnDisplay,
+                              valueColor: isMaBnOfficial ? const Color(0xFF4F46E5) : null, textScaler: textScaler),
+                          const SizedBox(height: 8),
+                          _buildInfoField(icon: Icons.confirmation_number_outlined, label: 'Số ĐK', value: queueDisplay, textScaler: textScaler),
+                          const SizedBox(height: 8),
+                          _buildInfoField(icon: Icons.local_hospital_outlined, label: 'Phòng khám', value: clinicDisplay, textScaler: textScaler),
+                          const SizedBox(height: 8),
+                          _buildInfoField(icon: Icons.cake_outlined, label: 'Ngày sinh', value: dobDisplay, textScaler: textScaler),
+                          const SizedBox(height: 8),
+                          _buildInfoField(icon: Icons.badge_outlined, label: 'CC/HC', value: ccHcDisplay, textScaler: textScaler),
+                          const SizedBox(height: 8),
                           _buildInfoField(icon: Icons.wc_rounded, label: 'Giới tính', value: genderDisplay, textScaler: textScaler),
                           const SizedBox(height: 8),
                           _buildInfoField(icon: Icons.phone_iphone_rounded, label: 'SĐT', value: phoneDisplay, textScaler: textScaler),
                           const SizedBox(height: 8),
-                          _buildInfoField(icon: Icons.tag_rounded, label: 'Mã BN', value: maBnDisplay,
-                              valueColor: isMaBnOfficial ? const Color(0xFF4F46E5) : null, textScaler: textScaler),
-                          const SizedBox(height: 8),
-                          _buildInfoField(icon: Icons.badge_outlined, label: 'CC/HC', value: ccHcDisplay, textScaler: textScaler),
-                          const SizedBox(height: 8),
-                          _buildInfoField(icon: Icons.cake_outlined, label: 'Ngày sinh', value: dobDisplay, textScaler: textScaler),
-                          const SizedBox(height: 8),
-                          _buildInfoField(icon: Icons.confirmation_number_outlined, label: 'Số đăng ký', value: queueDisplay, textScaler: textScaler),
-                          const SizedBox(height: 8),
-                          _buildInfoField(icon: Icons.calendar_today_rounded, label: 'Ngày khám', value: ngayGioKhamDisplay, textScaler: textScaler),
+                          _buildInfoField(icon: Icons.calendar_today_rounded, label: 'Ngày khám/giờ khám', value: ngayGioKhamDisplay, textScaler: textScaler),
                           const SizedBox(height: 8),
                           _buildInfoField(icon: Icons.location_on_outlined, label: 'Địa chỉ', value: addressDisplay, textScaler: textScaler),
                         ],
                       );
                     }
 
-                    // Bố cục chuẩn: 3 hàng đầu 2 cột, Ngày khám gộp full-width, Địa chỉ ở cuối cùng
+                    // Bố cục chuẩn theo thứ tự mới:
                     return Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        // Hàng 1: Giới tính | SĐT
+                        // Hàng 1: Mã BN | Số ĐK
+                        buildRow(
+                          _buildInfoField(icon: Icons.tag_rounded, label: 'Mã BN', value: maBnDisplay,
+                              valueColor: isMaBnOfficial ? const Color(0xFF4F46E5) : null, textScaler: textScaler),
+                          _buildInfoField(icon: Icons.confirmation_number_outlined, label: 'Số ĐK', value: queueDisplay, textScaler: textScaler),
+                        ),
+                        const SizedBox(height: 8),
+                        // Hàng 2: Phòng khám (full-width, chiếm trọn 1 hàng)
+                        _buildInfoField(icon: Icons.local_hospital_outlined, label: 'Phòng khám', value: clinicDisplay, textScaler: textScaler),
+                        const SizedBox(height: 8),
+                        // Hàng 3: Ngày sinh | CC/HC
+                        buildRow(
+                          _buildInfoField(icon: Icons.cake_outlined, label: 'Ngày sinh', value: dobDisplay, textScaler: textScaler),
+                          _buildInfoField(icon: Icons.badge_outlined, label: 'CC/HC', value: ccHcDisplay, textScaler: textScaler),
+                        ),
+                        const SizedBox(height: 8),
+                        // Hàng 4: Giới tính | SĐT
                         buildRow(
                           _buildInfoField(icon: Icons.wc_rounded, label: 'Giới tính', value: genderDisplay, textScaler: textScaler),
                           _buildInfoField(icon: Icons.phone_iphone_rounded, label: 'SĐT', value: phoneDisplay, textScaler: textScaler),
                         ),
                         const SizedBox(height: 8),
-                        // Hàng 2: Mã BN | CC/HC
-                        buildRow(
-                          _buildInfoField(icon: Icons.tag_rounded, label: 'Mã BN', value: maBnDisplay,
-                              valueColor: isMaBnOfficial ? const Color(0xFF4F46E5) : null, textScaler: textScaler),
-                          _buildInfoField(icon: Icons.badge_outlined, label: 'CC/HC', value: ccHcDisplay, textScaler: textScaler),
-                        ),
-                        const SizedBox(height: 8),
-                        // Hàng 3: Ngày sinh | Số ĐK
-                        buildRow(
-                          _buildInfoField(icon: Icons.cake_outlined, label: 'Ngày sinh', value: dobDisplay, textScaler: textScaler),
-                          _buildInfoField(icon: Icons.confirmation_number_outlined, label: 'Số ĐK', value: queueDisplay, textScaler: textScaler),
-                        ),
-                        const SizedBox(height: 8),
-                        // Hàng 4: Ngày khám (gộp cả giờ, full-width)
+                        // Hàng 5: Ngày khám • Giờ khám (full-width)
                         _buildInfoField(icon: Icons.calendar_today_rounded, label: 'Ngày khám/giờ khám', value: ngayGioKhamDisplay, textScaler: textScaler),
                         const SizedBox(height: 8),
-                        // Hàng 5: Địa chỉ — full width, đặt CUỐI CÙNG
+                        // Hàng 6: Địa chỉ (full-width, ở cuối cùng)
                         _buildInfoField(icon: Icons.location_on_outlined, label: 'Địa chỉ', value: addressDisplay, textScaler: textScaler),
                       ],
                     );

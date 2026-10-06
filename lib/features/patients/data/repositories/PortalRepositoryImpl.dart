@@ -989,8 +989,12 @@ class PortalRepositoryImpl implements PortalRepository {
           patientCode: cleanMaBN,
           createdAtText: _formatCreatedAtText(dto.ngayud ?? dto.ngayGioKham),
           note: 'Ghi chú: Phiếu đặt lịch khám chỉ có giá trị trong ngày đặt khám từ 6g30 - 16g30',
-          department: dto.phongKhamTen ?? '',
-          clinic: dto.phongKhamTen ?? dto.phongKham ?? '',
+          department: (dto.phongKhamTen != null && dto.phongKhamTen!.trim().isNotEmpty)
+              ? dto.phongKhamTen!.trim()
+              : (meta?['phongKhamTen']?.toString() ?? meta?['clinic']?.toString() ?? meta?['department']?.toString() ?? ''),
+          clinic: (dto.phongKhamTen != null && dto.phongKhamTen!.trim().isNotEmpty)
+              ? dto.phongKhamTen!.trim()
+              : (meta?['clinic']?.toString() ?? meta?['phongKhamTen']?.toString() ?? meta?['department']?.toString() ?? (dto.phongKham ?? '')),
           selectedDate: dto.ngayGioKham,
           selectedTime: rawGioKham,
           phoneNumber: dto.sdt,

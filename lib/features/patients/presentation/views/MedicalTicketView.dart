@@ -323,30 +323,64 @@ class _MedicalTicketViewState extends State<MedicalTicketView> {
                       ),
                       const SizedBox(height: 20),
 
-                      // --- CHẾ ĐỘ THU GỌN (MẶC ĐỊNH) ---
-                      // Thứ tự spec: HoTen -> SoCcHc -> NgayCap -> NgaySinh -> GioiTinh -> DiaChi -> DienThoai
-                      _DetailRow(label: 'Họ tên', value: ticket.patientName),
-                      if (ticket.soCcHc != null && ticket.soCcHc!.isNotEmpty)
-                        _DetailRow(label: 'CCCD/HC', value: ticket.soCcHc!)
-                      else if (ticket.insuranceText.isNotEmpty)
-                        _DetailRow(label: 'Mã số/Thẻ', value: ticket.insuranceText),
-                      if (ticket.ngayCap != null && ticket.ngayCap!.isNotEmpty)
-                        _DetailRow(
-                          label: 'Ngày cấp',
-                          value: DateTimeConverter.toVnDate(ticket.ngayCap) ?? ticket.ngayCap!,
-                        ),
+                      // --- KHỐI 1: THÔNG TIN KHÁM (DỜI LÊN TRƯỚC, LUÔN HIỂN THỊ) ---
                       _DetailRow(
-                        label: 'Ngày sinh',
-                        value: (ticket.dateOfBirth != null && ticket.dateOfBirth!.isNotEmpty)
-                            ? (DateTimeConverter.toVnDate(ticket.dateOfBirth) ?? ticket.dateOfBirth!)
-                            : ticket.birthYear,
+                        label: 'Ngày khám',
+                        value: DateTimeConverter.formatNgayGioKhamBullet(
+                          ngayKham: ticket.selectedDate,
+                          gioKham: ticket.selectedTime,
+                          rawSchedule: ticket.scheduleText,
+                        ),
                       ),
-                      _DetailRow(label: 'Giới tính', value: ticket.gender),
-                      _DetailRow(label: 'Địa chỉ', value: finalAddress.isNotEmpty ? finalAddress : '--'),
-                      if (ticket.phoneNumber != null && ticket.phoneNumber!.isNotEmpty)
-                        _DetailRow(label: 'Điện thoại', value: ticket.phoneNumber!),
+                      if (ticket.symptom != null && ticket.symptom!.trim().isNotEmpty)
+                        _DetailRow(label: 'Triệu chứng', value: ticket.symptom!.trim()),
+                      if (ticket.clinic != null && ticket.clinic!.isNotEmpty)
+                        _DetailRow(label: 'Phòng khám', value: ticket.clinic!)
+                      else if (ticket.department != null && ticket.department!.isNotEmpty)
+                        _DetailRow(label: 'Phòng khám', value: ticket.department!),
 
-                      // --- CHẾ ĐỘ ĐẦY ĐỦ (KHI BẤM "XEM CHI TIẾT") ---
+                      // Mã BN & Barcode
+                      if (ticket.patientCode.trim().isNotEmpty) ...[
+                        _DetailRow(label: 'Mã BN', value: ticket.patientCode),
+                        const SizedBox(height: 8),
+                        InkWell(
+                          onTap: () => _showExpandedBarcodeDialog(context, ticket.patientCode),
+                          borderRadius: BorderRadius.circular(8),
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 4),
+                            child: Column(
+                              children: [
+                                Center(
+                                  child: SizedBox(
+                                    width: 260,
+                                    height: 80,
+                                    child: MedicalTicketBarcode(seed: ticket.patientCode),
+                                  ),
+                                ),
+                                const SizedBox(height: 4),
+                                const Text(
+                                  '(Chạm để phóng to mã vạch)',
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    color: Color(0xFF64748B),
+                                    fontStyle: FontStyle.italic,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 10),
+                      ],
+
+                      _DetailRow(
+                        label: 'Đăng ký lúc',
+                        value: DateTimeConverter.toVnDateTime(ticket.createdAtText, includeSeconds: true) ?? ticket.createdAtText,
+                      ),
+                      if (ticket.dangKyGiup != null && ticket.dangKyGiup!.isNotEmpty)
+                        _DetailRow(label: 'Đăng ký giúp', value: ticket.dangKyGiup!),
+
+                      // --- KHỐI 2: THÔNG TIN CÁ NHÂN (DỜI XUỐNG SAU, ẨN/HIỆN QUA NÚT "XEM CHI TIẾT" / "THU GỌN") ---
                       AnimatedSize(
                         duration: const Duration(milliseconds: 300),
                         curve: Curves.easeInOut,
@@ -357,61 +391,26 @@ class _MedicalTicketViewState extends State<MedicalTicketView> {
                                   const Divider(color: Color(0xFFE2E8F0), thickness: 1),
                                   const SizedBox(height: 10),
 
-                                  _DetailRow(
-                                    label: 'Ngày khám',
-                                    value: DateTimeConverter.formatNgayGioKhamBullet(
-                                      ngayKham: ticket.selectedDate,
-                                      gioKham: ticket.selectedTime,
-                                      rawSchedule: ticket.scheduleText,
+                                  _DetailRow(label: 'Họ tên', value: ticket.patientName),
+                                  if (ticket.soCcHc != null && ticket.soCcHc!.isNotEmpty)
+                                    _DetailRow(label: 'CCCD/HC', value: ticket.soCcHc!)
+                                  else if (ticket.insuranceText.isNotEmpty)
+                                    _DetailRow(label: 'Mã số/Thẻ', value: ticket.insuranceText),
+                                  if (ticket.ngayCap != null && ticket.ngayCap!.isNotEmpty)
+                                    _DetailRow(
+                                      label: 'Ngày cấp',
+                                      value: DateTimeConverter.toVnDate(ticket.ngayCap) ?? ticket.ngayCap!,
                                     ),
-                                  ),
-                                  if (ticket.symptom != null && ticket.symptom!.trim().isNotEmpty)
-                                    _DetailRow(label: 'Triệu chứng', value: ticket.symptom!.trim()),
-                                  if (ticket.clinic != null && ticket.clinic!.isNotEmpty)
-                                    _DetailRow(label: 'Phòng khám', value: ticket.clinic!)
-                                  else if (ticket.department != null && ticket.department!.isNotEmpty)
-                                    _DetailRow(label: 'Phòng khám', value: ticket.department!),
-
-                                  // Mã BN & Barcode
-                                  if (ticket.patientCode.trim().isNotEmpty) ...[
-                                    _DetailRow(label: 'Mã BN', value: ticket.patientCode),
-                                    const SizedBox(height: 8),
-                                    InkWell(
-                                      onTap: () => _showExpandedBarcodeDialog(context, ticket.patientCode),
-                                      borderRadius: BorderRadius.circular(8),
-                                      child: Padding(
-                                        padding: const EdgeInsets.symmetric(vertical: 4),
-                                        child: Column(
-                                          children: [
-                                            Center(
-                                              child: SizedBox(
-                                                width: 260,
-                                                height: 80,
-                                                child: MedicalTicketBarcode(seed: ticket.patientCode),
-                                              ),
-                                            ),
-                                            const SizedBox(height: 4),
-                                            const Text(
-                                              '(Chạm để phóng to mã vạch)',
-                                              style: TextStyle(
-                                                fontSize: 11,
-                                                color: Color(0xFF64748B),
-                                                fontStyle: FontStyle.italic,
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                      ),
-                                    ),
-                                    const SizedBox(height: 10),
-                                  ],
-
                                   _DetailRow(
-                                    label: 'Đăng ký lúc',
-                                    value: DateTimeConverter.toVnDateTime(ticket.createdAtText, includeSeconds: true) ?? ticket.createdAtText,
+                                    label: 'Ngày sinh',
+                                    value: (ticket.dateOfBirth != null && ticket.dateOfBirth!.isNotEmpty)
+                                        ? (DateTimeConverter.toVnDate(ticket.dateOfBirth) ?? ticket.dateOfBirth!)
+                                        : ticket.birthYear,
                                   ),
-                                  if (ticket.dangKyGiup != null && ticket.dangKyGiup!.isNotEmpty)
-                                    _DetailRow(label: 'Đăng ký giúp', value: ticket.dangKyGiup!),
+                                  _DetailRow(label: 'Giới tính', value: ticket.gender),
+                                  _DetailRow(label: 'Địa chỉ', value: finalAddress.isNotEmpty ? finalAddress : '--'),
+                                  if (ticket.phoneNumber != null && ticket.phoneNumber!.isNotEmpty)
+                                    _DetailRow(label: 'Điện thoại', value: ticket.phoneNumber!),
                                 ],
                               )
                             : const SizedBox.shrink(),
