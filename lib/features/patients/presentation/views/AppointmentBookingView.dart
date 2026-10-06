@@ -95,6 +95,7 @@ class _AppointmentBookingViewState extends State<AppointmentBookingView> {
 
   /// Widget ô thông tin dùng chung — đảm bảo mọi trường có cùng kiểu dáng, padding, font.
   /// [valueColor]: màu riêng cho giá trị (ví dụ màu tím #4F46E5 cho Mã BN).
+  /// [isEmphasized]: tăng kích thước chữ giá trị cho các trường định danh quan trọng (Mã BN, Số ĐK).
   /// [textScaler]: TextScaler đã clamp sẵn để bảo vệ layout với Accessibility.
   Widget _buildInfoField({
     required IconData icon,
@@ -102,17 +103,22 @@ class _AppointmentBookingViewState extends State<AppointmentBookingView> {
     required String value,
     Color iconColor = const Color(0xFF64748B),
     Color? valueColor,
+    bool isEmphasized = false,
+    double? valueFontSize,
+    FontWeight? valueFontWeight,
     required TextScaler textScaler,
   }) {
     final displayValue = value.trim().isEmpty ? '--' : value.trim();
     final resolvedValueColor = valueColor ?? const Color(0xFF1E293B);
+    final resolvedFontSize = valueFontSize ?? (isEmphasized ? 15.5 : 12.5);
+    final resolvedFontWeight = valueFontWeight ?? (isEmphasized ? FontWeight.w700 : FontWeight.w600);
 
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Padding(
-          padding: const EdgeInsets.only(top: 1.5),
-          child: Icon(icon, size: 15, color: iconColor),
+          padding: EdgeInsets.only(top: isEmphasized ? 2.0 : 1.5),
+          child: Icon(icon, size: isEmphasized ? 16 : 15, color: iconColor),
         ),
         const SizedBox(width: 5),
         Expanded(
@@ -131,9 +137,9 @@ class _AppointmentBookingViewState extends State<AppointmentBookingView> {
                 TextSpan(
                   text: displayValue,
                   style: TextStyle(
-                    fontSize: 12.5,
+                    fontSize: resolvedFontSize,
                     color: resolvedValueColor,
-                    fontWeight: FontWeight.w600,
+                    fontWeight: resolvedFontWeight,
                     height: 1.4,
                   ),
                 ),
@@ -411,23 +417,63 @@ class _AppointmentBookingViewState extends State<AppointmentBookingView> {
                       return Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          _buildInfoField(icon: Icons.tag_rounded, label: 'Mã BN', value: maBnDisplay,
-                              valueColor: isMaBnOfficial ? const Color(0xFF4F46E5) : null, textScaler: textScaler),
+                          // Hàng 1: Mã BN (to hơn, nổi bật)
+                          _buildInfoField(
+                            icon: Icons.tag_rounded,
+                            label: 'Mã BN',
+                            value: maBnDisplay,
+                            valueColor: isMaBnOfficial ? const Color(0xFF4F46E5) : null,
+                            isEmphasized: true,
+                            textScaler: textScaler,
+                          ),
                           const SizedBox(height: 8),
-                          _buildInfoField(icon: Icons.confirmation_number_outlined, label: 'Số ĐK', value: queueDisplay, textScaler: textScaler),
+                          // Hàng 1 (phần 2): Số ĐK (to hơn, nổi bật)
+                          _buildInfoField(
+                            icon: Icons.confirmation_number_outlined,
+                            label: 'Số ĐK',
+                            value: queueDisplay,
+                            isEmphasized: true,
+                            textScaler: textScaler,
+                          ),
                           const SizedBox(height: 8),
-                          _buildInfoField(icon: Icons.local_hospital_outlined, label: 'Phòng khám', value: clinicDisplay, textScaler: textScaler),
+                          // Hàng 2: Ngày khám • Giờ khám (full-width)
+                          _buildInfoField(
+                            icon: Icons.calendar_today_rounded,
+                            label: 'Ngày khám/giờ khám',
+                            value: ngayGioKhamDisplay,
+                            textScaler: textScaler,
+                          ),
                           const SizedBox(height: 8),
+                          // Hàng 3: Phòng khám (full-width)
+                          _buildInfoField(
+                            icon: Icons.local_hospital_outlined,
+                            label: 'Phòng khám',
+                            value: clinicDisplay,
+                            textScaler: textScaler,
+                          ),
+
+                          // ── Đường kẻ mờ ngăn cách giữa "Thông tin khám" và "Thông tin cá nhân" ──
+                          const SizedBox(height: 8),
+                          Divider(
+                            height: 1,
+                            thickness: 0.8,
+                            color: Colors.grey.withValues(alpha: 0.25),
+                          ),
+                          const SizedBox(height: 8),
+
+                          // Hàng 4: Ngày sinh
                           _buildInfoField(icon: Icons.cake_outlined, label: 'Ngày sinh', value: dobDisplay, textScaler: textScaler),
                           const SizedBox(height: 8),
+                          // Hàng 4 (phần 2): CC/HC
                           _buildInfoField(icon: Icons.badge_outlined, label: 'CC/HC', value: ccHcDisplay, textScaler: textScaler),
                           const SizedBox(height: 8),
+                          // Hàng 5: Giới tính
                           _buildInfoField(icon: Icons.wc_rounded, label: 'Giới tính', value: genderDisplay, textScaler: textScaler),
                           const SizedBox(height: 8),
+                          // Hàng 5 (phần 2): SĐT
                           _buildInfoField(icon: Icons.phone_iphone_rounded, label: 'SĐT', value: phoneDisplay, textScaler: textScaler),
                           const SizedBox(height: 8),
-                          _buildInfoField(icon: Icons.calendar_today_rounded, label: 'Ngày khám/giờ khám', value: ngayGioKhamDisplay, textScaler: textScaler),
-                          const SizedBox(height: 8),
+                          // Hàng 6: Địa chỉ (full-width)
                           _buildInfoField(icon: Icons.location_on_outlined, label: 'Địa chỉ', value: addressDisplay, textScaler: textScaler),
                         ],
                       );
@@ -437,31 +483,66 @@ class _AppointmentBookingViewState extends State<AppointmentBookingView> {
                     return Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        // Hàng 1: Mã BN | Số ĐK
+                        // Hàng 1: Mã BN | Số ĐK (Mã BN & Số ĐK hiển thị to hơn: 15.5sp, đậm)
                         buildRow(
-                          _buildInfoField(icon: Icons.tag_rounded, label: 'Mã BN', value: maBnDisplay,
-                              valueColor: isMaBnOfficial ? const Color(0xFF4F46E5) : null, textScaler: textScaler),
-                          _buildInfoField(icon: Icons.confirmation_number_outlined, label: 'Số ĐK', value: queueDisplay, textScaler: textScaler),
+                          _buildInfoField(
+                            icon: Icons.tag_rounded,
+                            label: 'Mã BN',
+                            value: maBnDisplay,
+                            valueColor: isMaBnOfficial ? const Color(0xFF4F46E5) : null,
+                            isEmphasized: true,
+                            textScaler: textScaler,
+                          ),
+                          _buildInfoField(
+                            icon: Icons.confirmation_number_outlined,
+                            label: 'Số ĐK',
+                            value: queueDisplay,
+                            isEmphasized: true,
+                            textScaler: textScaler,
+                          ),
                         ),
                         const SizedBox(height: 8),
-                        // Hàng 2: Phòng khám (full-width, chiếm trọn 1 hàng)
-                        _buildInfoField(icon: Icons.local_hospital_outlined, label: 'Phòng khám', value: clinicDisplay, textScaler: textScaler),
+
+                        // Hàng 2: Ngày khám • Giờ khám (full-width, gộp "dd/MM/yyyy • HH:mm")
+                        _buildInfoField(
+                          icon: Icons.calendar_today_rounded,
+                          label: 'Ngày khám/giờ khám',
+                          value: ngayGioKhamDisplay,
+                          textScaler: textScaler,
+                        ),
                         const SizedBox(height: 8),
-                        // Hàng 3: Ngày sinh | CC/HC
+
+                        // Hàng 3: Phòng khám (full-width)
+                        _buildInfoField(
+                          icon: Icons.local_hospital_outlined,
+                          label: 'Phòng khám',
+                          value: clinicDisplay,
+                          textScaler: textScaler,
+                        ),
+
+                        // ── Đường kẻ mờ ngăn cách giữa "Thông tin khám" và "Thông tin cá nhân" ──
+                        const SizedBox(height: 8),
+                        Divider(
+                          height: 1,
+                          thickness: 0.8,
+                          color: Colors.grey.withValues(alpha: 0.25),
+                        ),
+                        const SizedBox(height: 8),
+
+                        // Hàng 4: Ngày sinh | CC/HC
                         buildRow(
                           _buildInfoField(icon: Icons.cake_outlined, label: 'Ngày sinh', value: dobDisplay, textScaler: textScaler),
                           _buildInfoField(icon: Icons.badge_outlined, label: 'CC/HC', value: ccHcDisplay, textScaler: textScaler),
                         ),
                         const SizedBox(height: 8),
-                        // Hàng 4: Giới tính | SĐT
+
+                        // Hàng 5: Giới tính | SĐT
                         buildRow(
                           _buildInfoField(icon: Icons.wc_rounded, label: 'Giới tính', value: genderDisplay, textScaler: textScaler),
                           _buildInfoField(icon: Icons.phone_iphone_rounded, label: 'SĐT', value: phoneDisplay, textScaler: textScaler),
                         ),
                         const SizedBox(height: 8),
-                        // Hàng 5: Ngày khám • Giờ khám (full-width)
-                        _buildInfoField(icon: Icons.calendar_today_rounded, label: 'Ngày khám/giờ khám', value: ngayGioKhamDisplay, textScaler: textScaler),
-                        const SizedBox(height: 8),
+
                         // Hàng 6: Địa chỉ (full-width, ở cuối cùng)
                         _buildInfoField(icon: Icons.location_on_outlined, label: 'Địa chỉ', value: addressDisplay, textScaler: textScaler),
                       ],

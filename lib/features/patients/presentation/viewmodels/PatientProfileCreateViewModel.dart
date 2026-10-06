@@ -137,12 +137,13 @@ class PatientProfileCreateViewModel extends BasePortalViewModel {
   DkkListMasterDto? masterData;
   bool isLoadingMaster = false;
   String? masterError;
+  String? profilesError;
   late final Command0<DkkListMasterDto> loadMasterCommand;
   String? selectedClinicId;  // Lưu Id phòng khám từ server
 
 
   // Selected values
-  String? selectedDepartment = 'Phòng khám 1 - Nội tổng quát';
+  String? selectedDepartment;
   DateTime? selectedDate;
   String? selectedTime;
 
@@ -899,6 +900,8 @@ class PatientProfileCreateViewModel extends BasePortalViewModel {
     provinceController.clear();
     wardController.clear();
     clinicController.clear();
+    selectedDepartment = null;
+    selectedClinicId = null;
     dangKyGiupController.clear();
     fullNameError = null;
     birthYearError = null;
@@ -1752,13 +1755,17 @@ class PatientProfileCreateViewModel extends BasePortalViewModel {
       result.when(
         ok: (list) {
           savedProfiles = list;
+          profilesError = null;
           if (_initialTicket != null) {
             // Chỉ bổ sung các ô còn trống, KHÔNG ghi đè họ tên và KHÔNG khóa form!
             _applyMatchedSavedProfile(_maBN, _initialTicket!.patientName, identifierController.text);
           }
           notifyListeners();
         },
-        error: (_, _) {},
+        error: (err, message) {
+          profilesError = message.isNotEmpty ? message : err.toString();
+          notifyListeners();
+        },
       );
       return result;
     });

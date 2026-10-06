@@ -31,6 +31,9 @@ class PatientProfileCreateView extends StatefulWidget {
 }
 
 class _PatientProfileCreateViewState extends State<PatientProfileCreateView> {
+  /// Cờ ẩn/hiện khối "Tóm tắt thông tin khám" (tạm thời ẩn theo yêu cầu, đổi thành true để hiển thị lại)
+  static const bool kShowAppointmentSummary = false;
+
   final _formKey = GlobalKey<FormState>();
   late final PatientProfileCreateViewModel _viewModel;
   String? _captchaToken;
@@ -103,9 +106,14 @@ class _PatientProfileCreateViewState extends State<PatientProfileCreateView> {
     final loadResult = _viewModel.loadProfilesCommand.result;
     if (loadResult != null) {
       loadResult.when(
-        ok: (_) {},
+        ok: (_) {
+          // Tải hồ sơ thành công -> Tự động ẩn banner lỗi ngay lập tức
+          ScaffoldMessenger.of(context).hideCurrentSnackBar();
+          _viewModel.loadProfilesCommand.clearResult();
+        },
         error: (err, msg) {
           _viewModel.loadProfilesCommand.clearResult();
+          ScaffoldMessenger.of(context).hideCurrentSnackBar();
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: Text('Lỗi tải danh sách hồ sơ: ${msg.isNotEmpty ? msg : err}'),
@@ -137,8 +145,12 @@ class _PatientProfileCreateViewState extends State<PatientProfileCreateView> {
     }
   }
 
-  Future<void> _selectDateOfBirth(TextEditingController controller, {required bool isOther}) async {
-    DateTime initial = DateTime.now().subtract(const Duration(days: 365 * 25));
+  /// Chọn Ngày cấp CCCD/Hộ chiếu:
+  /// - Mặc định mở tháng/năm hiện tại nếu ô trống
+  /// - Vô hiệu hóa (disable) tất cả các ngày trong tương lai (lastDate: DateTime.now())
+  Future<void> _selectCccdIssueDate(TextEditingController controller) async {
+    final now = DateTime.now();
+    DateTime initial = now;
     if (controller.text.contains('/')) {
       final parts = controller.text.split('/');
       if (parts.length == 3) {
@@ -146,7 +158,10 @@ class _PatientProfileCreateViewState extends State<PatientProfileCreateView> {
         final m = int.tryParse(parts[1]);
         final y = int.tryParse(parts[2]);
         if (d != null && m != null && y != null) {
-          initial = DateTime(y, m, d);
+          final parsed = DateTime(y, m, d);
+          if (!parsed.isAfter(now) && !parsed.isBefore(DateTime(1900))) {
+            initial = parsed;
+          }
         }
       }
     }
@@ -154,7 +169,41 @@ class _PatientProfileCreateViewState extends State<PatientProfileCreateView> {
       context: context,
       initialDate: initial,
       firstDate: DateTime(1900),
-      lastDate: DateTime.now(),
+      lastDate: now,
+      locale: const Locale('vi', 'VN'),
+    );
+
+    if (picked != null) {
+      final formatted = DateFormat('dd/MM/yyyy').format(picked);
+      controller.text = formatted;
+    }
+  }
+
+  /// Chọn Ngày sinh:
+  /// - Mặc định mở tháng/năm hiện tại nếu ô trống
+  /// - Vô hiệu hóa (disable) tất cả các ngày trong tương lai (lastDate: DateTime.now())
+  Future<void> _selectDateOfBirth(TextEditingController controller, {required bool isOther}) async {
+    final now = DateTime.now();
+    DateTime initial = now;
+    if (controller.text.contains('/')) {
+      final parts = controller.text.split('/');
+      if (parts.length == 3) {
+        final d = int.tryParse(parts[0]);
+        final m = int.tryParse(parts[1]);
+        final y = int.tryParse(parts[2]);
+        if (d != null && m != null && y != null) {
+          final parsed = DateTime(y, m, d);
+          if (!parsed.isAfter(now) && !parsed.isBefore(DateTime(1900))) {
+            initial = parsed;
+          }
+        }
+      }
+    }
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: initial,
+      firstDate: DateTime(1900),
+      lastDate: now,
       locale: const Locale('vi', 'VN'),
     );
 
@@ -1958,7 +2007,7 @@ class _PatientProfileCreateViewState extends State<PatientProfileCreateView> {
                             icon: const Icon(Icons.calendar_today_rounded, size: 18),
                             onPressed: _viewModel.isExistingProfile
                                 ? null
-                                : () => _selectDateOfBirth(_viewModel.cccdIssueDateController, isOther: false),
+                                : () => _selectCccdIssueDate(_viewModel.cccdIssueDateController),
                           ),
                           border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
                         ),
@@ -2212,12 +2261,24 @@ class _PatientProfileCreateViewState extends State<PatientProfileCreateView> {
                                       ],
                                     ),
                                   ),
-                                  const SizedBox(height: 4),
-                                  Text(
-                                    _viewModel.clinicController.text.isNotEmpty
-                                        ? _viewModel.clinicController.text
-                                        : (_viewModel.selectedDepartment ?? 'Chọn Phòng khám'),
-                                    style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
+                                  Builder(
+                                    builder: (context) {
+                                      final hasClinic = _viewModel.clinicController.text.trim().isNotEmpty ||
+                                          (_viewModel.selectedDepartment != null && _viewModel.selectedDepartment!.trim().isNotEmpty);
+                                      final clinicText = _viewModel.clinicController.text.trim().isNotEmpty
+                                          ? _viewModel.clinicController.text.trim()
+                                          : (_viewModel.selectedDepartment?.trim().isNotEmpty == true
+                                              ? _viewModel.selectedDepartment!.trim()
+                                              : 'Chọn phòng khám');
+                                      return Text(
+                                        clinicText,
+                                        style: TextStyle(
+                                          fontSize: 14,
+                                          fontWeight: hasClinic ? FontWeight.bold : FontWeight.normal,
+                                          color: hasClinic ? const Color(0xFF1E293B) : const Color(0xFF94A3B8),
+                                        ),
+                                      );
+                                    },
                                   ),
                                 ],
                               ),
@@ -2263,7 +2324,9 @@ class _PatientProfileCreateViewState extends State<PatientProfileCreateView> {
                 const SizedBox(height: 16),
               ],
 
-              _buildSummaryCard(),
+              if (kShowAppointmentSummary) ...[
+                _buildSummaryCard(),
+              ],
             ],
           ),
         ),
