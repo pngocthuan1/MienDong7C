@@ -10,10 +10,13 @@ class PatientProfileDraftEntity {
     this.province,
     this.ward,
     this.clinic,
+    this.maThe,
     this.maSo,
     this.maHS,
     this.maBN,
     this.dangKyGiup,
+    this.idTinh,
+    this.idPhuong,
     this.isDeleted = false,
   });
 
@@ -27,10 +30,13 @@ class PatientProfileDraftEntity {
   final String? province;
   final String? ward;
   final String? clinic;
+  final String? maThe;
   final String? maSo;
   final String? maHS;
   final String? maBN;
   final String? dangKyGiup;
+  final dynamic idTinh;
+  final dynamic idPhuong;
   final bool isDeleted;
 
   Map<String, dynamic> toJson() {
@@ -45,10 +51,13 @@ class PatientProfileDraftEntity {
       'province': province,
       'ward': ward,
       'clinic': clinic,
+      'maThe': maThe,
       'maSo': maSo,
       'maHS': maHS,
       'maBN': maBN,
       'dangKyGiup': dangKyGiup,
+      'idTinh': idTinh,
+      'idPhuong': idPhuong,
       'isDeleted': isDeleted,
     };
   }
@@ -65,10 +74,13 @@ class PatientProfileDraftEntity {
       province: json['province'] as String?,
       ward: json['ward'] as String?,
       clinic: json['clinic'] as String?,
+      maThe: json['maThe'] as String?,
       maSo: json['maSo'] as String?,
       maHS: json['maHS'] as String?,
       maBN: json['maBN'] as String?,
       dangKyGiup: json['dangKyGiup'] as String?,
+      idTinh: json['idTinh'],
+      idPhuong: json['idPhuong'],
       isDeleted: json['isDeleted'] as bool? ?? false,
     );
   }
@@ -85,8 +97,13 @@ class PatientProfileDraftEntity {
     String? province,
     String? ward,
     String? clinic,
+    String? maThe,
     String? maSo,
+    String? maHS,
+    String? maBN,
     String? dangKyGiup,
+    dynamic idTinh,
+    dynamic idPhuong,
     bool? isDeleted,
   }) {
     return PatientProfileDraftEntity(
@@ -100,8 +117,13 @@ class PatientProfileDraftEntity {
       province: province ?? this.province,
       ward: ward ?? this.ward,
       clinic: clinic ?? this.clinic,
+      maThe: maThe ?? this.maThe,
       maSo: maSo ?? this.maSo,
+      maHS: maHS ?? this.maHS,
+      maBN: maBN ?? this.maBN,
       dangKyGiup: dangKyGiup ?? this.dangKyGiup,
+      idTinh: idTinh ?? this.idTinh,
+      idPhuong: idPhuong ?? this.idPhuong,
       isDeleted: isDeleted ?? this.isDeleted,
     );
   }

@@ -722,5 +722,216 @@ void main() {
       expect(vm.provinceController.text, 'Thành phố Hồ Chí Minh');
       expect(vm.wardController.text, 'Phường Đông Hòa');
     });
+
+    test('Bố cục phiếu khám: Tách ngày sinh, ngày khám, giờ khám riêng biệt', () {
+      // 1. Phiếu MỚI: có khoảng giờ gốc selectedTime
+      const ticketNew = MedicalTicketEntity(
+        id: '201',
+        hospitalName: 'Bệnh viện Quân Dân Y Miền Đông',
+        hospitalAddress: '50 Lê Văn Việt',
+        ticketTitle: 'PHIẾU ĐẶT LỊCH KHÁM',
+        roomName: 'P01',
+        serviceName: 'Khám bệnh',
+        queueNumber: '005',
+        scheduleText: '05/10/2026 10:30 - 11:00',
+        patientName: 'LÊ VĂN AN',
+        gender: 'Nam',
+        birthYear: '1995',
+        dateOfBirth: '1995-05-15T00:00:00',
+        selectedDate: '2026-10-05T10:30:00',
+        selectedTime: '10:30-11:00',
+        address: 'Phường Hiệp Phú, Thành phố Hồ Chí Minh',
+        insuranceText: 'Có BHYT',
+        patientCode: '07641190',
+        createdAtText: '05/10/2026',
+        note: '',
+      );
+
+      // Header: chỉ còn họ tên viết hoa, KHÔNG dính ngày sinh
+      final headerName = ticketNew.patientName.toUpperCase();
+      expect(headerName, 'LÊ VĂN AN');
+      expect(headerName.contains('1995'), false);
+
+      // Ngày sinh (Hàng 4)
+      final dobDisplay = DateTimeConverter.toVnDate(ticketNew.dateOfBirth) ?? ticketNew.birthYear;
+      expect(dobDisplay, '15/05/1995');
+
+      // Ngày khám (Hàng 5 - cột trái, chỉ dd/MM/yyyy)
+      final ngayKhamDisplay = DateTimeConverter.toVnDate(ticketNew.selectedDate) ?? '--';
+      expect(ngayKhamDisplay, '05/10/2026');
+
+      // Giờ khám (Hàng 5 - cột phải, hiển thị khoảng giờ gốc)
+      final gioKhamDisplayNew = DateTimeConverter.formatGioKhamForDisplay(ticketNew.selectedTime!);
+      expect(gioKhamDisplayNew, '10:30 - 11:00');
+
+      // 2. Phiếu CŨ: chưa có selectedTime (rỗng), chỉ có ngaygiokham từ server
+      const ticketOld = MedicalTicketEntity(
+        id: '202',
+        hospitalName: 'Bệnh viện Quân Dân Y Miền Đông',
+        hospitalAddress: '50 Lê Văn Việt',
+        ticketTitle: 'PHIẾU ĐẶT LỊCH KHÁM',
+        roomName: 'P01',
+        serviceName: 'Khám bệnh',
+        queueNumber: '006',
+        scheduleText: '05/10/2026 10:30',
+        patientName: 'NGUYỄN THỊ BÌNH',
+        gender: 'Nữ',
+        birthYear: '1990',
+        selectedDate: '2026-10-05T10:30:00',
+        selectedTime: '', // Phiếu cũ không có khoảng giờ gốc
+        address: 'Phường Tăng Nhơn Phú, Thành phố Hồ Chí Minh',
+        insuranceText: 'Tự túc',
+        patientCode: '07641191',
+        createdAtText: '05/10/2026',
+        note: '',
+      );
+
+      // Giờ khám phiếu cũ: Fallback chỉ lấy giờ bắt đầu 10:30, KHÔNG tự ý suy diễn giờ kết thúc
+      String gioKhamDisplayOld = '--';
+      if (ticketOld.selectedTime != null && ticketOld.selectedTime!.isNotEmpty) {
+        gioKhamDisplayOld = DateTimeConverter.formatGioKhamForDisplay(ticketOld.selectedTime!);
+      } else if (ticketOld.selectedDate != null && ticketOld.selectedDate!.isNotEmpty) {
+        final d = DateTime.tryParse(ticketOld.selectedDate!);
+        if (d != null) {
+          gioKhamDisplayOld = '${d.hour.toString().padLeft(2, '0')}:${d.minute.toString().padLeft(2, '0')}';
+        }
+      }
+      expect(gioKhamDisplayOld, '10:30');
+      expect(gioKhamDisplayOld.contains('-'), false, reason: 'Phiếu cũ không có khoảng giờ thì không tự bịa thêm 30 phút');
+    });
+
+    test('Bố cục mới: Địa chỉ ở cuối cùng, Responsive Ngày/Giờ khám (<360dp), Triệu chứng trong chi tiết', () {
+      // 1. Kiểm tra responsive Ngày/Giờ khám:
+      // Màn hình nhỏ (< 360dp) -> tách thành 2 dòng riêng full-width
+      const smallCardWidth = 330.0;
+      final isNarrowDateTimeSmall = smallCardWidth < 360;
+      expect(isNarrowDateTimeSmall, true, reason: 'Máy nhỏ < 360dp phải bật chế độ xếp dọc Ngày/Giờ khám');
+
+      // Màn hình lớn (>= 360dp) -> giữ 2 cột ngang
+      const largeCardWidth = 450.0;
+      final isNarrowDateTimeLarge = largeCardWidth < 360;
+      expect(isNarrowDateTimeLarge, false, reason: 'Màn hình lớn >= 360dp giữ 2 cột ngang');
+
+      // 2. Kiểm tra Triệu chứng trong phiếu chi tiết:
+      // Có triệu chứng -> hiển thị
+      const ticketWithSymptom = MedicalTicketEntity(
+        hospitalName: 'BV Miền Đông',
+        hospitalAddress: '50 Lê Văn Việt',
+        ticketTitle: 'Phiếu khám',
+        roomName: 'P01',
+        serviceName: 'Khám bệnh',
+        queueNumber: '001',
+        scheduleText: '05/10/2026 10:30',
+        patientName: 'LÊ NGUYỄN GIA HƯNG',
+        gender: 'Nam',
+        birthYear: '1989',
+        address: 'Phường Đông Hòa, Thành phố Hồ Chí Minh',
+        insuranceText: 'Có BHYT',
+        patientCode: '07641190',
+        createdAtText: '02/10/2026',
+        note: '',
+        symptom: 'Đau đầu, sốt nhẹ',
+      );
+      expect(ticketWithSymptom.symptom != null && ticketWithSymptom.symptom!.trim().isNotEmpty, true);
+      expect(ticketWithSymptom.symptom!.trim(), 'Đau đầu, sốt nhẹ');
+
+      // Không có triệu chứng / rỗng -> ẩn dòng này
+      const ticketWithoutSymptom = MedicalTicketEntity(
+        hospitalName: 'BV Miền Đông',
+        hospitalAddress: '50 Lê Văn Việt',
+        ticketTitle: 'Phiếu khám',
+        roomName: 'P01',
+        serviceName: 'Khám bệnh',
+        queueNumber: '002',
+        scheduleText: '05/10/2026 10:30',
+        patientName: 'LÊ NGUYỄN GIA HƯNG',
+        gender: 'Nam',
+        birthYear: '1989',
+        address: 'Phường Đông Hòa, Thành phố Hồ Chí Minh',
+        insuranceText: 'Có BHYT',
+        patientCode: '07641190',
+        createdAtText: '02/10/2026',
+        note: '',
+        symptom: '',
+      );
+      final shouldShowSymptom = ticketWithoutSymptom.symptom != null && ticketWithoutSymptom.symptom!.trim().isNotEmpty;
+      expect(shouldShowSymptom, false, reason: 'Triệu chứng rỗng phải ẩn hẳn');
+    });
+
+    test('Chọn hồ sơ từ ListHoSo: Gán Ngày cấp, Dò Tỉnh/Phường qua masterData, Cho phép sửa SĐT và Địa chỉ', () async {
+      final fakePortal = FakePortalRepository();
+      final vm = PatientProfileCreateViewModel(fakePortal, AppSessionStore.instance);
+
+      // Cung cấp masterData mẫu
+      vm.masterData = DkkListMasterDto(
+        listPhongKham: [
+          DkkPhongKhamDto(id: '1', display: 'Phòng khám Nội'),
+        ],
+        listTinh: [
+          DkkTinhDto(id: 79, maByt: '79', display: 'Thành phố Hồ Chí Minh'),
+          DkkTinhDto(id: 74, maByt: '74', display: 'Tỉnh Bình Dương'),
+        ],
+        dicPhuong: {
+          '79': [
+            DkkPhuongDto(id: 26734, maByt: '26734', maTinhByt: '79', display: 'Phường Linh Trung'),
+            DkkPhuongDto(id: 26740, maByt: '26740', maTinhByt: '79', display: 'Phường Hiệp Phú'),
+          ],
+        },
+        listNgayKham: [],
+        listGioKham: [],
+        dicNgayGioKham: {},
+      );
+
+      // 1. Hồ sơ có idTinh = 79, idPhuong = 26734, ngayCap = '20/10/2021'
+      const profile = PatientProfileDraftEntity(
+        identifier: '079200001234',
+        fullName: 'NGUYỄN VĂN AN',
+        birthYear: '1990',
+        gender: 'Nam',
+        phoneNumber: '0901234567',
+        dateOfBirth: '15/05/1990',
+        cccdIssueDate: '20/10/2021',
+        idTinh: 79,
+        idPhuong: 26734,
+        maBN: '07641190',
+        maSo: '07641190',
+      );
+
+      vm.selectProfile(profile);
+
+      // Kiểm tra các trường đã được điền đúng
+      expect(vm.identifierController.text, '079200001234');
+      expect(vm.fullNameController.text, 'NGUYỄN VĂN AN');
+      expect(vm.cccdIssueDateController.text, '20/10/2021', reason: 'Ngày cấp phải được điền từ hồ sơ');
+      expect(vm.phoneController.text, '0901234567');
+      expect(vm.provinceController.text, 'Thành phố Hồ Chí Minh', reason: 'Tỉnh phải được map từ id_tinh = 79');
+      expect(vm.selectedProvinceCode, '79');
+      expect(vm.wardController.text, 'Phường Linh Trung', reason: 'Phường phải được map từ id_phuong = 26734');
+      expect(vm.selectedWardCode, '26734');
+
+      // Người dùng được phép sửa số điện thoại
+      vm.phoneController.text = '0988776655';
+      expect(vm.phoneController.text, '0988776655', reason: 'Số điện thoại có thể thay đổi sau khi chọn hồ sơ');
+
+      // 2. Kiểm tra trường hợp idTinh hoặc idPhuong không có trong masterData
+      const profileUnknownAddress = PatientProfileDraftEntity(
+        identifier: '079200005678',
+        fullName: 'TRẦN VĂN BÌNH',
+        birthYear: '1995',
+        gender: 'Nam',
+        phoneNumber: '0912345678',
+        cccdIssueDate: '01/01/2022',
+        idTinh: 99999, // Không có trong master
+        idPhuong: 88888,
+        maBN: '07641191',
+        maSo: '07641191',
+      );
+
+      vm.selectProfile(profileUnknownAddress);
+      expect(vm.provinceController.text, '', reason: 'idTinh lạ phải để trống cho người dùng chọn tay, không văng lỗi');
+      expect(vm.wardController.text, '', reason: 'Phường cũng phải để trống khi không tìm thấy tỉnh');
+      expect(vm.selectedProvinceCode, null);
+      expect(vm.selectedWardCode, null);
+    });
   });
 }

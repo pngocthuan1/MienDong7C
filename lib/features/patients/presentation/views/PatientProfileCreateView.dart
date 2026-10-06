@@ -19,6 +19,7 @@ import 'package:benhvien7c/core/utils/CccdParserHelper.dart';
 import 'package:benhvien7c/features/patients/presentation/views/CccdScannerView.dart';
 import 'package:benhvien7c/core/utils/DateTimeConverter.dart';
 import 'package:benhvien7c/features/patients/data/models/DatLichKhamDtos.dart';
+import 'package:benhvien7c/features/auth/presentation/views/AuthFlowArguments.dart';
 import 'package:benhvien7c/features/patients/presentation/views/DkkCompareView.dart';
 
 class PatientProfileCreateView extends StatefulWidget {
@@ -52,6 +53,19 @@ class _PatientProfileCreateViewState extends State<PatientProfileCreateView> {
   final _phoneFocus = FocusNode();
   final _symptomFocus = FocusNode();
 
+  // Key để cuộn tới đúng vị trí trường bị thiếu hoặc không hợp lệ
+  final _identifierKey = GlobalKey();
+  final _cccdIssueDateKey = GlobalKey();
+  final _fullNameKey = GlobalKey();
+  final _dobKey = GlobalKey();
+  final _genderKey = GlobalKey();
+  final _phoneKey = GlobalKey();
+  final _provinceKey = GlobalKey();
+  final _wardKey = GlobalKey();
+  final _dateTimeKey = GlobalKey();
+  final _clinicKey = GlobalKey();
+  final _captchaKey = GlobalKey();
+
   @override
   void initState() {
     super.initState();
@@ -83,7 +97,32 @@ class _PatientProfileCreateViewState extends State<PatientProfileCreateView> {
   }
 
   void _onViewModelChanged() {
-    if (mounted) setState(() {});
+    if (!mounted) return;
+    setState(() {});
+
+    final loadResult = _viewModel.loadProfilesCommand.result;
+    if (loadResult != null) {
+      loadResult.when(
+        ok: (_) {},
+        error: (err, msg) {
+          _viewModel.loadProfilesCommand.clearResult();
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Lỗi tải danh sách hồ sơ: ${msg.isNotEmpty ? msg : err}'),
+              backgroundColor: Colors.red,
+              action: SnackBarAction(
+                label: 'Tải lại',
+                textColor: Colors.white,
+                onPressed: () {
+                  _viewModel.loadProfilesCommand.execute();
+                },
+              ),
+              duration: const Duration(seconds: 5),
+            ),
+          );
+        },
+      );
+    }
   }
 
   @override
@@ -332,10 +371,10 @@ class _PatientProfileCreateViewState extends State<PatientProfileCreateView> {
             duration: const Duration(seconds: 4),
           ),
         );
-        AppNavigator.resetToNamed(
+        AppNavigator.replaceAndKeepRoot(
           context,
-          RouteNames.home,
-          arguments: ticket,
+          RouteNames.medicalTicket,
+          arguments: MedicalTicketViewArgs(ticket: ticket),
         );
       },
       error: (err, msg) {
@@ -586,6 +625,35 @@ class _PatientProfileCreateViewState extends State<PatientProfileCreateView> {
     );
   }
 
+  void _showFoundPatientDialogForSubmit(DkkTimBenhNhanResponseDto dto) {
+    showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogCtx) => AlertDialog(
+        title: const Text('Tìm thấy hồ sơ theo CC/HC'),
+        content: Text('Hệ thống tìm thấy hồ sơ của bệnh nhân ${dto.hoTen} (Mã BN: ${dto.maBN}) theo số CC/HC bạn vừa nhập.\n\nBạn có muốn sử dụng hồ sơ này để đăng ký không?'),
+        actions: [
+          TextButton(
+            onPressed: () {
+              Navigator.of(dialogCtx).pop();
+            },
+            child: const Text('KIỂM TRA LẠI CC/HC'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.of(dialogCtx).pop();
+              _viewModel.acceptFoundPatientForSubmit(dto);
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('Đã cập nhật thông tin theo hồ sơ tìm thấy. Vui lòng kiểm tra lại trước khi bấm Đăng ký khám lần nữa.')),
+              );
+            },
+            child: const Text('SỬ DỤNG HỒ SƠ NÀY'),
+          ),
+        ],
+      ),
+    );
+  }
+
   void _showSearchErrorDialog(String query, String errorMsg) {
     final isNetwork = errorMsg.toLowerCase().contains('mạng') ||
         errorMsg.toLowerCase().contains('kết nối') ||
@@ -669,6 +737,195 @@ class _PatientProfileCreateViewState extends State<PatientProfileCreateView> {
     );
   }
 
+  List<_MissingField> _collectMissingFields() {
+    final vm = _viewModel;
+    final list = <_MissingField>[];
+
+    if (vm.identifierController.text.trim().isEmpty) {
+      list.add(_MissingField('Số CCCD / Hộ chiếu', _identifierKey, _identifierFocus));
+    }
+    if (vm.cccdIssueDateController.text.trim().isEmpty) {
+      list.add(_MissingField('Ngày cấp CCCD', _cccdIssueDateKey, _cccdIssueDateFocus));
+    }
+    if (vm.fullNameController.text.trim().isEmpty) {
+      list.add(_MissingField('Họ tên', _fullNameKey, _fullNameFocus));
+    }
+    if (vm.dobController.text.trim().isEmpty) {
+      list.add(_MissingField('Ngày sinh', _dobKey, _dobFocus));
+    }
+    if (vm.gender.trim().isEmpty) {
+      list.add(_MissingField('Giới tính', _genderKey));
+    }
+    if (vm.phoneController.text.trim().isEmpty) {
+      list.add(_MissingField('Số điện thoại', _phoneKey, _phoneFocus));
+    }
+    if (vm.provinceController.text.trim().isEmpty) {
+      list.add(_MissingField('Tỉnh / Thành phố', _provinceKey));
+    }
+    if (vm.wardController.text.trim().isEmpty) {
+      list.add(_MissingField('Phường / Xã', _wardKey));
+    }
+    if (vm.selectedDate == null || vm.selectedTime == null) {
+      list.add(_MissingField('Ngày & Giờ khám', _dateTimeKey));
+    }
+    if (vm.clinicController.text.trim().isEmpty &&
+        (vm.selectedDepartment == null || vm.selectedDepartment!.isEmpty)) {
+      list.add(_MissingField('Phòng khám', _clinicKey));
+    }
+    final isBypassedOnWeb = kIsWeb && Environment.disableTurnstileOnWeb;
+    if (!isBypassedOnWeb && (_captchaToken == null || _captchaToken!.isEmpty)) {
+      list.add(_MissingField('Xác thực CAPTCHA', _captchaKey));
+    }
+    return list;
+  }
+
+  List<_MissingField> _collectInvalidFields() {
+    final vm = _viewModel;
+    final list = <_MissingField>[];
+
+    if (vm.identifierController.text.trim().isNotEmpty) {
+      final err = Validators.validateCccdOrPassport(vm.identifierController.text, isOptional: false);
+      if (err != null) {
+        list.add(_MissingField('Số CCCD / Hộ chiếu', _identifierKey, _identifierFocus, err));
+      }
+    }
+    if (vm.cccdIssueDateController.text.trim().isNotEmpty) {
+      final err = Validators.validateFullDate(vm.cccdIssueDateController.text,
+          isRequired: true, fieldName: 'Ngày cấp CCCD');
+      if (err != null) {
+        list.add(_MissingField('Ngày cấp CCCD', _cccdIssueDateKey, _cccdIssueDateFocus, err));
+      }
+    }
+    if (vm.fullNameController.text.trim().isNotEmpty) {
+      final err = vm.checkFullName(vm.fullNameController.text);
+      if (err != null) {
+        list.add(_MissingField('Họ tên', _fullNameKey, _fullNameFocus, err));
+      }
+    }
+    if (vm.dobController.text.trim().isNotEmpty) {
+      final err = Validators.validateFullDate(vm.dobController.text,
+          isRequired: true, fieldName: 'Ngày sinh');
+      if (err != null) {
+        list.add(_MissingField('Ngày sinh', _dobKey, _dobFocus, err));
+      }
+    }
+    if (vm.phoneController.text.trim().isNotEmpty) {
+      final err = Validators.validatePhoneNumber(vm.phoneController.text, isOptional: false);
+      if (err != null) {
+        list.add(_MissingField('Số điện thoại', _phoneKey, _phoneFocus, err));
+      }
+    }
+    return list;
+  }
+
+  void _scrollToField(_MissingField field) {
+    final ctx = field.key.currentContext;
+    if (ctx == null) return;
+    Scrollable.ensureVisible(
+      ctx,
+      alignment: 0.15,
+      duration: const Duration(milliseconds: 400),
+      curve: Curves.easeInOut,
+    ).then((_) {
+      if (!mounted) return;
+      if (field.focusNode != null) {
+        FocusScope.of(context).requestFocus(field.focusNode);
+      }
+    });
+  }
+
+  void _showMissingFieldsSnackBar(List<_MissingField> missing) {
+    final first = missing.first;
+    final others = missing.length - 1;
+    final text = others > 0
+        ? 'Thiếu thông tin: ${first.label} (và $others mục khác)'
+        : 'Thiếu thông tin: ${first.label}';
+
+    void goToField() {
+      ScaffoldMessenger.of(context).hideCurrentSnackBar();
+      _scrollToField(first);
+    }
+
+    ScaffoldMessenger.of(context)
+      ..clearSnackBars()
+      ..showSnackBar(
+        SnackBar(
+          behavior: SnackBarBehavior.floating,
+          margin: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+          backgroundColor: const Color(0xFFE11D48),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          duration: const Duration(seconds: 5),
+          content: GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: goToField,
+            child: Row(
+              children: [
+                const Icon(Icons.error_outline_rounded, color: Colors.white, size: 20),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    text,
+                    style: const TextStyle(fontWeight: FontWeight.w600),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          action: SnackBarAction(
+            label: 'XEM',
+            textColor: Colors.white,
+            onPressed: goToField,
+          ),
+        ),
+      );
+  }
+
+  void _showInvalidFieldsSnackBar(List<_MissingField> invalid) {
+    final first = invalid.first;
+    final others = invalid.length - 1;
+    final text = others > 0
+        ? 'Thông tin chưa hợp lệ: ${first.label} (và $others mục khác)'
+        : 'Thông tin chưa hợp lệ: ${first.label}';
+
+    void goToField() {
+      ScaffoldMessenger.of(context).hideCurrentSnackBar();
+      _scrollToField(first);
+    }
+
+    ScaffoldMessenger.of(context)
+      ..clearSnackBars()
+      ..showSnackBar(
+        SnackBar(
+          behavior: SnackBarBehavior.floating,
+          margin: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+          backgroundColor: const Color(0xFFE11D48),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          duration: const Duration(seconds: 5),
+          content: GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: goToField,
+            child: Row(
+              children: [
+                const Icon(Icons.error_outline_rounded, color: Colors.white, size: 20),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    text,
+                    style: const TextStyle(fontWeight: FontWeight.w600),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          action: SnackBarAction(
+            label: 'XEM',
+            textColor: Colors.white,
+            onPressed: goToField,
+          ),
+        ),
+      );
+  }
+
   // ---------------------------------------------------------------------------
   // Submit & Luồng 3 Đối Chiếu
   // ---------------------------------------------------------------------------
@@ -676,19 +933,59 @@ class _PatientProfileCreateViewState extends State<PatientProfileCreateView> {
   Future<void> _submit() async {
     try {
       FocusScope.of(context).unfocus();
-      if (!_formKey.currentState!.validate()) {
+
+      // Hiện lỗi đỏ ngay dưới từng ô (nếu có)
+      final formValid = _formKey.currentState!.validate();
+
+      final missing = _collectMissingFields();
+      if (missing.isNotEmpty) {
+        _showMissingFieldsSnackBar(missing);
         return;
+      }
+
+      if (!formValid) {
+        final invalid = _collectInvalidFields();
+        if (invalid.isNotEmpty) {
+          _showInvalidFieldsSnackBar(invalid);
+        } else {
+          ScaffoldMessenger.of(context)
+            ..clearSnackBars()
+            ..showSnackBar(
+              SnackBar(
+                behavior: SnackBarBehavior.floating,
+                margin: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                backgroundColor: const Color(0xFFE11D48),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                duration: const Duration(seconds: 5),
+                content: const Row(
+                  children: [
+                    Icon(Icons.error_outline_rounded, color: Colors.white, size: 20),
+                    SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'Thông tin biểu mẫu chưa hợp lệ, vui lòng kiểm tra lại các ô màu đỏ.',
+                        style: TextStyle(fontWeight: FontWeight.w600),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            );
+        }
+        return;
+      }
+
+      // ── Auto-search TRƯỚC khi CAPTCHA ──
+      final searchCheck = await _viewModel.autoSearchBeforeSubmit();
+      if (!mounted) return;
+      if (searchCheck.foundNew && searchCheck.dto != null) {
+        _showFoundPatientDialogForSubmit(searchCheck.dto!);
+        return; // DỪNG - người dùng bấm Đăng ký lần nữa
       }
 
       // ── Xác thực CAPTCHA duy nhất 1 lần tại thời điểm bấm Đăng ký khám ──
       final isBypassedOnWeb = kIsWeb && Environment.disableTurnstileOnWeb;
       if (!isBypassedOnWeb) {
-        if (_captchaToken == null || _captchaToken!.isEmpty) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Vui lòng hoàn thành xác thực CAPTCHA.')),
-          );
-          return;
-        }
 
         final verifyRes = await AppLocator.turnstileService.verifyToken(_captchaToken!);
         if (!mounted) return;
@@ -1209,6 +1506,29 @@ class _PatientProfileCreateViewState extends State<PatientProfileCreateView> {
               ),
             ),
           ],
+          if (_viewModel.hasIdentifierChangedWarning) ...[  
+            const SizedBox(height: 8),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+              decoration: BoxDecoration(
+                color: const Color(0xFFFFF7ED),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: const Color(0xFFFB923C)),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.warning_amber_rounded, size: 16, color: Color(0xFFEA580C)),
+                  const SizedBox(width: 6),
+                  const Expanded(
+                    child: Text(
+                      'Bạn đã đổi số CC/HC. Vui lòng bấm \'Tìm kiếm\' lại để xác nhận trước khi đăng ký.',
+                      style: TextStyle(fontSize: 12, color: Color(0xFF9A3412)),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
         ],
       ),
     );
@@ -1229,7 +1549,7 @@ class _PatientProfileCreateViewState extends State<PatientProfileCreateView> {
           SizedBox(width: 8),
           Expanded(
             child: Text(
-              'Hồ sơ đã lưu đang ở chế độ chỉ đọc. Bấm icon [✕] trên chip để nhập hồ sơ mới.',
+              'Thông tin định danh từ hồ sơ đã lưu đang ở chế độ chỉ đọc (bạn có thể sửa SĐT và Địa chỉ). Bấm [✕] trên chip để nhập hồ sơ mới.',
               style: TextStyle(fontSize: 12, color: Color(0xFF475569)),
             ),
           ),
@@ -1482,14 +1802,11 @@ class _PatientProfileCreateViewState extends State<PatientProfileCreateView> {
           ListenableBuilder(
             listenable: _viewModel.continueCommand,
             builder: (context, _) {
-              final isCaptchaVerified =
-                  (kIsWeb && Environment.disableTurnstileOnWeb) ||
-                  _captchaToken != null;
-              final canSubmit = _viewModel.canContinue && isCaptchaVerified;
+              final isRunning = _viewModel.continueCommand.running;
               return SizedBox(
                 width: double.infinity,
                 child: ElevatedButton(
-                  onPressed: canSubmit ? _submit : null,
+                  onPressed: isRunning ? null : _submit,
                   style: ElevatedButton.styleFrom(
                     backgroundColor: const Color(0xFF0D6EFD),
                     foregroundColor: Colors.white,
@@ -1597,117 +1914,144 @@ class _PatientProfileCreateViewState extends State<PatientProfileCreateView> {
                 children: [
                   // Hàng 1 (Chia đôi trên màn lớn / Xếp dọc trên màn nhỏ): Số CCCD & Ngày cấp CCCD
                   _buildResponsivePair(
-                    child1: AppTextField(
-                      controller: _viewModel.identifierController,
-                      label: 'Số CCCD / Hộ Chiếu *',
-                      hintText: 'Nhập 12 số CCCD hoặc Hộ chiếu',
-                      prefixIcon: Icons.badge_outlined,
-                      validator: (v) => Validators.validateCccdOrPassport(v, isOptional: false),
-                      focusNode: _identifierFocus,
-                      textInputAction: TextInputAction.next,
-                      onFieldSubmitted: (_) => FocusScope.of(context).requestFocus(_cccdIssueDateFocus),
-                      readOnly: _viewModel.isExistingProfile,
-                      onChanged: (_) => _viewModel.refreshFormState(),
-                    ),
-                    child2: TextFormField(
-                      controller: _viewModel.cccdIssueDateController,
-                      focusNode: _cccdIssueDateFocus,
-                      keyboardType: TextInputType.datetime,
-                      textInputAction: TextInputAction.next,
-                      onFieldSubmitted: (_) => FocusScope.of(context).requestFocus(_fullNameFocus),
-                      readOnly: _viewModel.isExistingProfile,
-                      decoration: InputDecoration(
-                        labelText: 'Ngày cấp *',
-                        hintText: 'DD/MM/YYYY',
-                        filled: _viewModel.isExistingProfile,
-                        fillColor: _viewModel.isExistingProfile ? const Color(0xFFF1F5F9) : null,
-                        prefixIcon: const Icon(Icons.event_available_outlined),
-                        suffixIcon: IconButton(
-                          icon: const Icon(Icons.calendar_today_rounded, size: 18),
-                          onPressed: _viewModel.isExistingProfile
-                              ? null
-                              : () => _selectDateOfBirth(_viewModel.cccdIssueDateController, isOther: false),
-                        ),
-                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                    child1: KeyedSubtree(
+                      key: _identifierKey,
+                      child: AppTextField(
+                        controller: _viewModel.identifierController,
+                        label: 'Số CCCD / Hộ Chiếu *',
+                        hintText: 'Nhập 12 số CCCD hoặc Hộ chiếu',
+                        prefixIcon: Icons.badge_outlined,
+                        validator: (v) => Validators.validateCccdOrPassport(v, isOptional: false),
+                        focusNode: _identifierFocus,
+                        textInputAction: TextInputAction.next,
+                        onFieldSubmitted: (_) => FocusScope.of(context).requestFocus(_cccdIssueDateFocus),
+                        readOnly: _viewModel.isExistingProfile,
+                        onChanged: (_) => _viewModel.refreshFormState(),
                       ),
-                      validator: (v) => Validators.validateFullDate(v, isRequired: true, fieldName: 'Ngày cấp CCCD'),
+                    ),
+                    child2: KeyedSubtree(
+                      key: _cccdIssueDateKey,
+                      child: TextFormField(
+                        controller: _viewModel.cccdIssueDateController,
+                        focusNode: _cccdIssueDateFocus,
+                        keyboardType: TextInputType.datetime,
+                        textInputAction: TextInputAction.next,
+                        onFieldSubmitted: (_) => FocusScope.of(context).requestFocus(_fullNameFocus),
+                        readOnly: _viewModel.isExistingProfile,
+                        decoration: InputDecoration(
+                          label: Text.rich(
+                            TextSpan(
+                              children: [
+                                const TextSpan(text: 'Ngày cấp '),
+                                TextSpan(
+                                  text: '*',
+                                  style: TextStyle(color: Colors.red),
+                                ),
+                              ],
+                            ),
+                          ),
+                          hintText: 'DD/MM/YYYY',
+                          filled: _viewModel.isExistingProfile,
+                          fillColor: _viewModel.isExistingProfile ? const Color(0xFFF1F5F9) : null,
+                          prefixIcon: const Icon(Icons.event_available_outlined),
+                          suffixIcon: IconButton(
+                            icon: const Icon(Icons.calendar_today_rounded, size: 18),
+                            onPressed: _viewModel.isExistingProfile
+                                ? null
+                                : () => _selectDateOfBirth(_viewModel.cccdIssueDateController, isOther: false),
+                          ),
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                        ),
+                        validator: (v) => Validators.validateFullDate(v, isRequired: true, fieldName: 'Ngày cấp CCCD'),
+                      ),
                     ),
                   ),
                   const SizedBox(height: 14),
 
                   // Hàng 2: Họ tên
-                  AppTextField(
-                    controller: _viewModel.fullNameController,
-                    label: 'Họ tên *',
-                    hintText: 'Nhập đầy đủ họ tên',
-                    prefixIcon: Icons.person_outline_rounded,
-                    validator: _viewModel.checkFullName,
-                    focusNode: _fullNameFocus,
-                    textInputAction: TextInputAction.next,
-                    onFieldSubmitted: (_) => FocusScope.of(context).requestFocus(_dobFocus),
-                    readOnly: _viewModel.isExistingProfile,
-                    onChanged: _viewModel.updateFullNameError,
+                  KeyedSubtree(
+                    key: _fullNameKey,
+                    child: AppTextField(
+                      controller: _viewModel.fullNameController,
+                      label: 'Họ tên *',
+                      hintText: 'Nhập đầy đủ họ tên',
+                      prefixIcon: Icons.person_outline_rounded,
+                      validator: _viewModel.checkFullName,
+                      focusNode: _fullNameFocus,
+                      textInputAction: TextInputAction.next,
+                      onFieldSubmitted: (_) => FocusScope.of(context).requestFocus(_dobFocus),
+                      readOnly: _viewModel.isExistingProfile,
+                      onChanged: _viewModel.updateFullNameError,
+                    ),
                   ),
                   const SizedBox(height: 14),
 
                   // Hàng 3 (Responsive: Chia đôi trên màn thường / Xếp dọc trên máy nhỏ < 380px): Ngày sinh & Giới tính
                   _buildResponsivePair(
                     breakpoint: 380,
-                    child1: TextFormField(
-                      controller: _viewModel.dobController,
-                      focusNode: _dobFocus,
-                      keyboardType: TextInputType.datetime,
-                      textInputAction: TextInputAction.next,
-                      onFieldSubmitted: (_) => FocusScope.of(context).requestFocus(_phoneFocus),
-                      readOnly: _viewModel.isExistingProfile,
-                      decoration: InputDecoration(
-                        label: _buildRequiredLabel('Ngày sinh'),
-                        hintText: 'DD/MM/YYYY',
-                        filled: _viewModel.isExistingProfile,
-                        fillColor: _viewModel.isExistingProfile ? const Color(0xFFF1F5F9) : null,
-                        prefixIcon: const Icon(Icons.cake_outlined),
-                        suffixIcon: IconButton(
-                          icon: const Icon(Icons.calendar_today_rounded, size: 18),
-                          onPressed: _viewModel.isExistingProfile
-                              ? null
-                              : () => _selectDateOfBirth(_viewModel.dobController, isOther: false),
+                    child1: KeyedSubtree(
+                      key: _dobKey,
+                      child: TextFormField(
+                        controller: _viewModel.dobController,
+                        focusNode: _dobFocus,
+                        keyboardType: TextInputType.datetime,
+                        textInputAction: TextInputAction.next,
+                        onFieldSubmitted: (_) => FocusScope.of(context).requestFocus(_phoneFocus),
+                        readOnly: _viewModel.isExistingProfile,
+                        decoration: InputDecoration(
+                          label: _buildRequiredLabel('Ngày sinh'),
+                          hintText: 'DD/MM/YYYY',
+                          filled: _viewModel.isExistingProfile,
+                          fillColor: _viewModel.isExistingProfile ? const Color(0xFFF1F5F9) : null,
+                          prefixIcon: const Icon(Icons.cake_outlined),
+                          suffixIcon: IconButton(
+                            icon: const Icon(Icons.calendar_today_rounded, size: 18),
+                            onPressed: _viewModel.isExistingProfile
+                                ? null
+                                : () => _selectDateOfBirth(_viewModel.dobController, isOther: false),
+                          ),
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
                         ),
-                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                        validator: (v) => Validators.validateFullDate(v, isRequired: true, fieldName: 'Ngày sinh'),
                       ),
-                      validator: (v) => Validators.validateFullDate(v, isRequired: true, fieldName: 'Ngày sinh'),
                     ),
-                    child2: DropdownButtonFormField<String>(
-                      initialValue: _viewModel.gender,
-                      decoration: InputDecoration(
-                        label: _buildRequiredLabel('Giới tính'),
-                        filled: _viewModel.isExistingProfile,
-                        fillColor: _viewModel.isExistingProfile ? const Color(0xFFF1F5F9) : null,
-                        prefixIcon: const Icon(Icons.wc_rounded),
-                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                    child2: KeyedSubtree(
+                      key: _genderKey,
+                      child: DropdownButtonFormField<String>(
+                        initialValue: _viewModel.gender,
+                        decoration: InputDecoration(
+                          label: _buildRequiredLabel('Giới tính'),
+                          filled: _viewModel.isExistingProfile,
+                          fillColor: _viewModel.isExistingProfile ? const Color(0xFFF1F5F9) : null,
+                          prefixIcon: const Icon(Icons.wc_rounded),
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                        ),
+                        items: const [
+                          DropdownMenuItem(value: 'Nam', child: Text('Nam')),
+                          DropdownMenuItem(value: 'Nữ', child: Text('Nữ')),
+                        ],
+                        onChanged: _viewModel.isExistingProfile ? null : _viewModel.updateGender,
                       ),
-                      items: const [
-                        DropdownMenuItem(value: 'Nam', child: Text('Nam')),
-                        DropdownMenuItem(value: 'Nữ', child: Text('Nữ')),
-                      ],
-                      onChanged: _viewModel.isExistingProfile ? null : _viewModel.updateGender,
                     ),
                   ),
                   const SizedBox(height: 14),
 
                   // Hàng 4: Số điện thoại & Mã bệnh nhân
                   _buildResponsivePair(
-                    child1: AppTextField(
-                      controller: _viewModel.phoneController,
-                      label: 'Số điện thoại',
-                      hintText: 'Mặc định theo SĐT tài khoản',
-                      keyboardType: TextInputType.phone,
-                      prefixIcon: Icons.phone_android_rounded,
-                      validator: (v) => Validators.validatePhoneNumber(v, isOptional: true),
-                      focusNode: _phoneFocus,
-                      textInputAction: TextInputAction.next,
-                      onFieldSubmitted: (_) => FocusScope.of(context).requestFocus(_symptomFocus),
-                      readOnly: _viewModel.isExistingProfile,
-                      onChanged: _viewModel.updatePhoneError,
+                    child1: KeyedSubtree(
+                      key: _phoneKey,
+                      child: AppTextField(
+                        controller: _viewModel.phoneController,
+                        label: 'Số điện thoại',
+                        hintText: 'Mặc định theo SĐT tài khoản',
+                        keyboardType: TextInputType.phone,
+                        prefixIcon: Icons.phone_android_rounded,
+                        validator: (v) => Validators.validatePhoneNumber(v, isOptional: true),
+                        focusNode: _phoneFocus,
+                        textInputAction: TextInputAction.next,
+                        onFieldSubmitted: (_) => FocusScope.of(context).requestFocus(_symptomFocus),
+                        onChanged: _viewModel.updatePhoneError,
+                      ),
                     ),
                     child2: AppTextField(
                       controller: _viewModel.patientCodeController,
@@ -1728,35 +2072,37 @@ class _PatientProfileCreateViewState extends State<PatientProfileCreateView> {
                 title: '2. Địa chỉ cư trú',
                 children: [
                   _buildResponsivePair(
-                    child1: TextFormField(
-                      controller: _viewModel.provinceController,
-                      readOnly: true,
-                      onTap: _viewModel.isExistingProfile ? null : _selectProvince,
-                      decoration: InputDecoration(
-                        label: _buildRequiredLabel('Tỉnh / Thành phố'),
-                        hintText: 'Chọn Tỉnh / Thành phố',
-                        filled: _viewModel.isExistingProfile,
-                        fillColor: _viewModel.isExistingProfile ? const Color(0xFFF1F5F9) : null,
-                        prefixIcon: const Icon(Icons.location_city_rounded),
-                        suffixIcon: const Icon(Icons.arrow_drop_down),
-                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                    child1: KeyedSubtree(
+                      key: _provinceKey,
+                      child: TextFormField(
+                        controller: _viewModel.provinceController,
+                        readOnly: true,
+                        onTap: _selectProvince,
+                        decoration: InputDecoration(
+                          label: _buildRequiredLabel('Tỉnh / Thành phố'),
+                          hintText: 'Chọn Tỉnh / Thành phố',
+                          prefixIcon: const Icon(Icons.location_city_rounded),
+                          suffixIcon: const Icon(Icons.arrow_drop_down),
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                        ),
+                        validator: (v) => Validators.validateRequired(v, fieldName: 'Tỉnh / Thành phố'),
                       ),
-                      validator: (v) => Validators.validateRequired(v, fieldName: 'Tỉnh / Thành phố'),
                     ),
-                    child2: TextFormField(
-                      controller: _viewModel.wardController,
-                      readOnly: true,
-                      onTap: _viewModel.isExistingProfile ? null : _selectWard,
-                      decoration: InputDecoration(
-                        label: _buildRequiredLabel('Phường / Xã'),
-                        hintText: 'Chọn Phường / Xã',
-                        filled: _viewModel.isExistingProfile,
-                        fillColor: _viewModel.isExistingProfile ? const Color(0xFFF1F5F9) : null,
-                        prefixIcon: const Icon(Icons.map_rounded),
-                        suffixIcon: const Icon(Icons.arrow_drop_down),
-                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                    child2: KeyedSubtree(
+                      key: _wardKey,
+                      child: TextFormField(
+                        controller: _viewModel.wardController,
+                        readOnly: true,
+                        onTap: _selectWard,
+                        decoration: InputDecoration(
+                          label: _buildRequiredLabel('Phường / Xã'),
+                          hintText: 'Chọn Phường / Xã',
+                          prefixIcon: const Icon(Icons.map_rounded),
+                          suffixIcon: const Icon(Icons.arrow_drop_down),
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                        ),
+                        validator: (v) => Validators.validateRequired(v, fieldName: 'Phường / Xã'),
                       ),
-                      validator: (v) => Validators.validateRequired(v, fieldName: 'Phường / Xã'),
                     ),
                   ),
                 ],
@@ -1768,111 +2114,117 @@ class _PatientProfileCreateViewState extends State<PatientProfileCreateView> {
                 title: '3. Chọn lịch & Phòng khám',
                 children: [
                   // Hàng (Responsive: Chia đôi trên màn thường / Xếp dọc trên máy nhỏ < 380px): Ngày khám & Giờ khám
-                  _buildResponsivePair(
-                    breakpoint: 380,
-                    child1: GestureDetector(
-                      onTap: _showDateTimePickerBottomSheet,
-                      child: Container(
-                        width: double.infinity,
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFFF7F9FC),
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(color: const Color(0xFFE4E9F2)),
-                        ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const Text.rich(
-                              TextSpan(
-                                children: [
-                                  TextSpan(text: 'Ngày khám', style: TextStyle(fontSize: 11, color: Colors.grey)),
-                                  TextSpan(text: ' *', style: TextStyle(fontSize: 11, color: Color(0xFFEF4444), fontWeight: FontWeight.bold)),
-                                ],
+                  KeyedSubtree(
+                    key: _dateTimeKey,
+                    child: _buildResponsivePair(
+                      breakpoint: 380,
+                      child1: GestureDetector(
+                        onTap: _showDateTimePickerBottomSheet,
+                        child: Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFF7F9FC),
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: const Color(0xFFE4E9F2)),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Text.rich(
+                                TextSpan(
+                                  children: [
+                                    TextSpan(text: 'Ngày khám', style: TextStyle(fontSize: 11, color: Colors.grey)),
+                                    TextSpan(text: ' *', style: TextStyle(fontSize: 11, color: Color(0xFFEF4444), fontWeight: FontWeight.bold)),
+                                  ],
+                                ),
                               ),
-                            ),
-                            const SizedBox(height: 6),
-                            Text(
-                              _viewModel.selectedDate == null
-                                  ? 'Chọn ngày'
-                                  : DateFormat('dd/MM/yyyy').format(_viewModel.selectedDate!),
-                              style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
-                            ),
-                          ],
+                              const SizedBox(height: 6),
+                              Text(
+                                _viewModel.selectedDate == null
+                                    ? 'Chọn ngày'
+                                    : DateFormat('dd/MM/yyyy').format(_viewModel.selectedDate!),
+                                style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
+                              ),
+                            ],
+                          ),
                         ),
                       ),
-                    ),
-                    child2: GestureDetector(
-                      onTap: _showDateTimePickerBottomSheet,
-                      child: Container(
-                        width: double.infinity,
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFFF7F9FC),
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(color: const Color(0xFFE4E9F2)),
-                        ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const Text.rich(
-                              TextSpan(
-                                children: [
-                                  TextSpan(text: 'Giờ khám', style: TextStyle(fontSize: 11, color: Colors.grey)),
-                                  TextSpan(text: ' *', style: TextStyle(fontSize: 11, color: Color(0xFFEF4444), fontWeight: FontWeight.bold)),
-                                ],
+                      child2: GestureDetector(
+                        onTap: _showDateTimePickerBottomSheet,
+                        child: Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFF7F9FC),
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: const Color(0xFFE4E9F2)),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Text.rich(
+                                TextSpan(
+                                  children: [
+                                    TextSpan(text: 'Giờ khám', style: TextStyle(fontSize: 11, color: Colors.grey)),
+                                    TextSpan(text: ' *', style: TextStyle(fontSize: 11, color: Color(0xFFEF4444), fontWeight: FontWeight.bold)),
+                                  ],
+                                ),
                               ),
-                            ),
-                            const SizedBox(height: 6),
-                            Text(
-                              _viewModel.selectedTime != null
-                                  ? DateTimeConverter.formatGioKhamForDisplay(_viewModel.selectedTime!)
-                                  : 'Chọn giờ',
-                              style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
-                            ),
-                          ],
+                              const SizedBox(height: 6),
+                              Text(
+                                _viewModel.selectedTime != null
+                                    ? DateTimeConverter.formatGioKhamForDisplay(_viewModel.selectedTime!)
+                                    : 'Chọn giờ',
+                                style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
+                              ),
+                            ],
+                          ),
                         ),
                       ),
                     ),
                   ),
                   const SizedBox(height: 14),
-                  GestureDetector(
-                    onTap: _selectClinic,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFF7F9FC),
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: const Color(0xFFE4E9F2)),
-                      ),
-                      child: Row(
-                        children: [
-                          const Icon(Icons.local_hospital_outlined, color: Color(0xFF0D6EFD)),
-                          const SizedBox(width: 10),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                const Text.rich(
-                                  TextSpan(
-                                    children: [
-                                      TextSpan(text: 'Phòng khám', style: TextStyle(fontSize: 11, color: Colors.grey)),
-                                      TextSpan(text: ' *', style: TextStyle(fontSize: 11, color: Color(0xFFEF4444), fontWeight: FontWeight.bold)),
-                                    ],
+                  KeyedSubtree(
+                    key: _clinicKey,
+                    child: GestureDetector(
+                      onTap: _selectClinic,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFF7F9FC),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: const Color(0xFFE4E9F2)),
+                        ),
+                        child: Row(
+                          children: [
+                            const Icon(Icons.local_hospital_outlined, color: Color(0xFF0D6EFD)),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  const Text.rich(
+                                    TextSpan(
+                                      children: [
+                                        TextSpan(text: 'Phòng khám', style: TextStyle(fontSize: 11, color: Colors.grey)),
+                                        TextSpan(text: ' *', style: TextStyle(fontSize: 11, color: Color(0xFFEF4444), fontWeight: FontWeight.bold)),
+                                      ],
+                                    ),
                                   ),
-                                ),
-                                const SizedBox(height: 4),
-                                Text(
-                                  _viewModel.clinicController.text.isNotEmpty
-                                      ? _viewModel.clinicController.text
-                                      : (_viewModel.selectedDepartment ?? 'Chọn Phòng khám'),
-                                  style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
-                                ),
-                              ],
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    _viewModel.clinicController.text.isNotEmpty
+                                        ? _viewModel.clinicController.text
+                                        : (_viewModel.selectedDepartment ?? 'Chọn Phòng khám'),
+                                    style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
+                                  ),
+                                ],
+                              ),
                             ),
-                          ),
-                          const Icon(Icons.arrow_drop_down, color: Colors.grey),
-                        ],
+                            const Icon(Icons.arrow_drop_down, color: Colors.grey),
+                          ],
+                        ),
                       ),
                     ),
                   ),
@@ -1894,6 +2246,7 @@ class _PatientProfileCreateViewState extends State<PatientProfileCreateView> {
               if (!(kIsWeb && Environment.disableTurnstileOnWeb)) ...[
                 Center(
                   child: SizedBox(
+                    key: _captchaKey,
                     height: 70,
                     child: RepaintBoundary(
                       child: CloudflareTurnstile(
@@ -1917,4 +2270,12 @@ class _PatientProfileCreateViewState extends State<PatientProfileCreateView> {
       ),
     );
   }
+}
+
+class _MissingField {
+  final String label;
+  final GlobalKey key;
+  final FocusNode? focusNode;
+  final String? reason;
+  const _MissingField(this.label, this.key, [this.focusNode, this.reason]);
 }

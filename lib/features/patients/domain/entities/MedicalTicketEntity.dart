@@ -1,3 +1,5 @@
+import 'package:benhvien7c/core/utils/DateTimeConverter.dart';
+
 class MedicalTicketEntity {
   const MedicalTicketEntity({
     required this.hospitalName,
@@ -83,36 +85,15 @@ class MedicalTicketEntity {
   }
 
   bool get isPast {
-    if (_isPastExplicit) return true;
-    try {
-      final now = DateTime.now();
-      final today = DateTime(now.year, now.month, now.day);
-      final clean = scheduleText.trim();
-      final parts = clean.split(' ');
-      if (parts.isNotEmpty) {
-        final dateStr = parts[0].replaceAll(',', '').trim();
-        final dateParts = dateStr.split('/');
-        if (dateParts.length == 3) {
-          final day = int.parse(dateParts[0]);
-          final month = int.parse(dateParts[1]);
-          final year = int.parse(dateParts[2]);
-
-          final ticketDate = DateTime(year, month, day);
-          if (ticketDate.isBefore(today)) return true;
-
-          if (ticketDate.isAtSameMomentAs(today) && parts.length >= 2) {
-            final timeStr = parts[1].replaceAll('g', ':').replaceAll('h', ':').trim();
-            final timeParts = timeStr.split(':');
-            if (timeParts.isNotEmpty) {
-              final hour = int.tryParse(timeParts[0]) ?? 0;
-              final min = timeParts.length >= 2 ? (int.tryParse(timeParts[1]) ?? 0) : 0;
-              final ticketTime = DateTime(year, month, day, hour, min);
-              return ticketTime.isBefore(now);
-            }
-          }
-        }
-      }
-    } catch (_) {}
+    final d = parsedTicketDate;
+    if (d != null) {
+      return DateTimeConverter.isTicketPast(
+        ticketDate: d,
+        selectedDate: selectedDate,
+        selectedTime: selectedTime,
+        scheduleText: scheduleText,
+      );
+    }
     return _isPastExplicit;
   }
 

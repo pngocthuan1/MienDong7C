@@ -7,6 +7,7 @@ import 'package:benhvien7c/features/patients/domain/entities/PatientProfileDraft
 import 'package:benhvien7c/features/patients/presentation/viewmodels/DkkCompareViewModel.dart';
 import 'package:benhvien7c/app/router/RouteNames.dart';
 import 'package:benhvien7c/core/navigation/AppNavigator.dart';
+import 'package:benhvien7c/features/auth/presentation/views/AuthFlowArguments.dart';
 
 /// Arguments để navigate đến DkkCompareView
 class DkkCompareArgs {
@@ -111,7 +112,11 @@ class _DkkCompareViewState extends State<DkkCompareView> {
             duration: const Duration(seconds: 4),
           ),
         );
-        AppNavigator.resetToNamed(context, RouteNames.home, arguments: ticket);
+        AppNavigator.replaceAndKeepRoot(
+          context,
+          RouteNames.medicalTicket,
+          arguments: MedicalTicketViewArgs(ticket: ticket),
+        );
       },
       error: (_, message) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -350,7 +355,7 @@ class _DkkCompareViewState extends State<DkkCompareView> {
   }
 
   List<_InfoRow> _buildSystemRows(DkkThongTinKhamModel model) => [
-        _InfoRow('Số CC/HC', model.systemCccd, model.maBhytHoacMaBnDiff),
+        _InfoRow('Số CC/HC', model.systemCccd, false),
         _InfoRow('Ngày cấp', model.systemNgayCap, model.ngayCapDiff),
         _InfoRow('Họ tên', model.systemHoTen, model.hoTenDiff),
         _InfoRow('Ngày sinh', model.systemNgaySinh, model.ngaySinhDiff),
@@ -361,7 +366,7 @@ class _DkkCompareViewState extends State<DkkCompareView> {
       ];
 
   List<_InfoRow> _buildUserRows(DkkThongTinKhamModel model) => [
-        _InfoRow('Số CC/HC', model.userCccd, model.maBhytHoacMaBnDiff),
+        _InfoRow('Số CC/HC', model.userCccd, false),
         _InfoRow('Ngày cấp', model.userNgayCap, model.ngayCapDiff),
         _InfoRow('Họ tên', model.userHoTen, model.hoTenDiff),
         _InfoRow('Ngày sinh', model.userNgaySinh, model.ngaySinhDiff),

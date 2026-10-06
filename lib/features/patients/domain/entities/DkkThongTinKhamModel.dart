@@ -111,9 +111,6 @@ class DkkThongTinKhamModel {
   /// Mỗi phần tử: (tên trường, giá trị người dùng, giá trị hệ thống)
   List<(String label, String userVal, String sysVal)> get diffSummary {
     final list = <(String, String, String)>[];
-    if (maBhytHoacMaBnDiff) {
-      list.add(('Số CC/HC', userCccd.isNotEmpty ? userCccd : '(Để trống)', systemCccd.isNotEmpty ? systemCccd : '(Chưa có)'));
-    }
     if (ngayCapDiff) {
       list.add(('Ngày cấp', userNgayCap.isNotEmpty ? userNgayCap : '(Để trống)', systemNgayCap.isNotEmpty ? systemNgayCap : '(Chưa có)'));
     }

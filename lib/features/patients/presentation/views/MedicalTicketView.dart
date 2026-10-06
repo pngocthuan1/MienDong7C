@@ -359,14 +359,18 @@ class _MedicalTicketViewState extends State<MedicalTicketView> {
 
                                   _DetailRow(
                                     label: 'Ngày khám',
-                                    value: DateTimeConverter.formatScheduleForDisplay(ticket.scheduleText),
+                                    value: DateTimeConverter.formatNgayGioKhamBullet(
+                                      ngayKham: ticket.selectedDate,
+                                      gioKham: ticket.selectedTime,
+                                      rawSchedule: ticket.scheduleText,
+                                    ),
                                   ),
+                                  if (ticket.symptom != null && ticket.symptom!.trim().isNotEmpty)
+                                    _DetailRow(label: 'Triệu chứng', value: ticket.symptom!.trim()),
                                   if (ticket.clinic != null && ticket.clinic!.isNotEmpty)
                                     _DetailRow(label: 'Phòng khám', value: ticket.clinic!)
                                   else if (ticket.department != null && ticket.department!.isNotEmpty)
                                     _DetailRow(label: 'Phòng khám', value: ticket.department!),
-                                  if (ticket.symptom != null && ticket.symptom!.isNotEmpty)
-                                    _DetailRow(label: 'Triệu chứng', value: ticket.symptom!),
 
                                   // Mã BN & Barcode
                                   if (ticket.patientCode.trim().isNotEmpty) ...[

@@ -78,9 +78,11 @@ class _PatientProfileSelectViewState extends State<PatientProfileSelectView> {
       _filteredProfiles = _profiles.where((p) {
         final nameNoSign = removeVietnameseDiacritics(p.fullName).toLowerCase();
         final idNoSign = removeVietnameseDiacritics(p.identifier).toLowerCase();
+        final maBn = (p.maBN ?? p.maSo ?? '').toLowerCase();
         return nameNoSign.contains(qNoSign) ||
             p.phoneNumber.contains(qRaw) ||
-            idNoSign.contains(qNoSign);
+            idNoSign.contains(qNoSign) ||
+            maBn.contains(qRaw);
       }).toList();
     }
   }
@@ -355,33 +357,71 @@ class _PatientProfileSelectViewState extends State<PatientProfileSelectView> {
                                     child: Column(
                                       crossAxisAlignment: CrossAxisAlignment.start,
                                       children: [
-                                        // Mã thẻ / CCCD / Mã BN
-                                        Row(
-                                          crossAxisAlignment: CrossAxisAlignment.center,
-                                          children: [
-                                            const Text(
-                                              '#',
-                                              style: TextStyle(
-                                                fontSize: 22,
-                                                fontWeight: FontWeight.bold,
-                                                color: Color(0xFF0D6EFD),
-                                              ),
-                                            ),
-                                            const SizedBox(width: 8),
-                                            Expanded(
-                                              child: Text(
-                                                'Mã thẻ: ${(profile.identifier.isNotEmpty && profile.identifier != 'N/A') ? profile.identifier : '<Tự động cấp tạo mới>'}',
-                                                style: const TextStyle(
-                                                  fontSize: 18,
-                                                  fontWeight: FontWeight.bold,
-                                                  color: Color(0xFF0D6EFD),
+                                        // Mã BN / Mã thẻ & Số CC
+                                        Builder(
+                                          builder: (context) {
+                                            final mb = (profile.maBN != null && profile.maBN!.isNotEmpty)
+                                                ? profile.maBN!
+                                                : ((profile.maSo != null && profile.maSo!.isNotEmpty && profile.maSo != 'N/A')
+                                                    ? profile.maSo!
+                                                    : '');
+                                            final label = mb.isNotEmpty ? 'Mã BN' : 'Mã thẻ';
+                                            final code = mb.isNotEmpty
+                                                ? mb
+                                                : ((profile.identifier.isNotEmpty && profile.identifier != 'N/A')
+                                                    ? profile.identifier
+                                                    : '<Chưa có mã BN>');
+                                            return Column(
+                                              crossAxisAlignment: CrossAxisAlignment.start,
+                                              children: [
+                                                Row(
+                                                  crossAxisAlignment: CrossAxisAlignment.center,
+                                                  children: [
+                                                    const Text(
+                                                      '#',
+                                                      style: TextStyle(
+                                                        fontSize: 22,
+                                                        fontWeight: FontWeight.bold,
+                                                        color: Color(0xFF0D6EFD),
+                                                      ),
+                                                    ),
+                                                    const SizedBox(width: 8),
+                                                    Expanded(
+                                                      child: Text(
+                                                        '$label: $code',
+                                                        style: const TextStyle(
+                                                          fontSize: 18,
+                                                          fontWeight: FontWeight.bold,
+                                                          color: Color(0xFF0D6EFD),
+                                                        ),
+                                                      ),
+                                                    ),
+                                                  ],
                                                 ),
-                                              ),
-                                            ),
-                                          ],
+                                                if (profile.identifier.isNotEmpty &&
+                                                    profile.identifier != 'N/A' &&
+                                                    profile.identifier != mb) ...[
+                                                  const SizedBox(height: 6),
+                                                  Row(
+                                                    children: [
+                                                      const Icon(Icons.badge_outlined, size: 18, color: Color(0xFF64748B)),
+                                                      const SizedBox(width: 8),
+                                                      Text(
+                                                        'Số CC: ${profile.identifier}',
+                                                        style: const TextStyle(
+                                                          fontSize: 15,
+                                                          color: Color(0xFF1E293B),
+                                                          fontWeight: FontWeight.w500,
+                                                        ),
+                                                      ),
+                                                    ],
+                                                  ),
+                                                ],
+                                              ],
+                                            );
+                                          },
                                         ),
                                         const SizedBox(height: 8),
-
                                         // Giới tính
                                         Row(
                                           children: [

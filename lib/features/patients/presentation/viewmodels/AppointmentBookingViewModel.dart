@@ -147,9 +147,16 @@ class AppointmentBookingViewModel extends BasePortalViewModel {
     _isMutating = true;
     notifyIfMounted();
     try {
-      await portalRepository.softDeleteMedicalTicket(id);
+      final res = await portalRepository.softDeleteMedicalTicket(id);
+      res.when(
+        ok: (_) {
+          setMessage('Đã xóa phiếu khám thành công.');
+        },
+        error: (e, msg) {
+          setMessage(msg.isNotEmpty ? msg : 'Xóa phiếu khám thất bại.');
+        },
+      );
       await loadTicketsCommand.execute();
-
     } catch (e) {
       setMessage('Xóa lịch hẹn thất bại. Vui lòng thử lại.');
     } finally {

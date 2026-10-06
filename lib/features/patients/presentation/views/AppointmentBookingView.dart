@@ -299,7 +299,7 @@ class _AppointmentBookingViewState extends State<AppointmentBookingView> {
                     const SizedBox(width: 8),
                     Expanded(
                       child: Text(
-                        '${ticket.patientName.toUpperCase()} - ${(ticket.dateOfBirth != null && ticket.dateOfBirth!.isNotEmpty) ? (DateTimeConverter.toVnDate(ticket.dateOfBirth) ?? ticket.birthYear) : ticket.birthYear}',
+                        ticket.patientName.toUpperCase(),
                         style: const TextStyle(
                           fontSize: 17,
                           fontWeight: FontWeight.bold,
@@ -317,8 +317,8 @@ class _AppointmentBookingViewState extends State<AppointmentBookingView> {
               // === KHỐI THÔNG TIN BỆNH NHÂN: lưới 2 cột responsive ===
               LayoutBuilder(
                 builder: (context, constraints) {
-                  // Ngưỡng responsive: thẻ rộng < 320dp → xếp 1 cột (màn hình ~380dp trở xuống)
-                  final isSingleColumn = constraints.maxWidth < 320;
+                  // Ngưỡng responsive: thẻ cực hẹp < 240dp → xếp toàn bộ 1 cột
+                  final isSingleColumn = constraints.maxWidth < 240;
                   // Giới hạn TextScaler: bảo vệ layout trên cả Android font scale và iOS Dynamic Type
                   final textScaler = MediaQuery.textScalerOf(context)
                       .clamp(minScaleFactor: 0.9, maxScaleFactor: 1.15);
@@ -332,8 +332,61 @@ class _AppointmentBookingViewState extends State<AppointmentBookingView> {
                       ? ticket.address.trim()
                       : [ticket.ward, ticket.province].where((s) => s != null && s.trim().isNotEmpty).join(', ');
                   final addressDisplay = resolvedAddr.trim().isEmpty ? '--' : resolvedAddr.trim();
-                  final scheduleDisplay = DateTimeConverter.formatScheduleForDisplay(ticket.scheduleText);
+
+                  // Chuẩn hóa Ngày sinh
+                  final rawDob = ticket.dateOfBirth;
+                  final dobFormatted = (rawDob != null && rawDob.trim().isNotEmpty)
+                      ? (DateTimeConverter.toVnDate(rawDob) ?? rawDob.trim())
+                      : (ticket.birthYear.trim().isNotEmpty ? ticket.birthYear.trim() : '');
+                  final dobDisplay = (dobFormatted.isEmpty || dobFormatted.toLowerCase() == 'null') ? '--' : dobFormatted;
+
                   final queueDisplay = ticket.queueNumber.trim().isEmpty ? '--' : ticket.queueNumber.trim();
+
+                  // Chuẩn hóa Ngày khám & Giờ khám gộp thành 1 chuỗi thống nhất: "dd/MM/yyyy • <giờ>"
+                  String ngayKhamDisplay = '';
+                  if (ticket.selectedDate != null && ticket.selectedDate!.trim().isNotEmpty) {
+                    final vn = DateTimeConverter.toVnDate(ticket.selectedDate);
+                    if (vn != null) ngayKhamDisplay = vn;
+                  }
+                  if (ngayKhamDisplay.isEmpty && ticket.scheduleText.trim().isNotEmpty) {
+                    final parts = ticket.scheduleText.trim().split(' ');
+                    if (parts.isNotEmpty) {
+                      final vn = DateTimeConverter.toVnDate(parts[0]);
+                      if (vn != null) ngayKhamDisplay = vn;
+                    }
+                  }
+
+                  String gioKhamDisplay = '';
+                  final rawTime = ticket.selectedTime?.trim() ?? '';
+                  if (rawTime.isNotEmpty && rawTime.toLowerCase() != 'null') {
+                    gioKhamDisplay = DateTimeConverter.formatGioKhamForDisplay(rawTime);
+                  } else {
+                    if (ticket.selectedDate != null && ticket.selectedDate!.trim().isNotEmpty) {
+                      final d = DateTime.tryParse(ticket.selectedDate!.trim());
+                      if (d != null) {
+                        gioKhamDisplay = '${d.hour.toString().padLeft(2, '0')}:${d.minute.toString().padLeft(2, '0')}';
+                      }
+                    }
+                    if (gioKhamDisplay.isEmpty && ticket.scheduleText.trim().isNotEmpty) {
+                      final parts = ticket.scheduleText.trim().split(' ');
+                      if (parts.length >= 2) {
+                        final timePart = parts[1].trim();
+                        if (timePart.contains(':')) {
+                          final tUnits = timePart.split(':');
+                          gioKhamDisplay = '${tUnits[0].padLeft(2, '0')}:${tUnits[1].padLeft(2, '0')}';
+                        } else {
+                          gioKhamDisplay = timePart;
+                        }
+                      }
+                    }
+                  }
+
+                  final ngayGioKhamDisplay = DateTimeConverter.formatNgayGioKhamBullet(
+                    ngayKham: ngayKhamDisplay,
+                    gioKham: gioKhamDisplay,
+                    rawSchedule: ticket.scheduleText,
+                  );
+
                   final isMaBnOfficial = ticket.patientCode.trim().length == 8 &&
                       RegExp(r'^\d+$').hasMatch(ticket.patientCode.trim());
 
@@ -348,7 +401,7 @@ class _AppointmentBookingViewState extends State<AppointmentBookingView> {
 
                   Widget buildInfoSection() {
                     if (isSingleColumn) {
-                      // 1 cột — mỗi trường 1 hàng riêng
+                      // Màn hình siêu nhỏ — mỗi trường 1 hàng riêng
                       return Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
@@ -361,16 +414,18 @@ class _AppointmentBookingViewState extends State<AppointmentBookingView> {
                           const SizedBox(height: 8),
                           _buildInfoField(icon: Icons.badge_outlined, label: 'CC/HC', value: ccHcDisplay, textScaler: textScaler),
                           const SizedBox(height: 8),
-                          _buildInfoField(icon: Icons.location_on_outlined, label: 'Địa chỉ', value: addressDisplay, textScaler: textScaler),
-                          const SizedBox(height: 8),
-                          _buildInfoField(icon: Icons.calendar_today_rounded, label: 'Ngày khám', value: scheduleDisplay, textScaler: textScaler),
+                          _buildInfoField(icon: Icons.cake_outlined, label: 'Ngày sinh', value: dobDisplay, textScaler: textScaler),
                           const SizedBox(height: 8),
                           _buildInfoField(icon: Icons.confirmation_number_outlined, label: 'Số đăng ký', value: queueDisplay, textScaler: textScaler),
+                          const SizedBox(height: 8),
+                          _buildInfoField(icon: Icons.calendar_today_rounded, label: 'Ngày khám', value: ngayGioKhamDisplay, textScaler: textScaler),
+                          const SizedBox(height: 8),
+                          _buildInfoField(icon: Icons.location_on_outlined, label: 'Địa chỉ', value: addressDisplay, textScaler: textScaler),
                         ],
                       );
                     }
 
-                    // 2 cột — bố cục lưới chuẩn
+                    // Bố cục chuẩn: 3 hàng đầu 2 cột, Ngày khám gộp full-width, Địa chỉ ở cuối cùng
                     return Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
@@ -387,14 +442,17 @@ class _AppointmentBookingViewState extends State<AppointmentBookingView> {
                           _buildInfoField(icon: Icons.badge_outlined, label: 'CC/HC', value: ccHcDisplay, textScaler: textScaler),
                         ),
                         const SizedBox(height: 8),
-                        // Hàng 3: Địa chỉ — full width (không ghép cặp)
-                        _buildInfoField(icon: Icons.location_on_outlined, label: 'Địa chỉ', value: addressDisplay, textScaler: textScaler),
-                        const SizedBox(height: 8),
-                        // Hàng 4: Ngày khám | Số đăng ký
+                        // Hàng 3: Ngày sinh | Số ĐK
                         buildRow(
-                          _buildInfoField(icon: Icons.calendar_today_rounded, label: 'Ngày khám', value: scheduleDisplay, textScaler: textScaler),
+                          _buildInfoField(icon: Icons.cake_outlined, label: 'Ngày sinh', value: dobDisplay, textScaler: textScaler),
                           _buildInfoField(icon: Icons.confirmation_number_outlined, label: 'Số ĐK', value: queueDisplay, textScaler: textScaler),
                         ),
+                        const SizedBox(height: 8),
+                        // Hàng 4: Ngày khám (gộp cả giờ, full-width)
+                        _buildInfoField(icon: Icons.calendar_today_rounded, label: 'Ngày khám/giờ khám', value: ngayGioKhamDisplay, textScaler: textScaler),
+                        const SizedBox(height: 8),
+                        // Hàng 5: Địa chỉ — full width, đặt CUỐI CÙNG
+                        _buildInfoField(icon: Icons.location_on_outlined, label: 'Địa chỉ', value: addressDisplay, textScaler: textScaler),
                       ],
                     );
                   }
@@ -431,24 +489,6 @@ class _AppointmentBookingViewState extends State<AppointmentBookingView> {
                             },
                             icon: const Icon(Icons.qr_code_rounded, size: 16),
                             label: const Text('Chi tiết'),
-                            style: TextButton.styleFrom(
-                              foregroundColor: const Color(0xFF0D6EFD),
-                              padding: const EdgeInsets.symmetric(horizontal: 8),
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          TextButton.icon(
-                            onPressed: () async {
-                              await AppNavigator.pushNamed(
-                                context,
-                                RouteNames.patientProfileCreate,
-                                arguments: ticket,
-                              );
-                              if (!mounted) return;
-                              _viewModel.loadTicketsCommand.execute();
-                            },
-                            icon: const Icon(Icons.refresh_rounded, size: 16),
-                            label: const Text('Đăng ký lại'),
                             style: TextButton.styleFrom(
                               foregroundColor: const Color(0xFF0D6EFD),
                               padding: const EdgeInsets.symmetric(horizontal: 8),

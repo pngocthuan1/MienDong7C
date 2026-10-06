@@ -510,7 +510,7 @@ class DkkSoKhamDto {
       gioiTinh: json['gioitinh'],
       sdt: json['sdt']?.toString(),
       ngayGioKham: json['ngaygiokham']?.toString(),
-      trieuChung: json['trieuchung']?.toString(),
+      trieuChung: json['trieuchung']?.toString() ?? json['TrieuChung']?.toString(),
       dangKyDum: json['dangkydum']?.toString(),
       soDangKy: (json['sodangky'] as num?)?.toInt(),
       ngayud: json['ngayud']?.toString(),

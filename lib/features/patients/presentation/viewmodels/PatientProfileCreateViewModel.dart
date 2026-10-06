@@ -23,6 +23,7 @@ class PatientProfileCreateViewModel extends BasePortalViewModel {
     super.repository,
     super.sessionStore,
   ) {
+    identifierController.addListener(_onIdentifierChanged);
     fullNameController.text = session.user.fullName;
     phoneController.text = session.user.phoneNumber;
     birthYearController.text = '';
@@ -75,6 +76,26 @@ class PatientProfileCreateViewModel extends BasePortalViewModel {
 
   /// Nguồn Thẻ 2 trong màn đối chiếu: true = hồ sơ đã lưu, false = nhập tay
   bool _compareSourceIsSavedProfile = false;
+
+  /// Số CC/HC đã tìm thành công lần gần nhất (dùng để kiểm tra khi identifier bị thay đổi)
+  String? _linkedIdentifier;
+  String? get linkedIdentifier => _linkedIdentifier;
+
+  /// Dto đã tìm thấy lần gần nhất (để khôi phục MaBN nếu người dùng gõ lại đúng số cũ)
+  DkkTimBenhNhanResponseDto? _lastFoundHospitalDto;
+
+  /// Số CC/HC đã tra cứu (kể cả kết quả không tìm thấy) - tránh tra lại nhiều lần
+  String? _lastSearchedIdentifier;
+
+  /// Kết quả tìm kiếm lần gần nhất (null = không tìm thấy)
+  DkkTimBenhNhanResponseDto? _lastSearchResult;
+
+  /// Cờ đang tự điền form (để bỏ qua listener khi app gán controller bằng code)
+  bool _isFillingForm = false;
+
+  /// Cờ cảnh báo người dùng đã đổi CC/HC sau khi đã tìm thấy hồ sơ
+  bool _hasIdentifierChangedWarning = false;
+  bool get hasIdentifierChangedWarning => _hasIdentifierChangedWarning;
 
   late final Command1<DkkTimBenhNhanResponseDto?, String> searchByCccdCommand;
 
@@ -195,7 +216,7 @@ class PatientProfileCreateViewModel extends BasePortalViewModel {
   Future<void> _initAddressData() async {
     await AddressHelper.instance.init();
     provinces = AddressHelper.instance.provinces;
-    notifyListeners();
+    notifyIfMounted();
   }
 
   /// Đọc thông tin hồ sơ cá nhân đã lưu ĐỒNG BỘ (sync) từ SharedPreferences
@@ -432,6 +453,11 @@ class PatientProfileCreateViewModel extends BasePortalViewModel {
               }
             }
           }
+
+          // Áp dụng địa chỉ từ hồ sơ đang chờ (nếu người dùng đã bấm chọn hồ sơ trước khi masterData tải xong)
+          if (_pendingAddressProfile != null) {
+            _applyAddressFromProfile(_pendingAddressProfile!);
+          }
         },
         error: (_, message) {
           masterError = message;
@@ -440,6 +466,77 @@ class PatientProfileCreateViewModel extends BasePortalViewModel {
       isLoadingMaster = false;
       return result;
     });
+  }
+
+  PatientProfileDraftEntity? _pendingAddressProfile;
+
+  /// Tự động dò ngược id_tinh / id_phuong hoặc tên Tỉnh/Phường từ masterData
+  void _applyAddressFromProfile(PatientProfileDraftEntity profile) {
+    final master = masterData;
+    if (master == null) {
+      _pendingAddressProfile = profile;
+      return;
+    }
+    _pendingAddressProfile = null;
+
+    final idTinh = profile.idTinh;
+    final idPhuong = profile.idPhuong;
+
+    if (idTinh != null) {
+      final sIdTinh = idTinh.toString();
+      final matchedTinh = master.listTinh.where((t) =>
+          t.id.toString() == sIdTinh ||
+          (t.maByt.isNotEmpty && t.maByt == sIdTinh)
+      ).firstOrNull;
+
+      if (matchedTinh != null) {
+        selectProvinceFromApi(matchedTinh);
+
+        if (idPhuong != null) {
+          final sIdPhuong = idPhuong.toString();
+          final wards = getWardsForSelectedProvince();
+          final matchedWard = wards.where((w) =>
+              w.id.toString() == sIdPhuong ||
+              (w.maByt.isNotEmpty && w.maByt == sIdPhuong)
+          ).firstOrNull;
+
+          if (matchedWard != null) {
+            selectWardFromApi(matchedWard);
+          } else {
+            wardController.clear();
+            selectedWardCode = null;
+            selectedWardName = null;
+          }
+        }
+        return;
+      }
+    }
+
+    // Nếu không tìm thấy qua ID nhưng profile có sẵn text province / ward:
+    if (profile.province != null && profile.province!.trim().isNotEmpty) {
+      final pText = profile.province!.trim().toLowerCase();
+      final matchedTinhByName = master.listTinh.where((t) => t.display.trim().toLowerCase() == pText).firstOrNull;
+      if (matchedTinhByName != null) {
+        selectProvinceFromApi(matchedTinhByName);
+        if (profile.ward != null && profile.ward!.trim().isNotEmpty) {
+          final wText = profile.ward!.trim().toLowerCase();
+          final wards = getWardsForSelectedProvince();
+          final matchedWardByName = wards.where((w) => w.display.trim().toLowerCase() == wText).firstOrNull;
+          if (matchedWardByName != null) {
+            selectWardFromApi(matchedWardByName);
+          }
+        }
+        return;
+      }
+    }
+
+    // Trường hợp không tìm thấy cả qua ID lẫn text: để trống cho người dùng tự chọn, không báo lỗi
+    provinceController.clear();
+    wardController.clear();
+    selectedProvinceCode = null;
+    selectedProvinceName = null;
+    selectedWardCode = null;
+    selectedWardName = null;
   }
 
   // Dropdowns lists
@@ -654,10 +751,12 @@ class PatientProfileCreateViewModel extends BasePortalViewModel {
 
   // Pre-fill fields from saved profile
   void selectProfile(PatientProfileDraftEntity profile) {
+    _isFillingForm = true;
     final key = _getProfileUniqueKey(profile);
     if (selectedProfileIdentifier == key) {
       // Toggle off / Unselect
       clearProfileSelection();
+      _isFillingForm = false;
       return;
     }
 
@@ -700,6 +799,19 @@ class PatientProfileCreateViewModel extends BasePortalViewModel {
       maBNVal = rawMaSo;
     }
 
+    // ĐÚNG THEO CÁCH WEB ĐANG LÀM (DatLichKhamStep2ThongTinKham.cshtml.cs dòng 238:
+    // ThongTinKham.MaBhytHoacMaBn = ThongTinHoSo.MaThe):
+    // Ưu tiên dùng profile.maThe (dữ liệu mới nhất lưu trong dk_hosobenhnhan) để điền vào ô Số CCCD / Hộ chiếu.
+    final String effectiveCccd;
+    if (profile.maThe != null &&
+        profile.maThe!.trim().isNotEmpty &&
+        profile.maThe!.trim() != 'N/A' &&
+        profile.maThe!.trim() != rawMaSo) {
+      effectiveCccd = profile.maThe!.trim();
+    } else {
+      effectiveCccd = cccdVal;
+    }
+
     final isReal = maBNVal.isNotEmpty && !maBNVal.toUpperCase().startsWith('T');
     _hasRealMaBN = isReal;
     _maBN = isReal ? maBNVal : null;
@@ -708,6 +820,11 @@ class PatientProfileCreateViewModel extends BasePortalViewModel {
 
     // Gán mã bệnh nhân vào đúng controller ô Mã BN
     patientCodeController.text = maBNVal;
+
+    // Ghi nhớ khóa định danh liên kết để không bị reset khi đăng ký
+    _linkedIdentifier = effectiveCccd;
+    _lastSearchedIdentifier = effectiveCccd;
+    _hasIdentifierChangedWarning = false;
 
     final formattedDob = (profile.dateOfBirth != null && profile.dateOfBirth!.isNotEmpty)
         ? (DateTimeConverter.toVnDate(profile.dateOfBirth) ?? profile.dateOfBirth!)
@@ -722,30 +839,20 @@ class PatientProfileCreateViewModel extends BasePortalViewModel {
       otherBirthYearController.text = profile.birthYear;
       otherGender = profile.gender;
       otherPhoneController.text = profile.phoneNumber;
-      identifierController.text = cccdVal;
+      identifierController.text = effectiveCccd;
       cccdIssueDateController.text = formattedCccdDate;
-      otherCccdIssueDateController.text = formattedCccdDate;
-      otherPatientCodeController.text = _maBN ?? '';
-      provinceController.text = profile.province ?? '';
-      wardController.text = profile.ward ?? '';
-      if (profile.clinic != null && profile.clinic!.isNotEmpty) {
-        clinicController.text = profile.clinic!;
-        selectedDepartment = profile.clinic;
-      }
-
       otherFullNameError = null;
       otherBirthYearError = null;
       otherPhoneError = null;
+      _applyAddressFromProfile(profile);
     } else {
-      identifierController.text = cccdVal;
+      identifierController.text = effectiveCccd;
       cccdIssueDateController.text = formattedCccdDate;
       fullNameController.text = profile.fullName;
       dobController.text = formattedDob;
       birthYearController.text = profile.birthYear;
       _gender = profile.gender;
       phoneController.text = profile.phoneNumber;
-      provinceController.text = profile.province ?? '';
-      wardController.text = profile.ward ?? '';
       if (profile.clinic != null && profile.clinic!.isNotEmpty) {
         clinicController.text = profile.clinic!;
         selectedDepartment = profile.clinic;
@@ -754,14 +861,17 @@ class PatientProfileCreateViewModel extends BasePortalViewModel {
       fullNameError = null;
       birthYearError = null;
       phoneError = null;
+      _applyAddressFromProfile(profile);
     }
     deleteConfirmIdentifier = null;
+    _isFillingForm = false;
     notifyListeners();
   }
 
 
 
   void clearProfileSelection() {
+    _pendingAddressProfile = null;
     selectedProfileIdentifier = null;
     isExistingProfile = false;
     _formIsReadOnly = false;
@@ -771,6 +881,13 @@ class PatientProfileCreateViewModel extends BasePortalViewModel {
     _hasRealMaBN = false;
     _hospitalSnapshot = null;
     _compareSourceIsSavedProfile = false;
+
+    _linkedIdentifier = null;
+    _lastFoundHospitalDto = null;
+    _lastSearchedIdentifier = null;
+    _lastSearchResult = null;
+    _hasIdentifierChangedWarning = false;
+
     identifierController.clear();
     cccdIssueDateController.clear();
     patientCodeController.clear();
@@ -793,6 +910,41 @@ class PatientProfileCreateViewModel extends BasePortalViewModel {
   // Luồng 1 — Tìm hồ sơ bệnh viện theo CCCD/HC
   // ---------------------------------------------------------------------------
 
+  void _onIdentifierChanged() {
+    if (_isFillingForm) return; // Bỏ qua khi app đang tự điền form
+    if (!_isFromHospitalRecord && _maBN == null) return; // Chưa có hồ sơ bệnh viện -> không cần làm gì
+    
+    final currentVal = identifierController.text.trim();
+    final linked = _linkedIdentifier?.trim() ?? '';
+    
+    if (linked.isEmpty) return;
+    
+    if (currentVal.toLowerCase() == linked.toLowerCase()) {
+      // Người dùng gõ lại đúng số cũ -> khôi phục MaBN
+      if (_lastFoundHospitalDto != null && !_isFromHospitalRecord) {
+        _isFromHospitalRecord = true;
+        _maBN = _lastFoundHospitalDto!.maBN;
+        _hasRealMaBN = true;
+        patientCodeController.text = _lastFoundHospitalDto!.maBN;
+        _hasIdentifierChangedWarning = false;
+        notifyIfMounted();
+      }
+    } else if (currentVal != linked) {
+      // Người dùng đổi CC/HC -> reset ngay MaBN
+      _isFromHospitalRecord = false;
+      _maBN = null;
+      _hasRealMaBN = false;
+      patientCodeController.clear();
+      _hasIdentifierChangedWarning = true;
+      notifyIfMounted();
+    }
+  }
+
+  void clearIdentifierChangedWarning() {
+    _hasIdentifierChangedWarning = false;
+    notifyIfMounted();
+  }
+
   /// Gọi API tìm bệnh nhân theo số CCCD/HC.
   Future<Result<DkkTimBenhNhanResponseDto?>> _searchByCccd(String soCcHc) async {
     return runSafely(() async {
@@ -801,9 +953,61 @@ class PatientProfileCreateViewModel extends BasePortalViewModel {
     });
   }
 
+  /// Tra cứu CC/HC trước khi submit nếu cần.
+  /// Trả về:
+  ///   - null: không cần tra (đã có MaBN hợp lệ, hoặc đang dùng hồ sơ đã lưu, hoặc CC/HC giống lần tra trước)
+  ///   - DkkTimBenhNhanResponseDto: tìm thấy hồ sơ mới -> View phải hiện dialog
+  ///   - false (dùng sealed class/bool trả về qua out param): không tìm thấy -> tiếp tục đăng ký mới
+  Future<({bool foundNew, DkkTimBenhNhanResponseDto? dto})> autoSearchBeforeSubmit() async {
+    // Không tra nếu đang dùng hồ sơ đã lưu
+    if (isExistingProfile) return (foundNew: false, dto: null);
+    
+    final currentCccd = identifierController.text.trim();
+    if (currentCccd.isEmpty) return (foundNew: false, dto: null);
+    
+    // Đã có MaBN hợp lệ và CC/HC chưa thay đổi -> không cần tra
+    if ((_isFromHospitalRecord || _hasRealMaBN) &&
+        _linkedIdentifier != null &&
+        currentCccd.toLowerCase() == _linkedIdentifier!.toLowerCase()) {
+      return (foundNew: false, dto: null);
+    }
+    
+    // CC/HC giống lần tra trước -> dùng kết quả cũ
+    if (_lastSearchedIdentifier != null &&
+        currentCccd.toLowerCase() == _lastSearchedIdentifier!.toLowerCase()) {
+      if (_lastSearchResult != null) {
+        return (foundNew: true, dto: _lastSearchResult);
+      }
+      return (foundNew: false, dto: null);
+    }
+    
+    // Tra cứu mới
+    try {
+      final result = await portalRepository.timBenhNhanByCccdHc(currentCccd);
+      DkkTimBenhNhanResponseDto? found;
+      result.when(
+        ok: (dto) => found = dto,
+        error: (_, _) {},
+      );
+      _lastSearchedIdentifier = currentCccd;
+      _lastSearchResult = found;
+      if (found != null) {
+        return (foundNew: true, dto: found);
+      }
+    } catch (_) {}
+    
+    return (foundNew: false, dto: null);
+  }
+
+  void acceptFoundPatientForSubmit(DkkTimBenhNhanResponseDto dto) {
+    final searched = identifierController.text.trim();
+    fillFromHospitalRecord(dto, searchedNumber: searched);
+  }
+
   /// Điền form từ hồ sơ gốc bệnh viện (Luồng 1 — Trường hợp A).
   /// Gọi khi người dùng bấm [Đồng ý] trong dialog xác nhận.
   void fillFromHospitalRecord(DkkTimBenhNhanResponseDto dto, {String? searchedNumber}) {
+    _isFillingForm = true;
     _hospitalSnapshot = dto;
     _isFromHospitalRecord = true;
     _formIsReadOnly = false; // Được phép sửa sau khi đồng ý
@@ -811,13 +1015,20 @@ class PatientProfileCreateViewModel extends BasePortalViewModel {
     _compareSourceIsSavedProfile = false;
     isExistingProfile = false;
     selectedProfileIdentifier = null;
+    _hasIdentifierChangedWarning = false;
+
+    // Ghi nhớ số CC/HC đã tìm và kết quả tìm kiếm
+    final queryCccd = (searchedNumber != null && searchedNumber.trim().isNotEmpty)
+        ? searchedNumber.trim()
+        : cccdSearchController.text.trim();
+    _linkedIdentifier = queryCccd.isNotEmpty ? queryCccd : dto.soCcHc ?? dto.maBhytHoacMaBn;
+    _lastFoundHospitalDto = dto;
+    _lastSearchedIdentifier = _linkedIdentifier;
+    _lastSearchResult = dto;
 
     // 1. Ô "Số CCCD/HC" (identifierController):
     // PHẢI giữ đúng số CCCD/Hộ chiếu người dùng tìm kiếm (hoặc số từ hệ thống).
     // TUYỆT ĐỐI KHÔNG ghi đè bằng Mã bệnh nhân (MaBN)!
-    final queryCccd = (searchedNumber != null && searchedNumber.trim().isNotEmpty)
-        ? searchedNumber.trim()
-        : cccdSearchController.text.trim();
     if (queryCccd.isNotEmpty && queryCccd != dto.maBN) {
       identifierController.text = queryCccd;
     } else if (dto.soCcHc != null && dto.soCcHc!.isNotEmpty && dto.soCcHc != dto.maBN) {
@@ -908,6 +1119,7 @@ class PatientProfileCreateViewModel extends BasePortalViewModel {
     fullNameError = null;
     birthYearError = null;
     phoneError = null;
+    _isFillingForm = false;
     notifyListeners();
   }
 
@@ -930,6 +1142,10 @@ class PatientProfileCreateViewModel extends BasePortalViewModel {
     } else {
       identifierController.clear();
     }
+    _lastSearchedIdentifier = searchedNumber; // đã tra, không thấy
+    _lastSearchResult = null;
+    _linkedIdentifier = null;
+    _hasIdentifierChangedWarning = false;
     patientCodeController.clear();
 
     cccdIssueDateController.clear();
@@ -950,10 +1166,19 @@ class PatientProfileCreateViewModel extends BasePortalViewModel {
   }
 
   /// true nếu cần kiểm tra so sánh với hệ thống trước khi đăng ký:
-  /// Chỉ gọi khi bệnh nhân có MaBN thật (hồ sơ từ TimBenhNhan hoặc hồ sơ đã lưu có MaBN 8 số).
-  /// Không gọi khi bệnh nhân mới (không có MaBN hoặc mã tạm T...).
-  bool get needsComparisonCheck =>
-      _isFromHospitalRecord || _hasRealMaBN;
+  /// Chỉ gọi khi bệnh nhân có MaBN thật (hồ sơ từ TimBenhNhan hoặc hồ sơ đã lưu có MaBN 8 số)
+  /// VÀ số CC/HC hiện tại trên form phải trùng với số đã liên kết.
+  /// Không gọi khi bệnh nhân mới (không có MaBN hoặc mã tạm T...) hoặc khi đã đổi CC/HC.
+  bool get needsComparisonCheck {
+    if (!_isFromHospitalRecord && !_hasRealMaBN) return false;
+    final currentIdent = identifierController.text.trim().toLowerCase();
+    final linkedIdent = (_linkedIdentifier ?? '').trim().toLowerCase();
+    if (isExistingProfile) {
+      return linkedIdent.isEmpty ? currentIdent.isEmpty : (currentIdent == linkedIdent);
+    }
+    if (_linkedIdentifier == null) return false;
+    return currentIdent == linkedIdent;
+  }
 
   /// Tạo model đối chiếu cho Luồng 3.
   /// Sử dụng API KiemTraBenhNhan từ server để kiểm tra sai lệch.
@@ -1053,7 +1278,22 @@ class PatientProfileCreateViewModel extends BasePortalViewModel {
         : '';
 
     final effectiveMaHS = _isFromHospitalRecord ? '' : (_selectedMaHS ?? '');
-    final effectiveMaBN = _hasRealMaBN ? (_maBN ?? '') : (_isFromHospitalRecord ? (_maBN ?? '') : '');
+    // Chỉ dùng MaBN khi:
+    // 1. Hồ sơ chọn từ danh sách đã lưu (isExistingProfile): giữ nguyên MaBN nếu không bị sửa đổi khác với số ban đầu
+    // 2. Hoặc tìm từ bệnh viện (isFromHospitalRecord / hasRealMaBN) và CC/HC trùng khớp với số đã liên kết
+    final currentIdent = identifierController.text.trim().toLowerCase();
+    final linkedIdent = (_linkedIdentifier ?? '').trim().toLowerCase();
+    final bool cccdMatched;
+    if (isExistingProfile) {
+      // Khi chọn từ hồ sơ đã lưu, nếu ô CCCD rỗng hoặc khớp đúng linkedIdentifier -> hợp lệ
+      cccdMatched = linkedIdent.isEmpty ? currentIdent.isEmpty : (currentIdent == linkedIdent);
+    } else {
+      cccdMatched = _linkedIdentifier != null && currentIdent == linkedIdent;
+    }
+
+    final effectiveMaBN = (_hasRealMaBN && cccdMatched) 
+        ? (_maBN ?? '')
+        : (_isFromHospitalRecord && cccdMatched ? (_maBN ?? '') : '');
 
     return DangKyKhamRequestDto(
       maHS: effectiveMaHS,
@@ -1152,6 +1392,7 @@ class PatientProfileCreateViewModel extends BasePortalViewModel {
 
   // Pre-fill fields from scanned CCCD QR code
   ParsedAddressResult fillFromCccd(CccdData data) {
+    _isFillingForm = true;
     final parsedAddress = AddressHelper.instance.parseCccdAddress(
       data.address,
       issueDate: data.issueDate,
@@ -1205,6 +1446,7 @@ class PatientProfileCreateViewModel extends BasePortalViewModel {
       updateBirthYearError(data.birthYear);
     }
     refreshFormState();
+    _isFillingForm = false;
     notifyListeners();
     return parsedAddress;
   }
@@ -1727,6 +1969,19 @@ class PatientProfileCreateViewModel extends BasePortalViewModel {
           ? clinicController.text.trim()
           : selectedDepartment;
 
+      final currentIdent = identifierController.text.trim().toLowerCase();
+      final linkedIdent = (_linkedIdentifier ?? '').trim().toLowerCase();
+      final bool cccdMatched;
+      if (isExistingProfile) {
+        cccdMatched = linkedIdent.isEmpty ? currentIdent.isEmpty : (currentIdent == linkedIdent);
+      } else {
+        cccdMatched = _linkedIdentifier != null && currentIdent == linkedIdent;
+      }
+
+      final effectiveMaBN = (_hasRealMaBN && cccdMatched) 
+          ? (_maBN ?? '')
+          : (_isFromHospitalRecord && cccdMatched ? (_maBN ?? '') : null);
+
       final draft = PatientProfileDraftEntity(
         identifier: identifierController.text.trim(),
         fullName: finalFullName,
@@ -1743,7 +1998,7 @@ class PatientProfileCreateViewModel extends BasePortalViewModel {
             : (cccdIssueDateController.text.trim().isNotEmpty ? cccdIssueDateController.text.trim() : null),
         maSo: _hasRealMaBN ? _maBN : _selectedMaHS,
         maHS: _isFromHospitalRecord ? '' : _selectedMaHS,
-        maBN: _hasRealMaBN ? _maBN : (_isFromHospitalRecord ? _maBN : null),
+        maBN: effectiveMaBN,
       );
 
 
@@ -1801,6 +2056,7 @@ class PatientProfileCreateViewModel extends BasePortalViewModel {
   void dispose() {
     _realtimeRefreshTimer?.cancel();
     dangKyGiupController.dispose();
+    identifierController.removeListener(_onIdentifierChanged);
     identifierController.dispose();
     fullNameController.dispose();
     dobController.dispose();

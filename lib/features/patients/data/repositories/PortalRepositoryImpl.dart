@@ -654,6 +654,8 @@ class PortalRepositoryImpl implements PortalRepository {
           'gender': draft.gender,
           'patientName': draft.fullName,
           'phoneNumber': draft.phoneNumber,
+          'gioKham': (selectedTime != null && selectedTime.isNotEmpty) ? selectedTime : formattedGioKham,
+          'selectedTime': (selectedTime != null && selectedTime.isNotEmpty) ? selectedTime : formattedGioKham,
           // Lưu đầy đủ cả TinhTp, TinhTpTen, province
           'tinhTp': resolvedTinhId,
           'tinhTpTen': resolvedTinhTen,
@@ -695,8 +697,10 @@ class PortalRepositoryImpl implements PortalRepository {
         createdAtText: _formatCreatedAtText(serverPhieu?.ngayud),
         note: 'Ghi chú: Phiếu đặt lịch khám chỉ có giá trị trong ngày đặt khám từ 6g30 - 16g30',
         department: department,
-        selectedDate: selectedDate,
-        selectedTime: selectedTime,
+        selectedDate: DateTimeConverter.toVnDate(selectedDate) ?? selectedDate,
+        selectedTime: (selectedTime != null && selectedTime.trim().isNotEmpty)
+            ? DateTimeConverter.formatGioKhamForDisplay(selectedTime)
+            : selectedTime,
         phoneNumber: serverPhieu?.sdt ?? draft.phoneNumber,
         symptom: serverPhieu?.trieuChung ?? symptom,
         dangKyGiup: serverPhieu?.dangKyDum ?? draft.dangKyGiup,
@@ -710,18 +714,6 @@ class PortalRepositoryImpl implements PortalRepository {
         soCcHc: draft.identifier.isNotEmpty ? draft.identifier : serverPhieu?.soCcHc,
         ngayCap: formattedNgayCap,
       );
-
-      // Lưu lại vào cache địa phương để hiển thị lịch sử ngoại tuyến
-      try {
-        await _datasource.createMedicalTicket(
-          role,
-          draft,
-          department: department,
-          selectedDate: selectedDate,
-          selectedTime: selectedTime,
-          symptom: symptom,
-        );
-      } catch (_) {}
 
       return Ok(ticket);
     } on ApiException catch (e) {
@@ -974,6 +966,12 @@ class PortalRepositoryImpl implements PortalRepository {
           });
         }
 
+        final rawGioKham = meta?['gioKham']?.toString() ??
+            meta?['selectedTime']?.toString() ??
+            meta?['GioKham']?.toString() ??
+            meta?['SelectedTime']?.toString() ??
+            '';
+
         return MedicalTicketEntity(
           id: dto.id.toString(),
           hospitalName: 'Bệnh viện Quân Dân Y Miền Đông',
@@ -982,7 +980,7 @@ class PortalRepositoryImpl implements PortalRepository {
           roomName: '',
           serviceName: serviceNameText,
           queueNumber: (dto.soDangKy ?? dto.id).toString().padLeft(3, '0'),
-          scheduleText: _formatScheduleText(dto.ngayGioKham, dto.ngayGioKham, ''),
+          scheduleText: _formatScheduleText(dto.ngayGioKham, dto.ngayGioKham, rawGioKham),
           patientName: dto.hoTen ?? '',
           gender: _mapServerGender(dto.gioiTinh, 'Nam'),
           birthYear: dto.namSinh?.toString() ?? '',
@@ -994,9 +992,11 @@ class PortalRepositoryImpl implements PortalRepository {
           department: dto.phongKhamTen ?? '',
           clinic: dto.phongKhamTen ?? dto.phongKham ?? '',
           selectedDate: dto.ngayGioKham,
-          selectedTime: '',
+          selectedTime: rawGioKham,
           phoneNumber: dto.sdt,
-          symptom: dto.trieuChung,
+          symptom: (dto.trieuChung != null && dto.trieuChung!.trim().isNotEmpty)
+              ? dto.trieuChung!.trim()
+              : (meta?['symptom']?.toString() ?? meta?['trieuChung']?.toString()),
           dangKyGiup: meta?['dangKyGiup']?.toString() ?? dto.dangKyDum,
           dateOfBirth: cleanDob,
           province: prov,
@@ -1025,14 +1025,15 @@ class PortalRepositoryImpl implements PortalRepository {
   @override
   Future<Result<void>> softDeleteMedicalTicket(String id) async {
     try {
-      final remote = _remoteDatasource;
-      if (remote != null) {
-        final ticketId = int.tryParse(id) ?? 0;
-        if (ticketId > 0) {
-          try {
-            await remote.xoaSoKham(ticketId);
-          } catch (_) {
-          }
+      final remote = _remoteDatasource ?? DatLichKhamRemoteDataSource(AppLocator.dioClient);
+      final ticketId = int.tryParse(id) ?? 0;
+      if (ticketId > 0) {
+        try {
+          await remote.xoaSoKham(ticketId);
+        } on ApiException catch (e) {
+          return Error(e, e.message);
+        } catch (e) {
+          return Error(Exception(e.toString()), e.toString().replaceAll('Exception: ', ''));
         }
       }
       await _datasource.softDeleteMedicalTicket(id);
@@ -1063,11 +1064,14 @@ class PortalRepositoryImpl implements PortalRepository {
       final listHoSo = await remote.getListHoSo('');
       final List<PatientProfileDraftEntity> remoteProfiles = listHoSo.map((dto) {
         // Ưu tiên:
-        // 1. Số CCCD / Hộ chiếu (dto.cccd)
+        // 1. Số CCCD / Hộ chiếu (dto.cccd hoặc dto.hoChieu)
         // 2. Thẻ BHYT (dto.maThe / dto.maBhyt)
         // Tuyệt đối KHÔNG gán dto.maSo (Mã bệnh nhân) vào identifier!
         final cccdClean = (dto.cccd != null && dto.cccd!.trim().isNotEmpty && dto.cccd != 'N/A')
             ? dto.cccd!.trim()
+            : '';
+        final hoChieuClean = (dto.hoChieu != null && dto.hoChieu!.trim().isNotEmpty && dto.hoChieu != 'N/A')
+            ? dto.hoChieu!.trim()
             : '';
         final maTheClean = (dto.maThe != null && dto.maThe!.trim().isNotEmpty && dto.maThe != 'N/A')
             ? dto.maThe!.trim()
@@ -1078,9 +1082,11 @@ class PortalRepositoryImpl implements PortalRepository {
 
         final identifier = cccdClean.isNotEmpty
             ? cccdClean
-            : (maTheClean.isNotEmpty
-                ? maTheClean
-                : (maBhytClean.isNotEmpty ? maBhytClean : ''));
+            : (hoChieuClean.isNotEmpty
+                ? hoChieuClean
+                : (maTheClean.isNotEmpty
+                    ? maTheClean
+                    : (maBhytClean.isNotEmpty ? maBhytClean : '')));
 
         final dobStr = dto.ngaySinh != null && dto.ngaySinh!.trim().isNotEmpty
             ? DateTimeConverter.toVnDate(dto.ngaySinh)
@@ -1097,73 +1103,85 @@ class PortalRepositoryImpl implements PortalRepository {
             !maSoClean.toUpperCase().startsWith('T') &&
             maSoClean != identifier;
 
+        final cccdIssueDateClean = (dto.ngayCap != null && dto.ngayCap!.trim().isNotEmpty)
+            ? (DateTimeConverter.toVnDate(dto.ngayCap) ?? dto.ngayCap!.trim())
+            : null;
+
         return PatientProfileDraftEntity(
           identifier: identifier,
           maSo: maSoClean,
           maHS: maSoClean,
-          maBN: isRealMaBn ? maSoClean : null,
+          maBN: isRealMaBn ? maSoClean : (maSoClean != identifier ? maSoClean : null),
           fullName: dto.hoTen ?? '',
           birthYear: dto.namSinh ?? '',
           gender: _mapServerGender(dto.gioiTinh, 'Nam'),
           phoneNumber: dto.soDienThoai ?? '',
           dateOfBirth: dobStr,
+          cccdIssueDate: cccdIssueDateClean,
+          maThe: maTheClean.isNotEmpty ? maTheClean : null,
+          idTinh: dto.idTinh,
+          idPhuong: dto.idPhuong,
         );
       }).toList();
 
-      final prefs = await SharedPreferences.getInstance();
-      final hisUsername = _getHisUsername();
-      final deletedKeySet = (prefs.getStringList('deleted_patient_profile_keys_$hisUsername') ?? []).toSet();
+      // Dọn dẹp key rác cục bộ để app luôn đồng bộ 100% với danh sách server ListHoSo
+      try {
+        final prefs = await SharedPreferences.getInstance();
+        final hisUsername = _getHisUsername();
+        await prefs.remove('deleted_patient_profile_keys_$hisUsername');
+      } catch (_) {}
 
-      final localProfiles = await _datasource.loadPatientProfiles();
-      final Map<String, PatientProfileDraftEntity> profileMap = {};
+      // LOGIC GHI ĐÈ HỒ SƠ:
+      // Theo yêu cầu: Chỉ ghi đè khi đối chiếu CẢ CCCD/HC VÀ Mã Bệnh Nhân đều có và trùng nhau!
+      // Nếu khác Mã BN hoặc khác CCCD/HC, hoặc không đủ cả 2 trường -> giữ nguyên từng hồ sơ độc lập từ server.
+      final List<PatientProfileDraftEntity> finalProfiles = [];
+      final Map<String, int> exactDuplicateIndexMap = {};
 
-      void addOrUpdateProfile(PatientProfileDraftEntity p) {
-        if (p.isDeleted) return;
-        final pName = p.fullName.trim().toLowerCase();
-        final pYear = p.birthYear.trim();
+      for (final p in remoteProfiles) {
+        if (p.isDeleted) continue;
         final pId = (p.identifier.isNotEmpty && p.identifier != 'N/A') ? p.identifier.trim().toLowerCase() : '';
-        final fallbackKey = '${pName}_$pYear';
+        final pMaSo = (p.maBN != null && p.maBN!.isNotEmpty && p.maBN != 'N/A')
+            ? p.maBN!.trim().toLowerCase()
+            : ((p.maSo != null && p.maSo!.isNotEmpty && p.maSo != 'N/A') ? p.maSo!.trim().toLowerCase() : '');
 
-        final primaryKey = pId.isNotEmpty ? pId : fallbackKey;
-        if (primaryKey.isEmpty || primaryKey == '_') return;
-
-        if (deletedKeySet.contains(primaryKey) || deletedKeySet.contains(fallbackKey)) {
-          return;
+        if (pId.isNotEmpty && pMaSo.isNotEmpty) {
+          final exactKey = '${pId}_$pMaSo';
+          if (exactDuplicateIndexMap.containsKey(exactKey)) {
+            final idx = exactDuplicateIndexMap[exactKey]!;
+            final existing = finalProfiles[idx];
+            finalProfiles[idx] = PatientProfileDraftEntity(
+              identifier: (p.identifier.isNotEmpty && p.identifier != 'N/A') ? p.identifier : existing.identifier,
+              maSo: (p.maSo != null && p.maSo!.isNotEmpty && p.maSo != 'N/A') ? p.maSo : existing.maSo,
+              maHS: (p.maHS != null && p.maHS!.isNotEmpty) ? p.maHS : existing.maHS,
+              maBN: (p.maBN != null && p.maBN!.isNotEmpty) ? p.maBN : existing.maBN,
+              fullName: p.fullName.isNotEmpty ? p.fullName : existing.fullName,
+              birthYear: p.birthYear.isNotEmpty ? p.birthYear : existing.birthYear,
+              gender: (p.gender == 'Nữ' || p.gender == 'Nam') ? p.gender : existing.gender,
+              phoneNumber: p.phoneNumber.isNotEmpty ? p.phoneNumber : existing.phoneNumber,
+              dateOfBirth: (p.dateOfBirth != null && p.dateOfBirth!.isNotEmpty) ? p.dateOfBirth : existing.dateOfBirth,
+              cccdIssueDate: (p.cccdIssueDate != null && p.cccdIssueDate!.isNotEmpty) ? p.cccdIssueDate : existing.cccdIssueDate,
+              province: (p.province != null && p.province!.isNotEmpty) ? p.province : existing.province,
+              ward: (p.ward != null && p.ward!.isNotEmpty) ? p.ward : existing.ward,
+              clinic: (p.clinic != null && p.clinic!.isNotEmpty) ? p.clinic : existing.clinic,
+              dangKyGiup: p.dangKyGiup ?? existing.dangKyGiup,
+              maThe: p.maThe ?? existing.maThe,
+              idTinh: p.idTinh ?? existing.idTinh,
+              idPhuong: p.idPhuong ?? existing.idPhuong,
+              isDeleted: false,
+            );
+            continue;
+          } else {
+            exactDuplicateIndexMap[exactKey] = finalProfiles.length;
+            finalProfiles.add(p);
+            continue;
+          }
         }
 
-        final existing = profileMap[primaryKey];
-        if (existing == null) {
-          profileMap[primaryKey] = p;
-        } else {
-          profileMap[primaryKey] = PatientProfileDraftEntity(
-            identifier: (p.identifier.isNotEmpty && p.identifier != 'N/A' && p.identifier != p.maSo)
-                ? p.identifier
-                : existing.identifier,
-            maSo: (p.maSo != null && p.maSo!.isNotEmpty && p.maSo != 'N/A') ? p.maSo : existing.maSo,
-            fullName: p.fullName.isNotEmpty ? p.fullName : existing.fullName,
-            birthYear: p.birthYear.isNotEmpty ? p.birthYear : existing.birthYear,
-            gender: (p.gender == 'Nữ' || p.gender == 'Nam') ? p.gender : existing.gender,
-            phoneNumber: p.phoneNumber.isNotEmpty ? p.phoneNumber : existing.phoneNumber,
-            dateOfBirth: (p.dateOfBirth != null && p.dateOfBirth!.isNotEmpty) ? p.dateOfBirth : existing.dateOfBirth,
-            cccdIssueDate: (p.cccdIssueDate != null && p.cccdIssueDate!.isNotEmpty) ? p.cccdIssueDate : existing.cccdIssueDate,
-            province: (p.province != null && p.province!.isNotEmpty) ? p.province : existing.province,
-            ward: (p.ward != null && p.ward!.isNotEmpty) ? p.ward : existing.ward,
-            clinic: (p.clinic != null && p.clinic!.isNotEmpty) ? p.clinic : existing.clinic,
-            dangKyGiup: p.dangKyGiup ?? existing.dangKyGiup,
-            isDeleted: false,
-          );
-        }
+        // Không đủ cả 2 trường để xác định trùng lặp hoàn toàn -> giữ nguyên bản ghi của server
+        finalProfiles.add(p);
       }
 
-      for (var p in remoteProfiles) {
-        addOrUpdateProfile(p);
-      }
-
-      for (var p in localProfiles) {
-        addOrUpdateProfile(p);
-      }
-
-      return Ok(profileMap.values.toList());
+      return Ok(finalProfiles);
     } on ApiException catch (e) {
       return Error(e, e.message);
     } on Exception catch (exception) {
@@ -1201,17 +1219,24 @@ class PortalRepositoryImpl implements PortalRepository {
   @override
   Future<Result<void>> softDeletePatientProfile(PatientProfileDraftEntity profile) async {
     try {
-      final remote = _remoteDatasource;
-      final targetMaHs = (profile.maSo != null && profile.maSo!.trim().isNotEmpty)
-          ? profile.maSo!.trim()
-          : profile.identifier.trim();
+      final remote = _remoteDatasource ?? DatLichKhamRemoteDataSource(AppLocator.dioClient);
+      final targetMaHs = (profile.maHS != null && profile.maHS!.trim().isNotEmpty)
+          ? profile.maHS!.trim()
+          : ((profile.maSo != null && profile.maSo!.trim().isNotEmpty)
+              ? profile.maSo!.trim()
+              : profile.identifier.trim());
 
-      if (remote != null && targetMaHs.isNotEmpty && targetMaHs != 'N/A') {
+      if (targetMaHs.isNotEmpty && targetMaHs != 'N/A') {
         try {
           await remote.xoaHoSo(targetMaHs);
-        } catch (_) {
+        } on ApiException catch (e) {
+          return Error(e, e.message);
+        } catch (e) {
+          return Error(Exception(e.toString()), e.toString().replaceAll('Exception: ', ''));
         }
       }
+
+      // Xóa hồ sơ trên server thành công, xóa thêm trong mock datasource nếu có
       await _datasource.softDeletePatientProfile(profile);
       return const Ok(null);
     } on Exception catch (exception) {
@@ -1449,31 +1474,19 @@ class PortalRepositoryImpl implements PortalRepository {
           if (tParts.length >= 2) {
             timePart = '${tParts[0].padLeft(2, '0')}:${tParts[1].padLeft(2, '0')}';
           }
+          if (time != null && time.trim().isNotEmpty) {
+            return '$datePart ${DateTimeConverter.formatGioKhamForDisplay(time)}';
+          }
           return '$datePart $timePart';
         }
       } catch (_) {}
       return serverNgayGio;
     }
 
-    String formattedDate = date ?? DateFormat('dd/MM/yyyy').format(DateTime.now());
-    if (formattedDate.contains('-')) {
-      final d = DateTime.tryParse(formattedDate);
-      if (d != null) formattedDate = DateFormat('dd/MM/yyyy').format(d);
-    }
-
-    String formattedTime = time ?? '10:00';
-    if (formattedTime.contains('-')) {
-      formattedTime = formattedTime.split('-').first.trim();
-    }
-    formattedTime = formattedTime.replaceAll('g', ':').replaceAll('h', ':').trim();
-    if (formattedTime.contains(':')) {
-      final tParts = formattedTime.split(':');
-      final hh = tParts[0].trim().padLeft(2, '0');
-      final mm = tParts.length > 1 ? tParts[1].trim().padLeft(2, '0') : '00';
-      formattedTime = '$hh:$mm';
-    } else {
-      formattedTime = '${formattedTime.padLeft(2, '0')}:00';
-    }
+    String formattedDate = DateTimeConverter.toVnDate(date) ?? DateFormat('dd/MM/yyyy').format(DateTime.now());
+    String formattedTime = (time != null && time.trim().isNotEmpty)
+        ? DateTimeConverter.formatGioKhamForDisplay(time)
+        : '10:00';
 
     return '$formattedDate $formattedTime';
   }

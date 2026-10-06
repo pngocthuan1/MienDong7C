@@ -43,7 +43,7 @@ class MedicalTicketViewModel extends BaseViewModel {
   /// Lý do lỗi khi doneStatus = -1 (từ field TrangThai của server)
   final String? lyDoLoi;
 
-  bool _isExpanded = false;
+  bool _isExpanded = true;
   bool get isExpanded => _isExpanded;
 
   void toggleExpand() {

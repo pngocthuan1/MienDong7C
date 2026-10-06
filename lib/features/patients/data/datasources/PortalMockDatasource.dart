@@ -4,6 +4,7 @@ import 'package:benhvien7c/core/utils/JsHelper.dart';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:benhvien7c/core/session/AppSessionStore.dart';
+import 'package:benhvien7c/core/utils/DateTimeConverter.dart';
 
 import 'package:benhvien7c/core/network/ApiException.dart';
 import 'package:benhvien7c/features/auth/domain/entities/UserRole.dart';
@@ -525,40 +526,13 @@ class PortalMockDatasource {
         final now = DateTime.now();
         bool dirty = false;
         final updatedList = list.map((ticket) {
-          bool passed = ticket.isPast;
-          if (ticket.selectedDate != null && ticket.selectedTime != null) {
-            try {
-              final dateParts = ticket.selectedDate!.split('/');
-              if (dateParts.length == 3) {
-                final ticketDay = DateTime(
-                  int.parse(dateParts[2]),
-                  int.parse(dateParts[1]),
-                  int.parse(dateParts[0]),
-                );
-                final today = DateTime(now.year, now.month, now.day);
-                if (ticketDay.isBefore(today)) {
-                  passed = true;
-                } else if (ticketDay.isAfter(today)) {
-                  passed = false;
-                } else if (ticketDay.isAtSameMomentAs(today)) {
-                  final startPart = ticket.selectedTime!.split('-')[0].trim().toLowerCase();
-                  int hr = 0;
-                  int min = 0;
-                  if (startPart.contains('g')) {
-                    final parts = startPart.split('g');
-                    hr = int.parse(parts[0]);
-                    min = parts[1].isEmpty ? 0 : int.parse(parts[1]);
-                  } else if (startPart.contains(':')) {
-                    final parts = startPart.split(':');
-                    hr = int.parse(parts[0]);
-                    min = int.parse(parts[1]);
-                  }
-                  final ticketTime = DateTime(now.year, now.month, now.day, hr, min);
-                  passed = ticketTime.isBefore(now);
-                }
-              }
-            } catch (_) {}
-          }
+          final passed = DateTimeConverter.isTicketPast(
+            ticketDate: ticket.parsedTicketDate,
+            selectedDate: ticket.selectedDate,
+            selectedTime: ticket.selectedTime,
+            scheduleText: ticket.scheduleText,
+            now: now,
+          );
           if (ticket.isPast != passed) {
             dirty = true;
             return ticket.copyWith(isPast: passed);
@@ -762,40 +736,12 @@ class PortalMockDatasource {
     final timeStr = selectedTime ?? '14:30 - 15:00';
     final createdTime = _formatDateTime(now);
     
-    bool isPast = false;
-    if (selectedDate != null && selectedTime != null) {
-      try {
-        final dateParts = selectedDate.split('/');
-        if (dateParts.length == 3) {
-          final ticketDay = DateTime(
-            int.parse(dateParts[2]),
-            int.parse(dateParts[1]),
-            int.parse(dateParts[0]),
-          );
-          final today = DateTime(now.year, now.month, now.day);
-          if (ticketDay.isBefore(today)) {
-            isPast = true;
-          } else if (ticketDay.isAtSameMomentAs(today)) {
-            final startPart = timeStr.split('-')[0].trim().toLowerCase();
-            int hr = 0;
-            int min = 0;
-            if (startPart.contains('g')) {
-              final parts = startPart.split('g');
-              hr = int.parse(parts[0]);
-              min = parts[1].isEmpty ? 0 : int.parse(parts[1]);
-            } else if (startPart.contains(':')) {
-              final parts = startPart.split(':');
-              hr = int.parse(parts[0]);
-              min = int.parse(parts[1]);
-            }
-            final ticketTime = DateTime(now.year, now.month, now.day, hr, min);
-            if (ticketTime.isBefore(now)) {
-              isPast = true;
-            }
-          }
-        }
-      } catch (_) {}
-    }
+    final bool isPast = DateTimeConverter.isTicketPast(
+      selectedDate: selectedDate,
+      selectedTime: selectedTime,
+      scheduleText: scheduleDate,
+      now: now,
+    );
 
     final String room = department ?? (role == UserRole.customer ? 'Phòng khám 1' : 'Quầy tiếp nhận 2');
     final String service = department != null ? 'Khám chuyên khoa' : 'Tiếp nhận ngoại trú';

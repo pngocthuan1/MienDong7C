@@ -112,10 +112,25 @@ class DkkCompareViewModel extends ChangeNotifier {
                 ? sys.soCcHc!.trim()
                 : sys.maBhytHoacMaBn.trim());
 
+        final effectiveMaBN = (userDraft.maBN != null && userDraft.maBN!.trim().isNotEmpty)
+            ? userDraft.maBN!.trim()
+            : (sys.maBN.trim().isNotEmpty ? sys.maBN.trim() : null);
+
+        final effectiveMaSo = (userDraft.maSo != null && userDraft.maSo!.trim().isNotEmpty)
+            ? userDraft.maSo!.trim()
+            : (sys.maBN.trim().isNotEmpty ? sys.maBN.trim() : null);
+
+        final effectiveMaHS = (userDraft.maHS != null && userDraft.maHS!.trim().isNotEmpty)
+            ? userDraft.maHS!.trim()
+            : null;
+
         draftToUse = userDraft.copyWith(
           identifier: effectiveIdentifier,
           cccdIssueDate: effectiveNgayCap,
           gender: _normalizeGender(userDraft.gender),
+          maBN: effectiveMaBN,
+          maSo: effectiveMaSo,
+          maHS: effectiveMaHS,
         );
       }
 
