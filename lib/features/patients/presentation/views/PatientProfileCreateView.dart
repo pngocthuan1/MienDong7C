@@ -1843,47 +1843,45 @@ class _PatientProfileCreateViewState extends State<PatientProfileCreateView> {
           _buildSummaryRow(Icons.local_hospital_rounded, 'Phòng khám', clinic),
           _buildSummaryRow(Icons.event_rounded, 'Lịch khám', '$dateStr ($timeStr)'),
           _buildSummaryRow(Icons.location_on_rounded, 'Địa chỉ', addressStr.isNotEmpty ? addressStr : 'Chưa chọn'),
-
-          const SizedBox(height: 16),
-          const Divider(height: 1, color: Color(0xFFE2E8F0)),
-          const SizedBox(height: 16),
-
-          ListenableBuilder(
-            listenable: _viewModel.continueCommand,
-            builder: (context, _) {
-              final isRunning = _viewModel.continueCommand.running;
-              return SizedBox(
-                width: double.infinity,
-                child: ElevatedButton(
-                  onPressed: isRunning ? null : _submit,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF0D6EFD),
-                    foregroundColor: Colors.white,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    padding: const EdgeInsets.symmetric(vertical: 16),
-                    elevation: 2,
-                  ),
-                  child: _viewModel.continueCommand.running
-                      ? const SizedBox(
-                          height: 20,
-                          width: 20,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2.5,
-                            valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                          ),
-                        )
-                      : const Text(
-                          'Đăng ký khám',
-                          style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, letterSpacing: 0.5),
-                        ),
-                ),
-              );
-            },
-          ),
         ],
       ),
+    );
+  }
+
+  Widget _buildSubmitButton() {
+    return ListenableBuilder(
+      listenable: _viewModel.continueCommand,
+      builder: (context, _) {
+        final isRunning = _viewModel.continueCommand.running;
+        return SizedBox(
+          width: double.infinity,
+          child: ElevatedButton(
+            onPressed: isRunning ? null : _submit,
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF0D6EFD),
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+              padding: const EdgeInsets.symmetric(vertical: 16),
+              elevation: 2,
+            ),
+            child: isRunning
+                ? const SizedBox(
+                    height: 20,
+                    width: 20,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2.5,
+                      valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                    ),
+                  )
+                : const Text(
+                    'Đăng ký khám',
+                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, letterSpacing: 0.5),
+                  ),
+          ),
+        );
+      },
     );
   }
 
@@ -2326,7 +2324,11 @@ class _PatientProfileCreateViewState extends State<PatientProfileCreateView> {
 
               if (kShowAppointmentSummary) ...[
                 _buildSummaryCard(),
+                const SizedBox(height: 16),
               ],
+
+              _buildSubmitButton(),
+              const SizedBox(height: 24),
             ],
           ),
         ),
