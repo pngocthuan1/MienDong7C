@@ -268,8 +268,11 @@ class LoginViewModel extends ChangeNotifier {
         );
       }
 
+      final currentToken = captchaToken!;
+      captchaToken = null; // Khóa chặt nút bấm và yêu cầu reset token mới
+
       final verifyRes = await AppLocator.turnstileService.verifyToken(
-        captchaToken!,
+        currentToken,
       );
       if (verifyRes is ApiFailure<TurnstileVerifyResult>) {
         _message = 'Xác thực CAPTCHA thất bại hoặc nghi ngờ Spam Bot.';

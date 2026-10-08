@@ -182,7 +182,10 @@ class _LoginViewState extends State<LoginView> with WidgetsBindingObserver {
         return;
       }
       await _viewModel.loginCommand.execute();
-    } catch (_) {}
+    } catch (_) {
+    } finally {
+      _resetCaptcha();
+    }
   }
 
   int _logoTapCount = 0;
@@ -452,6 +455,9 @@ class _LoginForm extends StatelessWidget {
                   onVerified: (token) {
                     viewModel.clearMessage();
                     onCaptchaVerified(token);
+                  },
+                  onExpired: () {
+                    onResetCaptcha();
                   },
                 ),
               );

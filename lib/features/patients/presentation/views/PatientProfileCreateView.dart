@@ -1035,8 +1035,12 @@ class _PatientProfileCreateViewState extends State<PatientProfileCreateView> {
       // ── Xác thực CAPTCHA duy nhất 1 lần tại thời điểm bấm Đăng ký khám ──
       final isBypassedOnWeb = kIsWeb && Environment.disableTurnstileOnWeb;
       if (!isBypassedOnWeb) {
+        final currentToken = _captchaToken!;
+        // Ngay khi lấy token ra để verify, lập tức xóa token lưu trữ và reset widget Captcha
+        // để lần bấm submit tiếp theo (hoặc khi quay lại sau khi gặp lỗi) luôn phải lấy token mới
+        _resetCaptcha();
 
-        final verifyRes = await AppLocator.turnstileService.verifyToken(_captchaToken!);
+        final verifyRes = await AppLocator.turnstileService.verifyToken(currentToken);
         if (!mounted) return;
         if (verifyRes is ApiFailure) {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -1045,7 +1049,6 @@ class _PatientProfileCreateViewState extends State<PatientProfileCreateView> {
               backgroundColor: Colors.red,
             ),
           );
-          _resetCaptcha();
           return;
         }
       }
@@ -2314,6 +2317,9 @@ class _PatientProfileCreateViewState extends State<PatientProfileCreateView> {
                           setState(() {
                             _captchaToken = token;
                           });
+                        },
+                        onExpired: () {
+                          _resetCaptcha();
                         },
                       ),
                     ),

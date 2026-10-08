@@ -122,10 +122,12 @@ class _RegisterViewState extends State<RegisterView> {
           return;
         }
 
-        final verifyRes = await AppLocator.turnstileService.verifyToken(_captchaToken!);
+        final currentToken = _captchaToken!;
+        _resetCaptcha(); // Xóa token lưu trữ và reset widget Captcha lập tức
+
+        final verifyRes = await AppLocator.turnstileService.verifyToken(currentToken);
         if (verifyRes is ApiFailure) {
           _viewModel.message = 'Xác thực CAPTCHA thất bại hoặc nghi ngờ Spam Bot.';
-          _resetCaptcha();
           return;
         }
       }
@@ -134,7 +136,9 @@ class _RegisterViewState extends State<RegisterView> {
       if (_viewModel.phoneError != null) {
         _formKey.currentState!.validate();
       }
-    } catch (_) {}
+    } catch (_) {
+      _resetCaptcha();
+    }
   }
 
   @override
@@ -234,6 +238,9 @@ class _RegisterViewState extends State<RegisterView> {
                     setState(() {
                       _captchaToken = token;
                     });
+                  },
+                  onExpired: () {
+                    _resetCaptcha();
                   },
                 ),
               ],

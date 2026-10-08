@@ -104,10 +104,12 @@ class _ForgotPasswordViewState extends State<ForgotPasswordView> {
           return;
         }
 
-        final verifyRes = await AppLocator.turnstileService.verifyToken(_captchaToken!);
+        final currentToken = _captchaToken!;
+        _resetCaptcha(); // Xóa token lưu trữ và reset widget Captcha lập tức
+
+        final verifyRes = await AppLocator.turnstileService.verifyToken(currentToken);
         if (verifyRes is ApiFailure) {
           _viewModel.message = 'Xác thực CAPTCHA thất bại hoặc nghi ngờ Spam Bot.';
-          _resetCaptcha();
           return;
         }
       }
@@ -116,7 +118,9 @@ class _ForgotPasswordViewState extends State<ForgotPasswordView> {
       if (_viewModel.phoneError != null) {
         _formKey.currentState!.validate();
       }
-    } catch (_) {}
+    } catch (_) {
+      _resetCaptcha();
+    }
   }
 
   @override
@@ -180,6 +184,9 @@ class _ForgotPasswordViewState extends State<ForgotPasswordView> {
                           setState(() {
                             _captchaToken = token;
                           });
+                        },
+                        onExpired: () {
+                          _resetCaptcha();
                         },
                       ),
                     ],
