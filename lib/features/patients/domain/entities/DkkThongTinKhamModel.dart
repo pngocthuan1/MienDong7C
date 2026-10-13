@@ -244,31 +244,43 @@ class DkkThongTinKhamModel {
       maBN: serverDiff.maBN ?? system.maBN,
       maBNDiff: (serverDiff.maBNDiff == true) || clientCompare.maBNDiff,
       maBhytHoacMaBn: system.maBhytHoacMaBn,
-      systemCccd: clientCompare.systemCccd,
+      systemCccd: (serverDiff.maBhytHoacMaBn != null && serverDiff.maBhytHoacMaBn!.isNotEmpty)
+          ? serverDiff.maBhytHoacMaBn!
+          : clientCompare.systemCccd,
       userCccd: clientCompare.userCccd,
       maBhytHoacMaBnDiff: (serverDiff.maBhytHoacMaBnDiff == true) || clientCompare.maBhytHoacMaBnDiff,
-      systemNgayCap: clientCompare.systemNgayCap,
+      systemNgayCap: (serverDiff.ngayCap != null && serverDiff.ngayCap!.isNotEmpty)
+          ? _displayDate(serverDiff.ngayCap)
+          : clientCompare.systemNgayCap,
       userNgayCap: clientCompare.userNgayCap,
       ngayCapDiff: (serverDiff.ngayCapDiff == true) || clientCompare.ngayCapDiff,
-      systemHoTen: clientCompare.systemHoTen,
+      systemHoTen: (serverDiff.hoTen != null && serverDiff.hoTen!.isNotEmpty)
+          ? serverDiff.hoTen!
+          : clientCompare.systemHoTen,
       userHoTen: clientCompare.userHoTen,
       hoTenDiff: (serverDiff.hoTenDiff == true) || clientCompare.hoTenDiff,
-      systemNgaySinh: clientCompare.systemNgaySinh,
+      systemNgaySinh: (serverDiff.ngaySinh != null && serverDiff.ngaySinh!.isNotEmpty)
+          ? _displayDate(serverDiff.ngaySinh)
+          : clientCompare.systemNgaySinh,
       userNgaySinh: clientCompare.userNgaySinh,
       ngaySinhDiff: (serverDiff.ngaySinhDiff == true) || clientCompare.ngaySinhDiff,
-      systemGioiTinh: clientCompare.systemGioiTinh,
+      systemGioiTinh: (serverDiff.gioiTinh != null && serverDiff.gioiTinh!.isNotEmpty)
+          ? _formatGenderDisplay(serverDiff.gioiTinh)
+          : clientCompare.systemGioiTinh,
       userGioiTinh: clientCompare.userGioiTinh,
       gioiTinhDiff: (serverDiff.gioiTinhDiff == true) || clientCompare.gioiTinhDiff,
-      systemSoDienThoai: clientCompare.systemSoDienThoai,
+      systemSoDienThoai: (serverDiff.soDienThoai != null && serverDiff.soDienThoai!.isNotEmpty)
+          ? serverDiff.soDienThoai!
+          : clientCompare.systemSoDienThoai,
       userSoDienThoai: clientCompare.userSoDienThoai,
       soDienThoaiDiff: (serverDiff.soDienThoaiDiff == true) || clientCompare.soDienThoaiDiff,
-      systemTinhTp: clientCompare.systemTinhTp,
-      systemTinhTpTen: clientCompare.systemTinhTpTen,
+      systemTinhTp: serverDiff.tinhTp ?? clientCompare.systemTinhTp,
+      systemTinhTpTen: serverDiff.tinhTpTen ?? clientCompare.systemTinhTpTen,
       userTinhTp: clientCompare.userTinhTp,
       userTinhTpTen: clientCompare.userTinhTpTen,
       tinhTpDiff: (serverDiff.tinhTpDiff == true) || clientCompare.tinhTpDiff,
-      systemPhuongXa: clientCompare.systemPhuongXa,
-      systemPhuongXaTen: clientCompare.systemPhuongXaTen,
+      systemPhuongXa: serverDiff.phuongXa ?? clientCompare.systemPhuongXa,
+      systemPhuongXaTen: serverDiff.phuongXaTen ?? clientCompare.systemPhuongXaTen,
       userPhuongXa: clientCompare.userPhuongXa,
       userPhuongXaTen: clientCompare.userPhuongXaTen,
       phuongXaDiff: (serverDiff.phuongXaDiff == true) || clientCompare.phuongXaDiff,

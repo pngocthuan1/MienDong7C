@@ -12,17 +12,23 @@ import 'package:benhvien7c/core/utils/CccdParserHelper.dart';
 import 'package:benhvien7c/core/utils/AddressHelper.dart';
 import 'package:benhvien7c/core/utils/DateTimeConverter.dart';
 import 'package:benhvien7c/features/patients/data/models/DatLichKhamDtos.dart';
+import 'package:benhvien7c/core/services/RemoteConfigService.dart';
 import 'package:benhvien7c/features/patients/domain/entities/DkkThongTinKhamModel.dart';
 import 'package:benhvien7c/features/patients/domain/entities/MedicalTicketEntity.dart';
 import 'package:benhvien7c/features/patients/domain/entities/PatientProfileDraftEntity.dart';
+import 'package:benhvien7c/features/patients/domain/services/PatientRegistrationFlowService.dart';
 import 'package:benhvien7c/features/patients/presentation/viewmodels/BasePortalViewModel.dart';
 import 'package:benhvien7c/core/widgets/SearchablePickerModal.dart';
 
 class PatientProfileCreateViewModel extends BasePortalViewModel {
+  late final PatientRegistrationFlowService _registrationFlowService;
+  String? _overrideMaBN;
+
   PatientProfileCreateViewModel(
     super.repository,
     super.sessionStore,
   ) {
+    _registrationFlowService = PatientRegistrationFlowService(portalRepository);
     identifierController.addListener(_onIdentifierChanged);
     fullNameController.text = session.user.fullName;
     phoneController.text = session.user.phoneNumber;
@@ -147,8 +153,8 @@ class PatientProfileCreateViewModel extends BasePortalViewModel {
   DateTime? selectedDate;
   String? selectedTime;
 
-  /// Hằng số số phút cho phép đăng ký tính từ giờ bắt đầu ca khám (16 phút)
-  static const int kSoPhutKhoaCaKham = 16;
+  /// Số phút cho phép đăng ký tính từ giờ bắt đầu ca khám (lấy từ Remote Config, mặc định 16 phút)
+  int get kSoPhutKhoaCaKham => RemoteConfigService.instance.soPhutKhoaCaKham;
   Timer? _realtimeRefreshTimer;
   void Function(String message)? onSlotExpired;
 
@@ -915,7 +921,6 @@ class PatientProfileCreateViewModel extends BasePortalViewModel {
 
   void _onIdentifierChanged() {
     if (_isFillingForm) return; // Bỏ qua khi app đang tự điền form
-    if (!_isFromHospitalRecord && _maBN == null) return; // Chưa có hồ sơ bệnh viện -> không cần làm gì
     
     final currentVal = identifierController.text.trim();
     final linked = _linkedIdentifier?.trim() ?? '';
@@ -933,13 +938,15 @@ class PatientProfileCreateViewModel extends BasePortalViewModel {
         notifyIfMounted();
       }
     } else if (currentVal != linked) {
-      // Người dùng đổi CC/HC -> reset ngay MaBN
-      _isFromHospitalRecord = false;
-      _maBN = null;
-      _hasRealMaBN = false;
-      patientCodeController.clear();
-      _hasIdentifierChangedWarning = true;
-      notifyIfMounted();
+      // Người dùng đổi CC/HC khác -> reset MaBN trên giao diện
+      if (_isFromHospitalRecord || _maBN != null) {
+        _isFromHospitalRecord = false;
+        _maBN = null;
+        _hasRealMaBN = false;
+        patientCodeController.clear();
+        _hasIdentifierChangedWarning = true;
+        notifyIfMounted();
+      }
     }
   }
 
@@ -1166,6 +1173,27 @@ class PatientProfileCreateViewModel extends BasePortalViewModel {
     birthYearError = null;
     phoneError = null;
     notifyListeners();
+  }
+
+  /// Gán MaBN ghi đè tạm thời khi được chỉ định bởi Decision
+  void setRegistrationOverrideMaBN(String? maBN) {
+    _overrideMaBN = maBN;
+  }
+
+  /// [TẠM THỜI TRÊN APP] Đánh giá luồng đăng ký bằng Orchestrator Service chuyên trách
+  Future<RegistrationDecision> evaluateRegistrationDecision() async {
+    final draft = _buildCurrentDraft();
+    final req = _buildDangKyKhamRequestDto();
+    final currentIdent = identifierController.text.trim();
+    return await _registrationFlowService.evaluateRegistration(
+      currentCccd: currentIdent,
+      linkedCccd: _linkedIdentifier,
+      originMaBN: _hasRealMaBN ? _maBN : (_isFromHospitalRecord ? _maBN : null),
+      isExistingProfile: isExistingProfile,
+      userDraft: draft,
+      hospitalSnapshot: _hospitalSnapshot,
+      requestDto: req,
+    );
   }
 
   /// true nếu cần kiểm tra so sánh với hệ thống trước khi đăng ký:
@@ -1897,7 +1925,7 @@ class PatientProfileCreateViewModel extends BasePortalViewModel {
     return rawSlots.where((slot) {
       final slotStartTime = _parseSlotStartTime(slot, now);
       if (slotStartTime == null) return true;
-      final deadline = slotStartTime.add(const Duration(minutes: kSoPhutKhoaCaKham));
+      final deadline = slotStartTime.add(Duration(minutes: kSoPhutKhoaCaKham));
       return now.isBefore(deadline);
     }).toList();
   }
@@ -1985,9 +2013,11 @@ class PatientProfileCreateViewModel extends BasePortalViewModel {
         cccdMatched = _linkedIdentifier != null && currentIdent == linkedIdent;
       }
 
-      final effectiveMaBN = (_hasRealMaBN && cccdMatched) 
-          ? (_maBN ?? '')
-          : (_isFromHospitalRecord && cccdMatched ? (_maBN ?? '') : null);
+      final effectiveMaBN = _overrideMaBN ??
+          ((_hasRealMaBN && cccdMatched) 
+              ? (_maBN ?? '')
+              : (_isFromHospitalRecord && cccdMatched ? (_maBN ?? '') : null));
+      _overrideMaBN = null;
 
       final draft = PatientProfileDraftEntity(
         identifier: identifierController.text.trim(),
@@ -2003,7 +2033,9 @@ class PatientProfileCreateViewModel extends BasePortalViewModel {
         cccdIssueDate: (registerForSomeoneElse && otherCccdIssueDateController.text.trim().isNotEmpty)
             ? otherCccdIssueDateController.text.trim()
             : (cccdIssueDateController.text.trim().isNotEmpty ? cccdIssueDateController.text.trim() : null),
-        maSo: _hasRealMaBN ? _maBN : _selectedMaHS,
+        maSo: (effectiveMaBN != null && effectiveMaBN.isNotEmpty)
+            ? effectiveMaBN
+            : (_hasRealMaBN ? _maBN : _selectedMaHS),
         maHS: _isFromHospitalRecord ? '' : _selectedMaHS,
         maBN: effectiveMaBN,
       );

@@ -128,48 +128,90 @@ class DkkTimBenhNhanResponseDto {
 // ---------------------------------------------------------------------------
 class DkkKiemTraBenhNhanResponseDto {
   final String? maBN;
+  final bool? hasDiffRaw;
+  final bool? maBNAuto;
   final bool? maBNDiff;
+  final String? maBhytHoacMaBn;
   final bool? maBhytHoacMaBnDiff;
+  final String? ngayCap;
+  final bool? ngayCapDiff;
+  final String? hoTen;
+  final bool? hoTenDiff;
+  final String? ngaySinh;
+  final bool? ngaySinhDiff;
+  final String? gioiTinh;
+  final bool? gioiTinhDiff;
   final String? soDienThoai;
   final bool? soDienThoaiDiff;
-  final bool? hoTenDiff;
-  final bool? gioiTinhDiff;
-  final bool? ngaySinhDiff;
-  final bool? ngayCapDiff;
+  final String? tinhTp;
+  final String? tinhTpTen;
   final bool? tinhTpDiff;
+  final String? phuongXa;
+  final String? phuongXaTen;
   final bool? phuongXaDiff;
 
   const DkkKiemTraBenhNhanResponseDto({
     this.maBN,
+    this.hasDiffRaw,
+    this.maBNAuto,
     this.maBNDiff,
+    this.maBhytHoacMaBn,
     this.maBhytHoacMaBnDiff,
+    this.ngayCap,
+    this.ngayCapDiff,
+    this.hoTen,
+    this.hoTenDiff,
+    this.ngaySinh,
+    this.ngaySinhDiff,
+    this.gioiTinh,
+    this.gioiTinhDiff,
     this.soDienThoai,
     this.soDienThoaiDiff,
-    this.hoTenDiff,
-    this.gioiTinhDiff,
-    this.ngaySinhDiff,
-    this.ngayCapDiff,
+    this.tinhTp,
+    this.tinhTpTen,
     this.tinhTpDiff,
+    this.phuongXa,
+    this.phuongXaTen,
     this.phuongXaDiff,
   });
+
+  static bool? _safeBool(dynamic val) {
+    if (val == null) return null;
+    if (val is bool) return val;
+    if (val is num) return val != 0;
+    final s = val.toString().trim().toLowerCase();
+    return s == 'true' || s == '1';
+  }
 
   factory DkkKiemTraBenhNhanResponseDto.fromJson(Map<String, dynamic> json) {
     return DkkKiemTraBenhNhanResponseDto(
       maBN: json['MaBN']?.toString() ?? json['mabn']?.toString(),
-      maBNDiff: json['MaBNDiff'] as bool? ?? json['maBNDiff'] as bool?,
-      maBhytHoacMaBnDiff: json['MaBhytHoacMaBnDiff'] as bool? ?? json['maBhytHoacMaBnDiff'] as bool?,
-      soDienThoai: json['SoDienThoai']?.toString() ?? json['sdt']?.toString(),
-      soDienThoaiDiff: json['SoDienThoaiDiff'] as bool? ?? json['soDienThoaiDiff'] as bool?,
-      hoTenDiff: json['HoTenDiff'] as bool? ?? json['hoTenDiff'] as bool?,
-      gioiTinhDiff: json['GioiTinhDiff'] as bool? ?? json['gioiTinhDiff'] as bool?,
-      ngaySinhDiff: json['NgaySinhDiff'] as bool? ?? json['ngaySinhDiff'] as bool?,
-      ngayCapDiff: json['NgayCapDiff'] as bool? ?? json['ngayCapDiff'] as bool?,
-      tinhTpDiff: json['TinhTpDiff'] as bool? ?? json['tinhTpDiff'] as bool?,
-      phuongXaDiff: json['PhuongXaDiff'] as bool? ?? json['phuongXaDiff'] as bool?,
+      hasDiffRaw: _safeBool(json['HasDiff'] ?? json['hasDiff']),
+      maBNAuto: _safeBool(json['MaBNAuto'] ?? json['maBNAuto'] ?? json['mabnAuto']),
+      maBNDiff: _safeBool(json['MaBNDiff'] ?? json['maBNDiff']),
+      maBhytHoacMaBn: json['MaBhytHoacMaBn']?.toString() ?? json['maBhytHoacMaBn']?.toString(),
+      maBhytHoacMaBnDiff: _safeBool(json['MaBhytHoacMaBnDiff'] ?? json['maBhytHoacMaBnDiff']),
+      ngayCap: json['NgayCap']?.toString() ?? json['ngayCap']?.toString(),
+      ngayCapDiff: _safeBool(json['NgayCapDiff'] ?? json['ngayCapDiff']),
+      hoTen: json['HoTen']?.toString() ?? json['hoTen']?.toString(),
+      hoTenDiff: _safeBool(json['HoTenDiff'] ?? json['hoTenDiff']),
+      ngaySinh: json['NgaySinh']?.toString() ?? json['ngaySinh']?.toString(),
+      ngaySinhDiff: _safeBool(json['NgaySinhDiff'] ?? json['ngaySinhDiff']),
+      gioiTinh: json['GioiTinh']?.toString() ?? json['gioiTinh']?.toString(),
+      gioiTinhDiff: _safeBool(json['GioiTinhDiff'] ?? json['gioiTinhDiff']),
+      soDienThoai: json['SoDienThoai']?.toString() ?? json['soDienThoai']?.toString() ?? json['sdt']?.toString(),
+      soDienThoaiDiff: _safeBool(json['SoDienThoaiDiff'] ?? json['soDienThoaiDiff']),
+      tinhTp: json['TinhTp']?.toString() ?? json['tinhTp']?.toString(),
+      tinhTpTen: json['TinhTpTen']?.toString() ?? json['tinhTpTen']?.toString(),
+      tinhTpDiff: _safeBool(json['TinhTpDiff'] ?? json['tinhTpDiff']),
+      phuongXa: json['PhuongXa']?.toString() ?? json['phuongXa']?.toString(),
+      phuongXaTen: json['PhuongXaTen']?.toString() ?? json['phuongXaTen']?.toString(),
+      phuongXaDiff: _safeBool(json['PhuongXaDiff'] ?? json['phuongXaDiff']),
     );
   }
 
   bool get hasDiff =>
+      (hasDiffRaw ?? false) ||
       (maBNDiff ?? false) ||
       (maBhytHoacMaBnDiff ?? false) ||
       (soDienThoaiDiff ?? false) ||
@@ -179,6 +221,9 @@ class DkkKiemTraBenhNhanResponseDto {
       (ngayCapDiff ?? false) ||
       (tinhTpDiff ?? false) ||
       (phuongXaDiff ?? false);
+
+  bool get isMaBnAuto => maBNAuto ?? false;
+  bool get isMaBnDiff => maBNDiff ?? false;
 }
 
 class DkkPhongKhamDto {
@@ -411,6 +456,48 @@ class DangKyKhamRequestDto {
     this.trieuChung,
     this.dangKyDum,
   });
+
+  DangKyKhamRequestDto copyWith({
+    String? maHS,
+    String? maBN,
+    String? maBhytHoacMaBn,
+    String? hoTen,
+    String? gioiTinh,
+    String? ngaySinh,
+    String? ngayCap,
+    String? soDienThoai,
+    String? ngayKham,
+    String? gioKham,
+    String? phongKham,
+    String? phongKhamTen,
+    String? tinhTp,
+    String? tinhTpTen,
+    String? phuongXa,
+    String? phuongXaTen,
+    String? trieuChung,
+    String? dangKyDum,
+  }) {
+    return DangKyKhamRequestDto(
+      maHS: maHS ?? this.maHS,
+      maBN: maBN ?? this.maBN,
+      maBhytHoacMaBn: maBhytHoacMaBn ?? this.maBhytHoacMaBn,
+      hoTen: hoTen ?? this.hoTen,
+      gioiTinh: gioiTinh ?? this.gioiTinh,
+      ngaySinh: ngaySinh ?? this.ngaySinh,
+      ngayCap: ngayCap ?? this.ngayCap,
+      soDienThoai: soDienThoai ?? this.soDienThoai,
+      ngayKham: ngayKham ?? this.ngayKham,
+      gioKham: gioKham ?? this.gioKham,
+      phongKham: phongKham ?? this.phongKham,
+      phongKhamTen: phongKhamTen ?? this.phongKhamTen,
+      tinhTp: tinhTp ?? this.tinhTp,
+      tinhTpTen: tinhTpTen ?? this.tinhTpTen,
+      phuongXa: phuongXa ?? this.phuongXa,
+      phuongXaTen: phuongXaTen ?? this.phuongXaTen,
+      trieuChung: trieuChung ?? this.trieuChung,
+      dangKyDum: dangKyDum ?? this.dangKyDum,
+    );
+  }
 
   Map<String, dynamic> toJson() {
     return {

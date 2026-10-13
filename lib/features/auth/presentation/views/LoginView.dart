@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -32,13 +34,29 @@ class _LoginViewState extends State<LoginView> with WidgetsBindingObserver {
   final _formKey = GlobalKey<FormState>();
   late final LoginViewModel _viewModel;
   String? _captchaToken;
+  DateTime? _captchaTokenIssuedAt;
+  Timer? _captchaExpiryTimer;
   int _captchaResetKey = 0;
   bool _isFaceIdAvailable = false;
+  bool _isBiometricLoggingIn = false;
+  String _captchaStatusText = 'Đang đăng nhập...';
+
+  /// Mốc thời gian mở màn hình LoginView để đo thời gian pre-warm token
+  final DateTime _screenOpenTime = DateTime.now();
+
+  /// Mốc thời gian người dùng chạm vân tay để đo thời gian từ lúc chạm đến lúc vào app
+  DateTime? _biometricTouchTime;
+
+  /// Completer dùng để chờ token captcha mới khi chưa có sẵn hoặc hết hạn (luồng vân tay)
+  Completer<String>? _pendingBiometricCompleter;
 
   void _resetCaptcha() {
     if (!mounted) return;
+    _captchaExpiryTimer?.cancel();
+    _captchaExpiryTimer = null;
     setState(() {
       _captchaToken = null;
+      _captchaTokenIssuedAt = null;
       _viewModel.captchaToken = null;
       _captchaResetKey++;
     });
@@ -82,6 +100,7 @@ class _LoginViewState extends State<LoginView> with WidgetsBindingObserver {
 
   @override
   void dispose() {
+    _captchaExpiryTimer?.cancel();
     WidgetsBinding.instance.removeObserver(this);
     _viewModel.loginCommand.removeListener(_onLoginChanged);
     _viewModel.dispose();
@@ -93,6 +112,12 @@ class _LoginViewState extends State<LoginView> with WidgetsBindingObserver {
       return;
     }
 
+    if (mounted && _isBiometricLoggingIn) {
+      setState(() {
+        _isBiometricLoggingIn = false;
+      });
+    }
+
     final result = _viewModel.loginCommand.result;
     if (result == null || !mounted) {
       return;
@@ -100,6 +125,13 @@ class _LoginViewState extends State<LoginView> with WidgetsBindingObserver {
 
     result.when(
       success: (AuthSessionEntity _) async {
+        if (_biometricTouchTime != null) {
+          final totalMs = DateTime.now().difference(_biometricTouchTime!).inMilliseconds;
+          if (kDebugMode) {
+            debugPrint('[BiometricLogin] 🚀 Thành công! Tổng thời gian từ lúc chạm đến vào app: ${totalMs}ms (${(totalMs / 1000).toStringAsFixed(2)}s)');
+          }
+          _biometricTouchTime = null;
+        }
         final phone = _viewModel.phoneController.text.trim();
         final password = _viewModel.passwordController.text;
         if (phone.isNotEmpty && password.isNotEmpty) {
@@ -112,6 +144,13 @@ class _LoginViewState extends State<LoginView> with WidgetsBindingObserver {
         }
       },
       failure: (exception) {
+        if (_biometricTouchTime != null) {
+          final totalMs = DateTime.now().difference(_biometricTouchTime!).inMilliseconds;
+          if (kDebugMode) {
+            debugPrint('[BiometricLogin] ❌ Đăng nhập thất bại sau ${totalMs}ms: $exception');
+          }
+          _biometricTouchTime = null;
+        }
         _resetCaptcha();
         _viewModel.loginCommand.clearResult();
       },
@@ -146,6 +185,15 @@ class _LoginViewState extends State<LoginView> with WidgetsBindingObserver {
         return;
       }
 
+      _biometricTouchTime = DateTime.now();
+
+      if (mounted) {
+        setState(() {
+          _isBiometricLoggingIn = true;
+          _captchaStatusText = 'Đang đăng nhập...';
+        });
+      }
+
       _viewModel.phoneController.text = savedPhone;
       _viewModel.passwordController.text = savedPassword;
 
@@ -160,10 +208,100 @@ class _LoginViewState extends State<LoginView> with WidgetsBindingObserver {
         _viewModel.updateRole(UserRole.customer);
       }
 
-      _viewModel.captchaToken = _captchaToken;
-      
+      // Bỏ qua yêu cầu captcha trên Web (đã disable theo config)
+      if (kIsWeb && Environment.disableTurnstileOnWeb) {
+        await _viewModel.loginCommand.execute();
+        return;
+      }
+
+      // Kiểm tra xem đã có token tươi được pre-warm sẵn (tuổi dưới 240 giây / 4 phút)
+      String? tokenToUse;
+      final now = DateTime.now();
+      if (_captchaToken != null &&
+          _captchaTokenIssuedAt != null &&
+          now.difference(_captchaTokenIssuedAt!).inSeconds < 240) {
+        tokenToUse = _captchaToken;
+        if (kDebugMode) {
+          final ageSec = now.difference(_captchaTokenIssuedAt!).inSeconds;
+          debugPrint('[BiometricLogin] ⚡ Dùng ngay token pre-warm sẵn (tuổi token: ${ageSec}s)');
+        }
+      } else {
+        // Nếu token đã quá 4 phút hoặc đã hết hạn: reset lấy token mới
+        if (_captchaTokenIssuedAt != null && now.difference(_captchaTokenIssuedAt!).inSeconds >= 240) {
+          if (kDebugMode) {
+            debugPrint('[BiometricLogin] ⏳ Token cũ đã quá 4 phút, làm mới token...');
+          }
+          _resetCaptcha();
+        } else {
+          // Chưa có token (widget đang tải lần đầu): CHỜ TOKEN HIỆN TẠI, KHÔNG RESET GIỮA CHỪNG
+          if (kDebugMode) {
+            debugPrint('[BiometricLogin] ⏳ Đang chờ widget nạp xong token hiện tại (không reset giữa chừng)...');
+          }
+        }
+
+        if (mounted) {
+          setState(() {
+            _captchaStatusText = 'Đang xác minh bảo mật...';
+          });
+        }
+
+        // Nếu sau 1.5s mà vẫn chưa có token, nhắc người dùng chạm vào ô vuông xác nhận
+        final promptTimer = Timer(const Duration(milliseconds: 1500), () {
+          if (mounted && _isBiometricLoggingIn && _captchaToken == null) {
+            _showSnackBar('👉 Vui lòng chạm vào ô vuông để xác nhận bạn không phải người máy');
+          }
+        });
+
+        _pendingBiometricCompleter = Completer<String>();
+        try {
+          tokenToUse = await _pendingBiometricCompleter!.future
+              .timeout(const Duration(seconds: 30));
+        } on TimeoutException {
+          promptTimer.cancel();
+          _pendingBiometricCompleter = null;
+          if (mounted) {
+            setState(() {
+              _isBiometricLoggingIn = false;
+              _captchaStatusText = 'Đang đăng nhập...';
+            });
+          }
+          _showSnackBar('Xác thực bảo mật mất quá lâu. Vui lòng đăng nhập bằng mật khẩu hoặc thử lại.');
+          _resetCaptcha();
+          return;
+        } finally {
+          promptTimer.cancel();
+          _pendingBiometricCompleter = null;
+        }
+      }
+
+      if (!mounted) return;
+
+      if (mounted) {
+        setState(() {
+          _captchaStatusText = 'Đang đăng nhập...';
+        });
+      }
+
+      // Dùng token mới vừa nhận/đã có, verify đúng 1 lần khi execute
+      _viewModel.captchaToken = tokenToUse;
       await _viewModel.loginCommand.execute();
+      // Sau khi login hoàn tất (thành công hay thất bại), _onLoginChanged sẽ gọi _resetCaptcha()
+      // để xóa token đã dùng và widget Turnstile tự động tải token mới sẵn sàng cho lần tiếp theo.
+    } on PlatformException catch (e) {
+      if (mounted) {
+        setState(() {
+          _isBiometricLoggingIn = false;
+          _captchaStatusText = 'Đang đăng nhập...';
+        });
+      }
+      _showSnackBar('Lỗi xác thực vân tay: ${e.message ?? e.code}');
     } catch (e) {
+      if (mounted) {
+        setState(() {
+          _isBiometricLoggingIn = false;
+          _captchaStatusText = 'Đang đăng nhập...';
+        });
+      }
       _showSnackBar('Lỗi xác thực vân tay: $e');
     }
   }
@@ -324,13 +462,41 @@ class _LoginViewState extends State<LoginView> with WidgetsBindingObserver {
             captchaResetKey: _captchaResetKey,
             onCaptchaVerified: (token) {
               _viewModel.captchaToken = token;
+              _captchaExpiryTimer?.cancel();
+              _captchaExpiryTimer = Timer(const Duration(seconds: 240), () {
+                if (mounted && _captchaToken == token) {
+                  if (kDebugMode) {
+                    debugPrint('[Turnstile] ⏰ Token đã quá 4 phút chưa dùng, tự reset lấy token mới...');
+                  }
+                  _resetCaptcha();
+                }
+              });
+
+              final prewarmMs = DateTime.now().difference(_screenOpenTime).inMilliseconds;
+              if (kDebugMode) {
+                debugPrint('[Turnstile] ⏱️ Thời gian từ lúc mở LoginView đến khi có token: ${prewarmMs}ms (${(prewarmMs / 1000).toStringAsFixed(2)}s)');
+              }
+
               setState(() {
                 _captchaToken = token;
+                _captchaTokenIssuedAt = DateTime.now();
               });
+              // Nếu luồng vân tay đang chờ token mới, hoàn thành Completer
+              if (_pendingBiometricCompleter != null &&
+                  !_pendingBiometricCompleter!.isCompleted) {
+                _pendingBiometricCompleter!.complete(token);
+              }
             },
             onResetCaptcha: _resetCaptcha,
             onBiometricPressed: _onBiometricLoginPressed,
+            onInteractiveRequired: () {
+              if (mounted) {
+                _showSnackBar('Vui lòng chạm vào ô vuông để xác nhận bạn không phải người máy.');
+              }
+            },
             isFaceIdAvailable: _isFaceIdAvailable,
+            isBiometricLoggingIn: _isBiometricLoggingIn,
+            captchaStatusText: _captchaStatusText,
           ),
         ),
       ),
@@ -347,7 +513,10 @@ class _LoginForm extends StatelessWidget {
     required this.onCaptchaVerified,
     required this.onResetCaptcha,
     required this.onBiometricPressed,
+    this.onInteractiveRequired,
     required this.isFaceIdAvailable,
+    required this.isBiometricLoggingIn,
+    required this.captchaStatusText,
   });
 
   final LoginViewModel viewModel;
@@ -357,7 +526,10 @@ class _LoginForm extends StatelessWidget {
   final ValueChanged<String> onCaptchaVerified;
   final VoidCallback onResetCaptcha;
   final VoidCallback onBiometricPressed;
+  final VoidCallback? onInteractiveRequired;
   final bool isFaceIdAvailable;
+  final bool isBiometricLoggingIn;
+  final String captchaStatusText;
 
   @override
   Widget build(BuildContext context) {
@@ -456,6 +628,7 @@ class _LoginForm extends StatelessWidget {
                     viewModel.clearMessage();
                     onCaptchaVerified(token);
                   },
+                  onInteractiveRequired: onInteractiveRequired,
                   onExpired: () {
                     onResetCaptcha();
                   },
@@ -474,11 +647,12 @@ class _LoginForm extends StatelessWidget {
                   final isCaptchaVerified =
                       (kIsWeb && Environment.disableTurnstileOnWeb) ||
                       captchaToken != null;
+                  final isBusy = viewModel.loginCommand.running || isBiometricLoggingIn;
                   return AppButton(
-                    label: 'Đăng nhập',
+                    label: isBiometricLoggingIn ? captchaStatusText : 'Đăng nhập',
                     icon: Icons.login_rounded,
-                    isLoading: viewModel.loginCommand.running,
-                    onPressed: isCaptchaVerified ? onSubmit : null,
+                    isLoading: isBusy,
+                    onPressed: isCaptchaVerified && !isBusy ? onSubmit : null,
                   );
                 },
               ),
@@ -492,14 +666,25 @@ class _LoginForm extends StatelessWidget {
                 borderRadius: BorderRadius.circular(12),
                 border: Border.all(color: const Color(0xFFDBEAFE)),
               ),
-              child: IconButton(
-                icon: Icon(
-                  isFaceIdAvailable ? Icons.face_unlock_rounded : Icons.fingerprint_rounded,
-                  color: const Color(0xFF1976D2),
-                  size: 32,
-                ),
-                onPressed: onBiometricPressed,
-              ),
+              child: isBiometricLoggingIn
+                  ? const Center(
+                      child: SizedBox(
+                        width: 24,
+                        height: 24,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2.5,
+                          valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF1976D2)),
+                        ),
+                      ),
+                    )
+                  : IconButton(
+                      icon: Icon(
+                        isFaceIdAvailable ? Icons.face_unlock_rounded : Icons.fingerprint_rounded,
+                        color: const Color(0xFF1976D2),
+                        size: 32,
+                      ),
+                      onPressed: viewModel.loginCommand.running ? null : onBiometricPressed,
+                    ),
             ),
           ],
         ),

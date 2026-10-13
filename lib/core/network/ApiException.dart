@@ -45,17 +45,18 @@ sealed class ApiException implements Exception {
         ErrorCode? errorCode;
 
         if (data is Map<String, dynamic>) {
-          // Ưu tiên 1: có ErrorCode dạng int -> lấy cả message chuẩn lẫn category
           if (data['ErrorCode'] != null && data['ErrorCode'] is int) {
             errorCode = ErrorCode.fromValue(data['ErrorCode'] as int);
-            errorMessage = errorCode.message;
           }
 
-          // Ưu tiên 2: có ErrorMessage riêng -> override message hiển thị
+          // Ưu tiên 1: có ErrorMessage riêng do backend trả về -> hiển thị chính xác chi tiết lỗi
           final rawErrorMessage = data['ErrorMessage'] ?? data['errorMessage'];
           if (rawErrorMessage != null &&
               rawErrorMessage.toString().trim().isNotEmpty) {
             errorMessage = rawErrorMessage.toString().trim();
+          } else if (errorCode != null && errorCode != ErrorCode.unknown) {
+            // Ưu tiên 2: dùng message chuẩn của ErrorCode nếu backend không có ErrorMessage cụ thể
+            errorMessage = errorCode.message;
           }
           // Ưu tiên 3: kiểm tra ASP.NET Core Validation Problem Details "errors" dictionary
           else if (data['errors'] is Map) {

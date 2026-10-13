@@ -5,12 +5,16 @@ import 'package:flutter/material.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 import 'package:benhvien7c/core/config/environment.dart';
 
+/// Chiều cao chuẩn cố định của Cloudflare Turnstile (65px)
+const double kTurnstileHeight = 65.0;
+
 class CloudflareTurnstile extends StatefulWidget {
   const CloudflareTurnstile({
     super.key,
     required this.onVerified,
     this.onExpired,
     this.onRetry,
+    this.onInteractiveRequired,
     this.simulateBot = false,
     this.hasError = false,
     this.errorMessage,
@@ -20,6 +24,7 @@ class CloudflareTurnstile extends StatefulWidget {
   final ValueChanged<String> onVerified;
   final VoidCallback? onExpired;
   final VoidCallback? onRetry;
+  final VoidCallback? onInteractiveRequired;
   final bool simulateBot;
   final bool hasError;
   final String? errorMessage;
@@ -44,6 +49,24 @@ class CloudflareTurnstileState extends State<CloudflareTurnstile> {
     if (!mounted) return;
     _timeoutTimer?.cancel();
     _webCheckTimer?.cancel();
+
+    // Nếu WebViewController đã tồn tại và không bị lỗi, gọi JS turnstile.reset()
+    if (_webViewController != null && !_isWebviewFailed) {
+      setState(() {
+        _isLoading = true;
+        _isVerifying = false;
+        _isSuccess = false;
+        _errorDetail = null;
+      });
+      _webViewController?.runJavaScript('resetTurnstile();').catchError((e) {
+        if (kDebugMode) {
+          debugPrint('[Turnstile] JS resetTurnstile error: $e -> fallback re-init');
+        }
+        _initTurnstile();
+      });
+      return;
+    }
+
     setState(() {
       _isLoading = true;
       _isVerifying = false;
@@ -196,6 +219,11 @@ class CloudflareTurnstileState extends State<CloudflareTurnstile> {
                     _isLoading = false;
                   });
                 }
+              } else if (type == 'interactive_required') {
+                if (kDebugMode) {
+                  debugPrint('[Turnstile] 👆 Cloudflare yêu cầu người dùng chạm xác minh (Interactive Challenge)');
+                }
+                widget.onInteractiveRequired?.call();
               } else if (type == 'success') {
                 _timeoutTimer?.cancel();
                 final token = data['token'] as String;
@@ -273,22 +301,31 @@ class CloudflareTurnstileState extends State<CloudflareTurnstile> {
         width: 100% !important;
         max-width: 100% !important;
         height: 65px !important;
+        min-height: 65px !important;
       }
     </style>
   </head>
   <body>
-    <div class="cf-turnstile"
+    <div id="turnstile-widget"
+         class="cf-turnstile"
          data-sitekey="$siteKey"
          data-size="flexible"
+         data-appearance="interaction-only"
          data-callback="onTurnstileSuccess"
          data-expired-callback="onTurnstileExpired"
          data-error-callback="onTurnstileError"
+         data-before-interactive-callback="onTurnstileInteractive"
          data-theme="light">
     </div>
     <script>
       function onTurnstileLoaded() {
         if (window.TurnstileChannel) {
           window.TurnstileChannel.postMessage(JSON.stringify({ type: 'ready' }));
+        }
+      }
+      function onTurnstileInteractive() {
+        if (window.TurnstileChannel) {
+          window.TurnstileChannel.postMessage(JSON.stringify({ type: 'interactive_required' }));
         }
       }
       function onTurnstileSuccess(token) {
@@ -306,6 +343,17 @@ class CloudflareTurnstileState extends State<CloudflareTurnstile> {
           window.TurnstileChannel.postMessage(JSON.stringify({ type: 'error', error: String(err) }));
         }
       }
+      function resetTurnstile() {
+        try {
+          if (window.turnstile) {
+            window.turnstile.reset('#turnstile-widget');
+          } else {
+            location.reload();
+          }
+        } catch(e) {
+          location.reload();
+        }
+      }
     </script>
   </body>
 </html>''';
@@ -319,13 +367,13 @@ class CloudflareTurnstileState extends State<CloudflareTurnstile> {
         _webViewController = controller;
       });
 
-      // Timeout 15 giây nếu mạng yếu
-      _timeoutTimer = Timer(const Duration(seconds: 15), () {
+      // Timeout 30 giây nếu mạng yếu
+      _timeoutTimer = Timer(const Duration(seconds: 30), () {
         if (mounted && _isLoading && !_isSuccess && !_isVerifying) {
           setState(() {
             _isLoading = false;
             _isWebviewFailed = true;
-            _errorDetail = 'Quá thời gian chờ phản hồi (15s)';
+            _errorDetail = 'Quá thời gian chờ phản hồi (30s)';
           });
         }
       });
@@ -377,10 +425,14 @@ class CloudflareTurnstileState extends State<CloudflareTurnstile> {
     final Widget currentChild;
 
     if (showWebView) {
-      currentChild = SizedBox(
+      currentChild = Container(
         key: const ValueKey('turnstile_webview'),
         width: double.infinity,
-        height: 65,
+        height: kTurnstileHeight,
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(8),
+        ),
         child: ClipRRect(
           borderRadius: BorderRadius.circular(8),
           child: WebViewWidget(controller: _webViewController!),
@@ -487,7 +539,7 @@ class CloudflareTurnstileState extends State<CloudflareTurnstile> {
     return Container(
       key: key,
       width: double.infinity,
-      height: 65,
+      height: kTurnstileHeight,
       decoration: BoxDecoration(
         color: bgColor,
         border: Border.all(color: borderColor, width: 1.0),

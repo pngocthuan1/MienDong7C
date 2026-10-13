@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:benhvien7c/app/router/RouteNames.dart';
 import 'package:benhvien7c/core/session/AppSessionStore.dart';
+import 'package:benhvien7c/core/services/AppVersionCheckService.dart';
 
 class SplashView extends StatefulWidget {
   const SplashView({super.key});
@@ -45,9 +46,13 @@ class _SplashViewState extends State<SplashView> with SingleTickerProviderStateM
     _controller.forward();
   }
 
-  void _navigateToNextScreen() {
+  Future<void> _navigateToNextScreen() async {
     if (!mounted || _hasNavigated) return;
     _hasNavigated = true;
+
+    // Kiểm tra phiên bản tối thiểu (Force Update)
+    final blocked = await AppVersionCheckService.checkAndShowForceUpdateIfNeeded(context);
+    if (blocked || !mounted) return;
 
     final hasUser = AppSessionStore.instance.currentUser != null;
     final nextRoute = hasUser ? RouteNames.home : RouteNames.login;

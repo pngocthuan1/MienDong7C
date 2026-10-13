@@ -69,7 +69,7 @@ class TurnstileVerifyService {
           return ApiSuccess(result);
         } else {
           if (kDebugMode) {
-            debugPrint('[TurnstileService] ❌ CAPTCHA không hợp lệ hoặc bị từ chối.');
+            debugPrint('[TurnstileService] ❌ CAPTCHA thất bại. Cloudflare error-code: ${result.error ?? "unknown"}');
           }
           return ApiFailure(
             BusinessException(

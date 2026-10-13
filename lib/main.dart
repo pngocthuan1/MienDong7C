@@ -58,6 +58,7 @@ import 'package:benhvien7c/features/patients/presentation/views/DkkCompareView.d
 import 'package:benhvien7c/features/patients/presentation/views/CreateNotificationView.dart';
 import 'package:benhvien7c/features/patients/domain/entities/NotificationItemEntity.dart';
 import 'package:benhvien7c/core/services/FirebaseTokenService.dart';
+import 'package:benhvien7c/core/services/RemoteConfigService.dart';
 
 import 'package:device_info_plus/device_info_plus.dart';
 
@@ -231,7 +232,7 @@ void main() async {
     FirebaseTokenService.instance.initialize(
       predefinedDeviceInfo: deviceInfoString,
       prefs: sharedPreferences,
-    ),
+    ).then((_) => RemoteConfigService.instance.initialize()),
   );
 }
 

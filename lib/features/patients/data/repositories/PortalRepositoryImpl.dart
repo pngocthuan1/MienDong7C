@@ -621,6 +621,13 @@ class PortalRepositoryImpl implements PortalRepository {
         return Error(apiEx, apiEx.message);
       }
 
+      if (bookingId <= 0 && serverPhieu == null) {
+        return Error(
+          ApiException.validation('Đăng ký khám không thành công. Máy chủ không trả về mã phiếu khám hợp lệ.'),
+          'Đăng ký khám không thành công. Máy chủ không trả về mã phiếu khám hợp lệ.',
+        );
+      }
+
       if (bookingId > 0 && serverPhieu == null) {
         try {
           serverPhieu = await remote.getPhieuSoKham(bookingId);

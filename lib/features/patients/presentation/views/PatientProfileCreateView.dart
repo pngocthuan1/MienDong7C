@@ -21,6 +21,7 @@ import 'package:benhvien7c/core/utils/DateTimeConverter.dart';
 import 'package:benhvien7c/features/patients/data/models/DatLichKhamDtos.dart';
 import 'package:benhvien7c/features/auth/presentation/views/AuthFlowArguments.dart';
 import 'package:benhvien7c/features/patients/presentation/views/DkkCompareView.dart';
+import 'package:benhvien7c/features/patients/domain/services/PatientRegistrationFlowService.dart';
 
 class PatientProfileCreateView extends StatefulWidget {
   const PatientProfileCreateView({super.key});
@@ -674,35 +675,6 @@ class _PatientProfileCreateViewState extends State<PatientProfileCreateView> {
     );
   }
 
-  void _showFoundPatientDialogForSubmit(DkkTimBenhNhanResponseDto dto) {
-    showDialog<void>(
-      context: context,
-      barrierDismissible: false,
-      builder: (dialogCtx) => AlertDialog(
-        title: const Text('Tìm thấy hồ sơ theo CC/HC'),
-        content: Text('Hệ thống tìm thấy hồ sơ của bệnh nhân ${dto.hoTen} (Mã BN: ${dto.maBN}) theo số CC/HC bạn vừa nhập.\n\nBạn có muốn sử dụng hồ sơ này để đăng ký không?'),
-        actions: [
-          TextButton(
-            onPressed: () {
-              Navigator.of(dialogCtx).pop();
-            },
-            child: const Text('KIỂM TRA LẠI CC/HC'),
-          ),
-          ElevatedButton(
-            onPressed: () {
-              Navigator.of(dialogCtx).pop();
-              _viewModel.acceptFoundPatientForSubmit(dto);
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Đã cập nhật thông tin theo hồ sơ tìm thấy. Vui lòng kiểm tra lại trước khi bấm Đăng ký khám lần nữa.')),
-              );
-            },
-            child: const Text('SỬ DỤNG HỒ SƠ NÀY'),
-          ),
-        ],
-      ),
-    );
-  }
-
   void _showSearchErrorDialog(String query, String errorMsg) {
     final isNetwork = errorMsg.toLowerCase().contains('mạng') ||
         errorMsg.toLowerCase().contains('kết nối') ||
@@ -1024,14 +996,6 @@ class _PatientProfileCreateViewState extends State<PatientProfileCreateView> {
         return;
       }
 
-      // ── Auto-search TRƯỚC khi CAPTCHA ──
-      final searchCheck = await _viewModel.autoSearchBeforeSubmit();
-      if (!mounted) return;
-      if (searchCheck.foundNew && searchCheck.dto != null) {
-        _showFoundPatientDialogForSubmit(searchCheck.dto!);
-        return; // DỪNG - người dùng bấm Đăng ký lần nữa
-      }
-
       // ── Xác thực CAPTCHA duy nhất 1 lần tại thời điểm bấm Đăng ký khám ──
       final isBypassedOnWeb = kIsWeb && Environment.disableTurnstileOnWeb;
       if (!isBypassedOnWeb) {
@@ -1053,35 +1017,57 @@ class _PatientProfileCreateViewState extends State<PatientProfileCreateView> {
         }
       }
 
-      // Luồng 3: Kiểm tra đối chiếu trước khi đăng ký
-      if (_viewModel.needsComparisonCheck) {
-        final compareModel = await _viewModel.buildCompareModel();
-        if (compareModel != null && mounted) {
-          final draft = _viewModel.currentDraftForBooking;
-          await Navigator.pushNamed(
-            context,
-            RouteNames.dkkCompare,
-            arguments: DkkCompareArgs(
-              compareModel: compareModel,
-              userDraft: draft,
-              role: _viewModel.role,
-              department: _viewModel.selectedDepartment,
-              departmentId: _viewModel.selectedClinicId,
-              provinceCode: _viewModel.selectedProvinceCode,
-              provinceName: _viewModel.selectedProvinceName ?? _viewModel.provinceController.text.trim(),
-              wardCode: _viewModel.selectedWardCode,
-              wardName: _viewModel.selectedWardName ?? _viewModel.wardController.text.trim(),
-              selectedDate: _viewModel.formattedSelectedDate,
-              selectedTime: _viewModel.selectedTime,
-              symptom: _viewModel.symptomController.text.trim(),
-            ),
-          );
-          return;
-        }
-      }
+      // ── GỌI SERVICE ĐIỀU PHỐI LUỒNG ĐĂNG KÝ (PatientRegistrationFlowService) ──
+      final decision = await _viewModel.evaluateRegistrationDecision();
+      if (!mounted) return;
 
-      await _viewModel.continueCommand.execute();
-    } catch (_) {}
+      if (decision is RequireComparisonDecision) {
+        final draft = _viewModel.currentDraftForBooking;
+        await Navigator.pushNamed(
+          context,
+          RouteNames.dkkCompare,
+          arguments: DkkCompareArgs(
+            compareModel: decision.comparisonModel,
+            userDraft: draft,
+            role: _viewModel.role,
+            department: _viewModel.selectedDepartment,
+            departmentId: _viewModel.selectedClinicId,
+            provinceCode: _viewModel.selectedProvinceCode,
+            provinceName: _viewModel.selectedProvinceName ?? _viewModel.provinceController.text.trim(),
+            wardCode: _viewModel.selectedWardCode,
+            wardName: _viewModel.selectedWardName ?? _viewModel.wardController.text.trim(),
+            selectedDate: _viewModel.formattedSelectedDate,
+            selectedTime: _viewModel.selectedTime,
+            symptom: _viewModel.symptomController.text.trim(),
+          ),
+        );
+        return;
+      } else if (decision is ProceedDecision) {
+        _viewModel.setRegistrationOverrideMaBN(decision.effectiveMaBN);
+        await _viewModel.continueCommand.execute();
+      } else if (decision is ProceedWithAutoMaBN) {
+        _viewModel.setRegistrationOverrideMaBN('');
+        await _viewModel.continueCommand.execute();
+      } else if (decision is FailureDecision) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(decision.message),
+            backgroundColor: Colors.red,
+          ),
+        );
+        return;
+      }
+    } catch (e) {
+      if (mounted) {
+        final errText = e.toString().replaceAll('Exception: ', '');
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Lỗi: $errText'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
   }
 
 
@@ -2309,7 +2295,7 @@ class _PatientProfileCreateViewState extends State<PatientProfileCreateView> {
                 Center(
                   child: SizedBox(
                     key: _captchaKey,
-                    height: 70,
+                    height: kTurnstileHeight,
                     child: RepaintBoundary(
                       child: CloudflareTurnstile(
                         key: ValueKey('turnstile_patient_$_captchaResetKey'),
